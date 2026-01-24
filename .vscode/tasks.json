@@ -1,0 +1,43 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "CMake Configure",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "-S",
+                ".",
+                "-B",
+                "build",
+                "-G",
+                "MinGW Makefiles"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:/Users/Win10/Desktop/Lorenzo/mingw64/bin;${env:PATH}"
+                }
+            },
+            "group": "build"
+        },
+        {
+            "label": "CMake Build",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "build"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "C:/Users/Win10/Desktop/Lorenzo/mingw64/bin;${env:PATH}"
+                }
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "dependsOn": "CMake Configure"
+        }
+    ]
+}

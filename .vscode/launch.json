@@ -1,0 +1,42 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug (Windows - VS)",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/GamePS1Horror.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/bin",
+            "environment": [],
+            "console": "externalTerminal"
+        },
+        {
+            "name": "Debug (MinGW)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${workspaceFolder}/build/bin/GamePS1Horror.exe",
+            "args": [],
+            "stopAtEntry": false,
+            "cwd": "${workspaceFolder}/build/bin",
+            "environment": [
+                {
+                    "name": "PATH",
+                    "value": "C:/Users/Win10/Desktop/Lorenzo/mingw64/bin;${env:PATH}"
+                }
+            ],
+            "externalConsole": true,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:/Users/Win10/Desktop/Lorenzo/mingw64/bin/gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "CMake Build"
+        }
+    ]
+}
