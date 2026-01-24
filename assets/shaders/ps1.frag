@@ -24,9 +24,13 @@ void main()
 
     // -- DISTANCE FOG --
     // Linear or Exponential    // Fog (Sky Blue PS1 style)
-    float fogNear = 250.0;
-    float fogFar = 400.0; 
-    float fogFactor = clamp((vDist - fogNear) / (fogFar - fogNear), 0.0, 1.0);
+    // HARDCODED FIX: Uniforms causing issues, using fixed values for now.
+    float fogStart = 450.0;
+    float fogEnd = 550.0;
+    
+    // DEBUG: Force Fog OFF to see if geometry exists
+    // float fogFactor = 0.0; 
+    float fogFactor = clamp((vDist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
     
     vec3 fogColor = vec3(0.4, 0.6, 1.0);
     

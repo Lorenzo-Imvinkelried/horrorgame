@@ -3,6 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <algorithm>
+#include "Config.h" // NEW
 
 WeaponSystem::WeaponSystem() : currentAmmo(2), maxAmmo(2), recoilTimer(0.0f), cooldownTimer(0.0f) {
     BuildShotgunMesh();
@@ -64,7 +65,7 @@ void WeaponSystem::BuildShotgunMesh() {
     glm::vec3 wood(0.35f, 0.18f, 0.08f);  // Warm walnut wood
 
     // BARRELS
-    float L = 1.2f;
+    float L = 1.5f;
     float W = 0.05f;
     
     // Left Barrel
@@ -107,18 +108,187 @@ void WeaponSystem::BuildShotgunMesh() {
     addQuad({-sW2, sH2, sZB}, {sW2, sH2, sZB}, {sW2, -sH2, sZB}, {-sW2, -sH2, sZB}, wood);
 }
 
-void WeaponSystem::Update(float deltaTime) {
+// Helper for Ray-Box Intersection (Returns Entry and Exit times)
+bool GetRayAABBIntersections(glm::vec3 origin, glm::vec3 dir, glm::vec3 minB, glm::vec3 maxB, float& tNear, float& tFar) {
+     float t1 = (minB.x - origin.x)/dir.x;
+     float t2 = (maxB.x - origin.x)/dir.x;
+     float t3 = (minB.y - origin.y)/dir.y;
+     float t4 = (maxB.y - origin.y)/dir.y;
+     float t5 = (minB.z - origin.z)/dir.z;
+     float t6 = (maxB.z - origin.z)/dir.z;
+
+     tNear = std::max(std::max(std::min(t1, t2), std::min(t3, t4)), std::min(t5, t6));
+     tFar = std::min(std::min(std::max(t1, t2), std::max(t3, t4)), std::max(t5, t6));
+
+     if (tFar < 0) return false;
+     if (tNear > tFar) return false;
+     return true;
+}
+
+// Wrapper for old simpler API (Trunks)
+bool RayAABB(glm::vec3 origin, glm::vec3 dir, glm::vec3 minB, glm::vec3 maxB, float maxDist, float& tScale) {
+     float tNear, tFar;
+     if (GetRayAABBIntersections(origin, dir, minB, maxB, tNear, tFar)) {
+         if (tNear > maxDist) return false;
+         tScale = tNear;
+         return true;
+     }
+     return false;
+}
+
+void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength, ChunkManager& chunkManager, FootprintSystem& craters, ParticleSystem& particles) {
     if (recoilTimer > 0.0f) recoilTimer -= deltaTime * 5.0f; // Recovery speed
     if (recoilTimer < 0.0f) recoilTimer = 0.0f;
     
     if (cooldownTimer > 0.0f) cooldownTimer -= deltaTime;
+
+    // PROJECTILE PHYSICS
+    for (auto& p : projectiles) {
+        if (!p.Active) continue;
+
+        p.LifeTime -= deltaTime;
+        if (p.LifeTime <= 0) {
+            p.Active = false;
+            continue;
+        }
+
+        // 1. Integration (Velocity Verlet / Euler)
+        glm::vec3 oldPos = p.Position;
+        
+        // Forces (Using Exaggerated Config Values)
+        glm::vec3 gravity(0, Config::Gameplay::ProjectileGravity, 0);
+        glm::vec3 windForce = glm::vec3(windDir.x, 0, windDir.y) * windStrength * Config::Gameplay::ProjectileWindInfluence; 
+        
+        // Split Drag: 
+        // Horizontal: Full Drag (slows down forward movement)
+        // Vertical: Reduced Drag (allows falling fast like a heavy object, not a feather)
+        glm::vec3 velHoriz(p.Velocity.x, 0, p.Velocity.z);
+        glm::vec3 velVert(0, p.Velocity.y, 0);
+        
+        glm::vec3 drag = -velHoriz * Config::Gameplay::ProjectileDrag * deltaTime; 
+        drag += -velVert * (Config::Gameplay::ProjectileDrag * 0.1f) * deltaTime; // 10% vertical drag
+
+        p.Velocity += (gravity + windForce) * deltaTime + drag;
+        p.Position += p.Velocity * deltaTime;
+
+        // 2. Collision Detection (Step Raycast)
+        glm::vec3 movementVec = p.Position - oldPos;
+        float dist = glm::length(movementVec);
+        if (dist < 0.001f) continue;
+        
+        glm::vec3 dir = glm::normalize(movementVec);
+        glm::vec3 hitPoint;
+        glm::vec4 hitColor(1.0f);
+        bool hit = false;
+        bool hitTree = false;
+
+        // A. Trees
+        std::vector<glm::vec4> nearbyTrees;
+        chunkManager.GetTreesInRange(oldPos, dist + 5.0f, nearbyTrees); // Optimized fetch
+        
+        for(const auto& treeData : nearbyTrees) {
+            glm::vec3 treePos(treeData.x, treeData.y, treeData.z);
+            float treeScale = treeData.w;
+            
+            // 1. TRUNK COLLISION (Stops Bullet)
+            float halfW = 0.6f * treeScale;
+            // Trunk AABB
+            glm::vec3 minB = treePos - glm::vec3(halfW, 0, halfW); 
+            glm::vec3 maxB = treePos + glm::vec3(halfW, 6.0f*treeScale, halfW); // Trunk Height 6.0
+            minB.y = treePos.y; 
+            
+            float t = 0;
+            // Use existing RayAABB for trunk (Boolean result + closest hit)
+            if (RayAABB(oldPos, dir, minB, maxB, dist, t)) {
+                hit = true; 
+                hitTree = true;
+                hitPoint = oldPos + dir * (t - 0.2f); // Retract slightly to prevent Z-fighting at distance
+                hitColor = glm::vec4(0.8f, 0.6f, 0.3f, 1.0f); // Very Bright Wood
+                // Trunk hit stops bullet instantly, so we don't check leaves for this tree (or maybe we should? No, trunk is solid)
+                break; 
+            }
+
+            // 2. LEAVES COLLISION (Pass-through + Particles)
+            // Leaves AABB: Expanded to cover "Pyramid" top and wider branches
+            float leavesW = 4.0f * treeScale; // Wider
+            float leavesBase = treePos.y + 6.0f * treeScale;
+            float leavesTop = treePos.y + 25.0f * treeScale; // Much Taller to catch the top
+            
+            glm::vec3 lMin = treePos - glm::vec3(leavesW, 0, leavesW);
+            glm::vec3 lMax = treePos + glm::vec3(leavesW, 0, leavesW);
+            lMin.y = leavesBase;
+            lMax.y = leavesTop;
+
+            float tNear, tFar;
+            if (GetRayAABBIntersections(oldPos, dir, lMin, lMax, tNear, tFar)) {
+                auto SpawnLeafParticles = [&](glm::vec3 pos) {
+                    for(int i=0; i<6; i++) {
+                        glm::vec3 rVel = glm::vec3((rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f);
+                        // Very Bright Neon Green for leaves
+                        particles.SpawnParticle(pos, rVel * 2.0f, glm::vec4(0.4f, 1.0f, 0.4f, 1.0f), 0.15f, 0.5f, -5.0f);
+                    }
+                };
+
+                // Check Entry
+                if (tNear >= 0.0f && tNear <= dist) {
+                    SpawnLeafParticles(oldPos + dir * (tNear - 0.2f)); // Bias Entry
+                }
+                // Check Exit
+                if (tFar >= 0.0f && tFar <= dist) {
+                     SpawnLeafParticles(oldPos + dir * (tFar + 0.5f)); // Push Exit OUTWARD
+                }
+            }
+        }
+
+        if (hit) {
+            p.Active = false;
+            
+            // Spawn Crater (Only on ground)
+            // Bias crater up slightly too? FootprintSystem might handle it.
+            if(!hitTree) craters.AddFootprint(hitPoint, (float)(rand() % 360));
+            
+            // Spawn Debris
+            int debrisCount = hitTree ? 15 : 8; 
+            for(int i=0; i<debrisCount; i++) {
+                 glm::vec3 rndVel = glm::vec3((rand()%100)/100.0f - 0.5f, 3.0f + (rand()%100)/50.0f, (rand()%100)/100.0f - 0.5f);
+                 if(hitTree) rndVel *= 1.4f; 
+                 particles.SpawnParticle(hitPoint, rndVel, hitColor, 0.08f, 0.6f, -9.8f);
+            }
+            continue; // Stop processing this bullet
+        }
+
+        // B. Terrain
+        if (!hit) {
+            float groundY = WorldGenerator::GetHeight(p.Position.x, p.Position.z);
+            if (p.Position.y < groundY) {
+                hit = true;
+                // Approximate impact point
+                hitPoint = p.Position; 
+                hitPoint.y = groundY + 0.1f; // Bias up
+                hitColor = glm::vec4(WorldGenerator::GetTerrainColor(hitPoint.x, hitPoint.z, groundY), 1.0f);
+                // Ultra Bright Terrain Hit (Light Gray/White tint)
+                hitColor = hitColor + glm::vec4(0.4f, 0.4f, 0.4f, 0.0f);
+                
+                p.Active = false;
+                // Craters handle their own Y bias usually
+                craters.AddFootprint(glm::vec3(hitPoint.x, groundY, hitPoint.z), (float)(rand() % 360)); 
+                for(int i=0; i<8; i++) {
+                     glm::vec3 rndVel = glm::vec3((rand()%100)/100.0f - 0.5f, 3.0f + (rand()%100)/50.0f, (rand()%100)/100.0f - 0.5f);
+                     particles.SpawnParticle(hitPoint, rndVel, hitColor, 0.08f, 0.6f, -9.8f);
+                }
+            }
+        }
+    }
+    
+    // Cleanup inactive
+    projectiles.erase(std::remove_if(projectiles.begin(), projectiles.end(), [](const Projectile& p){ return !p.Active; }), projectiles.end());
 }
 
-void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& particles, FootprintSystem& craters, ChunkManager& chunkManager) {
+void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& particles) {
     if (cooldownTimer > 0.0f) return;
     
-    cooldownTimer = 0.4f; // Slightly faster fire rate
-    recoilTimer = 1.0f;   // Kick back
+    cooldownTimer = 1.7f; 
+    recoilTimer = 1.0f;
 
     // 1. Muzzle Flash (Small, bright)
     glm::vec3 muzzlePos = camPos + camDir * 1.5f + glm::vec3(0.08f, -0.15f, 0.0f);
@@ -130,87 +300,13 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
         particles.SpawnParticle(muzzlePos, rndVel, glm::vec4(0.98f, 0.98f, 0.98f, 0.05f), 0.4f, 1.0f, 0.3f);
     }
 
-    // 2. Raycast Impact (Terrain + Trees)
-    glm::vec3 dir = glm::normalize(camDir);
-    glm::vec3 hitPoint;
-    glm::vec4 hitColor(1.0f);
-    bool hit = false;
-    bool hitTree = false;
-
-    // We check for trees first as they are "raised" objects
-    std::vector<glm::vec4> nearbyTrees;
-    chunkManager.GetTreesInRange(camPos, 50.0f, nearbyTrees);
-
-    for(int i=0; i<100; i++) { 
-        glm::vec3 ray = camPos + dir * (i * 0.5f);
-        
-        // A. Check Trees (AABB Collision for Square Trunks)
-        for(const auto& treeData : nearbyTrees) {
-            glm::vec3 treePos(treeData.x, treeData.y, treeData.z);
-            float treeScale = treeData.w;
-            float halfW = 0.6f * treeScale; // Half-width matches visual mesh
-            float trunkTop = treePos.y + 10.0f * treeScale;
-
-            // Check Height first
-            if (ray.y < treePos.y || ray.y > trunkTop) continue;
-
-            // Check AABB (Axis Aligned Box)
-            float minX = treePos.x - halfW;
-            float maxX = treePos.x + halfW;
-            float minZ = treePos.z - halfW;
-            float maxZ = treePos.z + halfW;
-
-            if (ray.x >= minX && ray.x <= maxX && ray.z >= minZ && ray.z <= maxZ) {
-                hit = true;
-                hitTree = true;
-                
-                // Snap to Closest Face (with bias)
-                // Determine distances to each face
-                float dLeft   = abs(ray.x - minX);
-                float dRight  = abs(ray.x - maxX);
-                float dBack   = abs(ray.z - minZ);
-                float dFront  = abs(ray.z - maxZ);
-                
-                // Find minimum distance
-                float minD = std::min({dLeft, dRight, dBack, dFront});
-                float bias = 0.08f; 
-
-                hitPoint = ray;
-                if (minD == dLeft)       hitPoint.x = minX - bias;
-                else if (minD == dRight) hitPoint.x = maxX + bias;
-                else if (minD == dBack)  hitPoint.z = minZ - bias;
-                else                     hitPoint.z = maxZ + bias; // Front
-
-                hitColor = glm::vec4(0.25f, 0.15f, 0.05f, 1.0f); // Dark Wood Color
-                break;
-            }
-        }
-        if(hit) break;
-
-        // B. Check Terrain
-        float groundY = WorldGenerator::GetHeight(ray.x, ray.z);
-        if(ray.y < groundY) {
-            hitPoint = ray;
-            hitPoint.y = groundY; 
-            hit = true;
-            glm::vec3 gColor = WorldGenerator::GetTerrainColor(ray.x, ray.z, groundY);
-            hitColor = glm::vec4(gColor, 1.0f);
-            break;
-        }
-    }
-    
-    if (hit) {
-        // Spawn Crater (Only on ground)
-        if(!hitTree) craters.AddFootprint(hitPoint, (float)(rand() % 360));
-        
-        // Spawn Debris (Smaller: size 0.08, matched color)
-        int debrisCount = hitTree ? 15 : 8; // More shards from wood
-        for(int i=0; i<debrisCount; i++) {
-             glm::vec3 rndVel = glm::vec3((rand()%100)/100.0f - 0.5f, 3.0f + (rand()%100)/50.0f, (rand()%100)/100.0f - 0.5f);
-             if(hitTree) rndVel *= 1.4f; // Faster explosion from tree
-             particles.SpawnParticle(hitPoint, rndVel, hitColor, 0.08f, 0.6f, -9.8f);
-        }
-    }
+    // Spawn Projectile
+    Projectile p;
+    p.Active = true;
+    p.LifeTime = 10.0f; // Long lifetime to see arc
+    p.Position = camPos + camDir * 0.5f; 
+    p.Velocity = camDir * Config::Gameplay::ProjectileSpeed; 
+    projectiles.push_back(p);
 }
 
 void WeaponSystem::Render(GLuint shaderProgram) {
@@ -256,4 +352,61 @@ void WeaponSystem::Render(GLuint shaderProgram) {
     glBindVertexArray(VAO);
     // Override color uniform if needed, or rely on vertex attributes
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(gunVertices.size()/9));
+    
+    // Draw Projectiles
+    if (projectiles.empty()) return;
+
+    // Simple Point/Line drawing for projectiles
+    // NOTE: This usually needs World Space ViewMatrix, but we are inside Weapon Render which might be Identity
+    // IF we are in identity, we cannot draw world space projectiles here easily.
+    // However, in main.cpp, Weapon.Render is called with Identity View.
+    // Solution: Draw projectiles in main.cpp or restore View Matrix?
+    // Hack: WeaponSystem::Render only draws the GUN.
+    // We should implement WeaponSystem::RenderProjectiles(shaderProgram) separately using World View?
+    // OR: Temporarily use Identity here.
+    // Wait, the user plan was to modify main.cpp.
+}
+
+// Separate Render helper for Projectiles using World View
+void WeaponSystem::RenderProjectiles(GLuint shaderProgram, GLuint vao, GLuint vbo) {
+     if (projectiles.empty()) return;
+     
+     std::vector<float> data;
+     for(const auto& p : projectiles) {
+         if(!p.Active) continue;
+        
+         // Draw a simple RED BALL (Cross shape for billboard-ish look or just a point)
+         // Let's draw a small Quad or 3 lines crossing
+         float sz = 0.2f; // Size of the ball
+         glm::vec3 pos = p.Position;
+         
+         auto addLine = [&](glm::vec3 p1, glm::vec3 p2) {
+             data.push_back(p1.x); data.push_back(p1.y); data.push_back(p1.z);
+             data.push_back(1.0f); data.push_back(0.0f); data.push_back(0.0f); // RED
+             data.push_back(0); data.push_back(0); 
+             data.push_back(0); data.push_back(1); data.push_back(0); 
+             
+             data.push_back(p2.x); data.push_back(p2.y); data.push_back(p2.z);
+             data.push_back(1.0f); data.push_back(0.0f); data.push_back(0.0f); // RED
+             data.push_back(0); data.push_back(0); 
+             data.push_back(0); data.push_back(1); data.push_back(0); 
+         };
+
+         // Cross 3 axes
+         addLine(pos - glm::vec3(sz,0,0), pos + glm::vec3(sz,0,0));
+         addLine(pos - glm::vec3(0,sz,0), pos + glm::vec3(0,sz,0));
+         addLine(pos - glm::vec3(0,0,sz), pos + glm::vec3(0,0,sz));
+     }
+     
+     glBindBuffer(GL_ARRAY_BUFFER, vbo);
+     glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
+     glBindVertexArray(vao);
+     
+     // Attributes (Assuming standard layout)
+     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
+     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6*sizeof(float))); glEnableVertexAttribArray(2);
+     glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8*sizeof(float))); glEnableVertexAttribArray(3);
+     
+     glDrawArrays(GL_LINES, 0, (GLsizei)(data.size()/11));
 }

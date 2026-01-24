@@ -1,6 +1,7 @@
 #include "ParticleSystem.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "Config.h" // Added for distance scaling
 
 ParticleSystem::ParticleSystem() {
     float quad[] = {
@@ -83,10 +84,18 @@ void ParticleSystem::Render(GLuint shaderProgram, glm::vec3 camPos) {
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, p.pos);
         
+        // DISTANCE SCALING
+        float dist = glm::length(p.pos - camPos);
+        float distScale = 1.0f;
+        if (dist > Config::Graphics::DistantScaleStart) {
+            distScale = 1.0f + (dist - Config::Graphics::DistantScaleStart) * Config::Graphics::DistantScaleFactor;
+            if(distScale > Config::Graphics::DistantScaleMax) distScale = Config::Graphics::DistantScaleMax;
+        }
+
         // Billboard alignment
         glm::mat4 viewLook = glm::lookAt(p.pos, camPos, glm::vec3(0,1,0));
         model = glm::inverse(viewLook); 
-        model = glm::scale(model, glm::vec3(p.size, p.size, p.size)); 
+        model = glm::scale(model, glm::vec3(p.size * distScale)); 
 
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
         

@@ -20,7 +20,9 @@ public:
 
     void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront, glm::vec2 windDir,
                 ChunkManager& chunkManager, ScentManager& scentManager);
-    void Render(GLuint shaderProgram);
+    
+    // Updated Render to accept camPos for distance scaling
+    void Render(GLuint shaderProgram); 
     void RenderDebug(GLuint shaderProgram);
 
     void TakeDamage(float amount);

@@ -2,6 +2,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <algorithm>
+#include "Config.h" // Added for Config constants
 
 void Chunk::Cleanup() {
     if (VAO) glDeleteVertexArrays(1, &VAO);

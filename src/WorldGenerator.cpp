@@ -7,14 +7,45 @@ unsigned int WorldGenerator::GlobalSeed = 0;
 float WorldGenerator::OffsetX = 0.0f;
 float WorldGenerator::OffsetZ = 0.0f;
 
+// Pseudo-random hash (0-1)
+float Hash(float x, float z) {
+    float p = x * 12.9898f + z * 78.233f;
+    return glm::fract(sin(p) * 43758.5453f);
+}
+
+// Smooth Value Noise
+float SmoothNoise(float x, float z) {
+    float i_x = floor(x); float i_z = floor(z);
+    float f_x = glm::fract(x); float f_z = glm::fract(z);
+    
+    // Four corners
+    float a = Hash(i_x, i_z);
+    float b = Hash(i_x + 1.0f, i_z);
+    float c = Hash(i_x, i_z + 1.0f);
+    float d = Hash(i_x + 1.0f, i_z + 1.0f);
+    
+    // Smooth interpolation (Smoothstep)
+    float u = f_x * f_x * (3.0f - 2.0f * f_x);
+    float v = f_z * f_z * (3.0f - 2.0f * f_z);
+    
+    return glm::mix(glm::mix(a, b, u), glm::mix(c, d, u), v);
+}
+
 float WorldGenerator::GetHeight(float x, float z) {
     // Apply Random Offset for Per-Run Variety
     x += OffsetX;
     z += OffsetZ;
 
-    // Smooth mathematical noise for fluid physics
-    float y = std::abs(sin(x * Config::Terrain::BaseFreqX)) * std::abs(cos(z * Config::Terrain::BaseFreqZ)) * Config::Terrain::BaseAmplitude;
-    y += std::abs(sin(x * Config::Terrain::DetailFreqX + z * Config::Terrain::DetailFreqZ)) * Config::Terrain::DetailAmplitude;
+    float y = 0.0f;
+    
+    // Octave 1: Base Hills (Large features)
+    // Value Noise returns 0..1, so we center it around 0 (-0.5..0.5) for hills/valleys if desired, 
+    // or just scale it. Let's keep 0..1 and scale.
+    y += SmoothNoise(x * Config::Terrain::BaseFreqX, z * Config::Terrain::BaseFreqZ) * Config::Terrain::BaseAmplitude;
+    
+    // Octave 2: Detail (Roughness)
+    y += SmoothNoise(x * Config::Terrain::DetailFreqX, z * Config::Terrain::DetailFreqZ) * Config::Terrain::DetailAmplitude;
+    
     return y;
 }
 
@@ -183,7 +214,7 @@ std::vector<glm::vec4> WorldGenerator::GenerateChunkTrees(int chunkX, int chunkZ
         // Deterministic scale based on position hash
         float scaleNoise = sin(p.x * 12.9898 + p.y * 78.233) * 43758.5453;
         scaleNoise = scaleNoise - floor(scaleNoise); // 0..1
-        float tScale = 0.8f + scaleNoise * 0.7f; // 0.8 to 1.5
+        float tScale = Config::Trees::MinScale + scaleNoise * (Config::Trees::MaxScale - Config::Trees::MinScale); 
         
         treeData.push_back(glm::vec4(p.x, y, p.y, tScale));
     }

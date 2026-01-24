@@ -6,6 +6,7 @@
 #include <glad/glad.h>
 #include "WorldGenerator.h"
 #include "Frustum.h"
+#include "Config.h" // Needed for default args
 
 struct Chunk {
     int x, z;
@@ -22,7 +23,7 @@ struct Chunk {
 
 class ChunkManager {
 public:
-    ChunkManager(int renderDistance = 8);
+    ChunkManager(int renderDistance = Config::World::RenderDistance);
     ~ChunkManager();
 
     void Update(glm::vec3 playerPos);
@@ -37,8 +38,8 @@ public:
 
 private:
     int m_renderDistance;
-    int m_chunkSize = 16;
-    float m_scale = 2.0f;
+    int m_chunkSize = Config::World::ChunkSize;
+    float m_scale = Config::World::ChunkScale;
     std::map<std::pair<int, int>, Chunk> m_chunks;
 
     void LoadChunk(int x, int z);

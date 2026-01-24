@@ -12,6 +12,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <random> // NEW: For better RNG
 
 #include "Monster.h"
 #include "ScentManager.h"
@@ -155,6 +156,80 @@ void DrawArrow(float x, float y, float size, float angle, GLuint vao, GLuint vbo
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size()/3));
 }
 
+// Helper to draw a DONUT (Ring)
+void DrawDonut(float cx, float cy, float cz, float rMin, float rMax, glm::vec3 color, GLuint vao, GLuint vbo) {
+    std::vector<float> data;
+    int segments = 64;
+    float step = 6.28318f / segments;
+
+    for (int i = 0; i < segments; i++) {
+        float theta1 = i * step;
+        float theta2 = (i + 1) * step;
+
+        float c1 = cos(theta1); float s1 = sin(theta1);
+        float c2 = cos(theta2); float s2 = sin(theta2);
+        
+        // Vertex helper for adding simple Position+Color+UV+Normal struct
+        auto addVert = [&](float r, float c, float s) {
+            data.push_back(cx + c * r); data.push_back(cy); data.push_back(cz + s * r); // Pos
+            data.push_back(color.r); data.push_back(color.g); data.push_back(color.b);  // Color
+            data.push_back(0); data.push_back(0); // UV
+            data.push_back(0); data.push_back(1); data.push_back(0); // Normal
+        };
+        
+        // Tri 1
+        addVert(rMin, c1, s1);
+        addVert(rMax, c1, s1);
+        addVert(rMin, c2, s2);
+        
+        // Tri 2
+        addVert(rMax, c1, s1);
+        addVert(rMax, c2, s2);
+        addVert(rMin, c2, s2);
+    }
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
+    glBindVertexArray(vao);
+    // Ensure Attributes are set up for "Vertex" layout!
+    // Stride = 11 floats
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0); glEnableVertexAttribArray(0); // Pos
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3*sizeof(float))); glEnableVertexAttribArray(1); // Color
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6*sizeof(float))); glEnableVertexAttribArray(2); // UV
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8*sizeof(float))); glEnableVertexAttribArray(3); // Norm
+    
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size()/11));
+}
+
+// Helper to draw a single 3D Line
+void DrawLine(glm::vec3 start, glm::vec3 end, glm::vec3 color, GLuint vao, GLuint vbo) {
+    std::vector<float> data;
+    // Vertex format matching DrawDonut for simplicity (Pos + Color + UV + Normal)
+    // P1
+    data.push_back(start.x); data.push_back(start.y); data.push_back(start.z);
+    data.push_back(color.r); data.push_back(color.g); data.push_back(color.b);
+    data.push_back(0); data.push_back(0); // UV
+    data.push_back(0); data.push_back(1); data.push_back(0); // Normal
+    
+    // P2
+    data.push_back(end.x); data.push_back(end.y); data.push_back(end.z);
+    data.push_back(color.r); data.push_back(color.g); data.push_back(color.b);
+    data.push_back(0); data.push_back(0);
+    data.push_back(0); data.push_back(1); data.push_back(0);
+
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    // Use GL_LINES instead of triangles
+    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
+    glBindVertexArray(vao);
+    
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0); glEnableVertexAttribArray(0); // Pos
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3*sizeof(float))); glEnableVertexAttribArray(1); // Color
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6*sizeof(float))); glEnableVertexAttribArray(2); // UV
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8*sizeof(float))); glEnableVertexAttribArray(3); // Norm
+    
+    glDrawArrays(GL_LINES, 0, 2);
+}
+
 int main() {
     sf::ContextSettings settings;
     settings.depthBits = 24;
@@ -246,6 +321,7 @@ int main() {
     
     float globalTime = 0.0f;
     bool debugCam = false;
+    bool showSpawnArea = false; // New toggle
     glm::vec3 freeCamPos(0, 50, 0);
     glm::vec3 freeCamFront(0, -1, 0);
     float freeCamYaw = -90.0f;
@@ -392,9 +468,15 @@ int main() {
     // Procedural Spawning ("The Donut" + Tree Collision Check)
     {
         // CONSTANTS (Must match ChunkManager)
-        const int C_SIZE = 16;
-        const float C_SCALE = 2.0f;
-        const float TREE_CHECK_RADIUS = 1.0f; // Minimal distance from tree center
+        const int C_SIZE = Config::World::ChunkSize;
+        const float C_SCALE = Config::World::ChunkScale;
+        
+        // Modern RNG Setup
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_real_distribution<float> angleDist(0.0f, 360.0f); // Degrees
+        std::uniform_real_distribution<float> radiusDist(Config::Gameplay::MonsterSpawnMinRadius, Config::Gameplay::MonsterSpawnMaxRadius);
+        std::uniform_real_distribution<float> coordDist(-150.0f, 150.0f); // For player
 
         auto IsPositionCurrentSafe = [&](float x, float z) {
             int cx = (int)floor(x / (C_SIZE * C_SCALE));
@@ -405,11 +487,6 @@ int main() {
                 for(int dz=-1; dz<=1; dz++) {
                      auto trees = WorldGenerator::GetChunkTreeLocations(cx+dx, cz+dz, C_SIZE, C_SCALE);
                      for(const auto& t : trees) {
-                         // t is x,z. Scale roughly 1.0 (visual height calc inside generator)
-                         // But we need exact tree pos. 
-                         // WorldGenerator::GenerateChunkTrees does scale calc.
-                         // Let's re-calculate scale roughly or just assume max radius 1.5
-                         
                          // Replicating scale logic from WorldGenerator:
                          float scaleNoise = sin(t.x * 12.9898 + t.y * 78.233) * 43758.5453;
                          scaleNoise = scaleNoise - floor(scaleNoise);
@@ -429,21 +506,27 @@ int main() {
         int attempts = 0;
         glm::vec3 pPos;
         do {
-            float px = (float)(rand() % 300 - 150);
-            float pz = (float)(rand() % 300 - 150);
+            float px = coordDist(gen);
+            float pz = coordDist(gen);
             pPos = glm::vec3(px, WorldGenerator::GetHeight(px, pz) + 1.0f, pz);
             attempts++;
         } while(!IsPositionCurrentSafe(pPos.x, pPos.z) && attempts < 100);
         player.Position = pPos;
 
-        // 2. Spawn Monster (Donut)
+        // 2. Spawn Monster (Donut Distribution)
         attempts = 0;
         glm::vec3 mPos;
         do {
-             float angle = (float)(rand() % 360) * 3.14159f / 180.0f;
-             float dist = 150.0f + (float)(rand() % 100); 
-             float mx = pPos.x + cos(angle) * dist;
-             float mz = pPos.z + sin(angle) * dist;
+             // Random Angle
+             float angleDeg = angleDist(gen);
+             float angleRad = glm::radians(angleDeg);
+             
+             // Random Radius (200 - 300)
+             float dist = radiusDist(gen);
+             
+             float mx = pPos.x + cos(angleRad) * dist;
+             float mz = pPos.z + sin(angleRad) * dist;
+             
              mPos = glm::vec3(mx, WorldGenerator::GetHeight(mx, mz), mz);
              attempts++;
         } while(!IsPositionCurrentSafe(mPos.x, mPos.z) && attempts < 100);
@@ -482,6 +565,9 @@ int main() {
                 
                 // Debug Camera Toggle
                 if (event.key.code == sf::Keyboard::F3) debugCam = !debugCam;
+                
+                // Spawn Area Toggle (Only in F3)
+                if (debugCam && event.key.code == sf::Keyboard::G) showSpawnArea = !showSpawnArea;
             }
         }
 
@@ -524,7 +610,7 @@ int main() {
             }
 
             if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-                weapon.TryFire(player.Position, player.Front, particles, footprints, chunkManager);
+                weapon.TryFire(player.Position, player.Front, particles);
             }
         }
 
@@ -539,7 +625,11 @@ int main() {
         glUseProgram(shaderProgram);
         glUniform1f(glGetUniformLocation(shaderProgram, "u_Time"), globalTime);
         glUniform2f(glGetUniformLocation(shaderProgram, "u_Resolution"), (float)INTERNAL_W, (float)INTERNAL_H);
-        glUniform1i(glGetUniformLocation(shaderProgram, "u_Snap"), 1); 
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_Snap"), 1); // ENABLED SNAPPING 
+        
+        // FOG CONFIGURATION
+        glUniform1f(glGetUniformLocation(shaderProgram, "u_FogStart"), Config::World::FogDistStart);
+        glUniform1f(glGetUniformLocation(shaderProgram, "u_FogEnd"), Config::World::FogDistEnd);
 
         glm::mat4 view = debugCam ? glm::lookAt(freeCamPos, freeCamPos + freeCamFront, glm::vec3(0,1,0)) : player.GetViewMatrix();
         glm::mat4 projection = glm::perspective(glm::radians(70.0f), (float)INTERNAL_ASPECT, 0.1f, 1000.0f);
@@ -552,15 +642,18 @@ int main() {
 
         // Wind System Update
         windSystem.Update(deltaTime);
-        weapon.Update(deltaTime);     // NEW
-        particles.Update(deltaTime);  // NEW
         glm::vec2 windDir = windSystem.GetDirection();
+        float windStrength = 1.0f; // Assuming simpler wind system, or expose strength getter
+        
+        weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles);     // NEW SIGNATURE
+        particles.Update(deltaTime);  // NEW
         glUniform2f(glGetUniformLocation(shaderProgram, "u_WindDirection"), windDir.x, windDir.y);
 
         // 1. Terrain Render
         glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
         glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
         glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f); // STATIC TERRAIN
+        glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f); // RESET ALPHA STATE (Critical Fix)
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, textureID); // Noise texture
         glUniform1i(glGetUniformLocation(shaderProgram, "u_Texture"), 0);
@@ -611,10 +704,69 @@ int main() {
         // 4. Monster Render (Normal)
         monster.Render(shaderProgram);
 
+        // 5. Render Projectiles (World Space) - VISIBLE IN NORMAL MODE
+        // Reuse debug VBO or creating a new one?
+        static GLuint projVAO=0, projVBO=0;
+        if(projVAO==0) { glGenVertexArrays(1, &projVAO); glGenBuffers(1, &projVBO); }
+        
+        // Fix Visibility: Bind White Texture and ensure simple uniform state
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_Texture"), 0);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_Model"), 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f))); // RESET MODEL MATRIX!
+        glBindTexture(GL_TEXTURE_2D, whiteTexID);
+        
+        weapon.RenderProjectiles(shaderProgram, projVAO, projVBO);
+        
         // Debug Highlights (Always on top)
         if (debugCam) {
             monster.RenderDebug(shaderProgram);
             player.RenderDebug(shaderProgram);
+            
+            if (showSpawnArea) {
+                // Use a dynamic VBO for debug drawing (can reuse shadowVBO or create a dedicated debug one?)
+                // Let's create a quick one-off VAO/VBO for this tool to be safe and clean.
+                static GLuint dbgVAO = 0, dbgVBO = 0;
+                if (dbgVAO == 0) {
+                     glGenVertexArrays(1, &dbgVAO);
+                     glGenBuffers(1, &dbgVBO);
+                }
+                
+                glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+                glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+                glUniform1i(glGetUniformLocation(shaderProgram, "u_Texture"), 0);
+                glBindTexture(GL_TEXTURE_2D, whiteTexID);
+                
+                // Yellow semi-transparent
+                // Note: Shader likely doesn't support transparency well without sorting or specific blend modes,
+                // but we can try basic addition.
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                
+                // Use the configured radii
+                DrawDonut(player.Position.x, player.Position.y + 0.1f, player.Position.z, 
+                          Config::Gameplay::MonsterSpawnMinRadius, 
+                          Config::Gameplay::MonsterSpawnMaxRadius, 
+                          glm::vec3(1.0f, 1.0f, 0.0f), dbgVAO, dbgVBO);
+                          
+                glDisable(GL_BLEND);
+            }
+            
+            // Render Range Lines
+            // Reuse the dynamic VBO (dbgVBO) and White Texture
+            static GLuint dbgVAO2 = 0, dbgVBO2 = 0;
+            if (dbgVAO2 == 0) {
+                 glGenVertexArrays(1, &dbgVAO2);
+                 glGenBuffers(1, &dbgVBO2);
+            }
+            glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+            glBindTexture(GL_TEXTURE_2D, whiteTexID);
+            
+            // 2. Vision Range (Blue) - 1000.0 units (Far Plane)
+            // Drawn slightly higher
+            glm::vec3 startPos = player.Position + glm::vec3(0, -0.5f, 0); 
+            glm::vec3 visionEnd = startPos + player.Front * 1000.0f;
+            DrawLine(startPos + glm::vec3(0, 0.1f, 0), visionEnd, glm::vec3(0.0f, 0.0f, 1.0f), dbgVAO2, dbgVBO2);
         }
 
         // 5. Weapon (Overlay - Clear Depth)

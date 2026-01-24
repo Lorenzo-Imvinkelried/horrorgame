@@ -100,6 +100,7 @@ void main()
 
     vec4 clipPos = u_Projection * viewPos;
     vec4 snappedPos = clipPos;
+    // NUCLEAR BYPASS: FORCE OFF SNAPPING
     if (u_Snap && clipPos.w > 0.0) {
         vec2 grid = u_Resolution;
         vec2 snap = clipPos.xy / clipPos.w;
