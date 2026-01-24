@@ -22,4 +22,12 @@ private:
     std::vector<Footprint> footprints;
     GLuint VAO, VBO, TexID;
     int maxFootprints = 100; // Increased
+    int m_vertexCount = 6;
+
+    struct FullVert {
+        float x,y,z;
+        float r,g,b;
+        float u,v;
+        float nx,ny,nz;
+    };
 };

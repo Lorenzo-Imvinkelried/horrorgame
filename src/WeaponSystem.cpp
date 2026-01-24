@@ -2,6 +2,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
+#include <algorithm>
 
 WeaponSystem::WeaponSystem() : currentAmmo(2), maxAmmo(2), recoilTimer(0.0f), cooldownTimer(0.0f) {
     BuildShotgunMesh();
@@ -143,22 +144,43 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
     for(int i=0; i<100; i++) { 
         glm::vec3 ray = camPos + dir * (i * 0.5f);
         
-        // A. Check Trees (Cylindrical Collision)
+        // A. Check Trees (AABB Collision for Square Trunks)
         for(const auto& treeData : nearbyTrees) {
             glm::vec3 treePos(treeData.x, treeData.y, treeData.z);
             float treeScale = treeData.w;
-            float trunkW = 0.5f * treeScale;
-            float trunkH = 10.0f * treeScale; // Conservatively tall
+            float halfW = 0.6f * treeScale; // Half-width matches visual mesh
+            float trunkTop = treePos.y + 10.0f * treeScale;
 
-            // Radial check
-            float dx = ray.x - treePos.x;
-            float dz = ray.z - treePos.z;
-            float distSq = dx*dx + dz*dz;
-            
-            if (distSq < trunkW * trunkW && ray.y >= treePos.y && ray.y <= treePos.y + trunkH) {
+            // Check Height first
+            if (ray.y < treePos.y || ray.y > trunkTop) continue;
+
+            // Check AABB (Axis Aligned Box)
+            float minX = treePos.x - halfW;
+            float maxX = treePos.x + halfW;
+            float minZ = treePos.z - halfW;
+            float maxZ = treePos.z + halfW;
+
+            if (ray.x >= minX && ray.x <= maxX && ray.z >= minZ && ray.z <= maxZ) {
                 hit = true;
                 hitTree = true;
+                
+                // Snap to Closest Face (with bias)
+                // Determine distances to each face
+                float dLeft   = abs(ray.x - minX);
+                float dRight  = abs(ray.x - maxX);
+                float dBack   = abs(ray.z - minZ);
+                float dFront  = abs(ray.z - maxZ);
+                
+                // Find minimum distance
+                float minD = std::min({dLeft, dRight, dBack, dFront});
+                float bias = 0.08f; 
+
                 hitPoint = ray;
+                if (minD == dLeft)       hitPoint.x = minX - bias;
+                else if (minD == dRight) hitPoint.x = maxX + bias;
+                else if (minD == dBack)  hitPoint.z = minZ - bias;
+                else                     hitPoint.z = maxZ + bias; // Front
+
                 hitColor = glm::vec4(0.25f, 0.15f, 0.05f, 1.0f); // Dark Wood Color
                 break;
             }

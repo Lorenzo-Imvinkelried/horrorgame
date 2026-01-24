@@ -1,6 +1,7 @@
 #include "FootprintSystem.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include "WorldGenerator.h"
 
 FootprintSystem::FootprintSystem() {
     // 1. Generate Gradient Texture (Radial Falloff)
@@ -31,27 +32,48 @@ FootprintSystem::FootprintSystem() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // 2. Vertex Setup
-    struct FullVert {
-        float x,y,z;
-        float r,g,b;
-        float u,v;
-        float nx,ny,nz;
-    };
-    
-    FullVert q[] = {
-        { -0.2f, 0.0f, -0.2f,  1,1,1, 0,0, 0,1,0 },
-        {  0.2f, 0.0f, -0.2f,  1,1,1, 1,0, 0,1,0 },
-        {  0.2f, 0.0f,  0.2f,  1,1,1, 1,1, 0,1,0 },
-        {  0.2f, 0.0f,  0.2f,  1,1,1, 1,1, 0,1,0 },
-        { -0.2f, 0.0f,  0.2f,  1,1,1, 0,1, 0,1,0 },
-        { -0.2f, 0.0f, -0.2f,  1,1,1, 0,0, 0,1,0 },
-    };
+    // 2. Vertex Setup (Tessellated Grid for Terrain Conforming)
+    std::vector<FullVert> verts;
+    int gridDetail = 3; // 3x3 grid = 9 quads = 18 triangles
+    float size = 0.4f;  // Total width (from -0.2 to 0.2)
+    float start = -size/2.0f;
+    float step = size / gridDetail;
+
+    for(int z=0; z<gridDetail; z++) {
+        for(int x=0; x<gridDetail; x++) {
+            float x1 = start + x * step;
+            float z1 = start + z * step;
+            float x2 = x1 + step;
+            float z2 = z1 + step;
+
+            // UVs
+            float u1 = (float)x / gridDetail;
+            float v1 = (float)z / gridDetail;
+            float u2 = (float)(x+1) / gridDetail;
+            float v2 = (float)(z+1) / gridDetail;
+
+            // Quad (2 Triangles, Matching Terrain Diagonal 01-10)
+            // Terrain uses: (00, 01, 10) and (10, 01, 11)
+            // Here: 00=(x1,z1), 01=(x1,z2), 10=(x2,z1), 11=(x2,z2)
+            
+            // Tri 1: 00 - 01 - 10
+            verts.push_back({x1, 0, z1,  1,1,1, u1,v1, 0,1,0});
+            verts.push_back({x1, 0, z2,  1,1,1, u1,v2, 0,1,0});
+            verts.push_back({x2, 0, z1,  1,1,1, u2,v1, 0,1,0});
+
+            // Tri 2: 10 - 01 - 11
+            verts.push_back({x2, 0, z1,  1,1,1, u2,v1, 0,1,0});
+            verts.push_back({x1, 0, z2,  1,1,1, u1,v2, 0,1,0});
+            verts.push_back({x2, 0, z2,  1,1,1, u2,v2, 0,1,0});
+        }
+    }
+    m_vertexCount = (int)verts.size();
 
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(q), q, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(FullVert), verts.data(), GL_STATIC_DRAW);
     
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(FullVert), (void*)0);
     glEnableVertexAttribArray(0);
@@ -71,8 +93,10 @@ FootprintSystem::~FootprintSystem() {
 
 void FootprintSystem::AddFootprint(glm::vec3 pos, float rotation) {
     Footprint fp;
-    fp.pos = pos;
-    fp.pos.y += 0.01f; // Lower offset to look merged
+    // Calculate precise mesh height
+    float groundY = WorldGenerator::GetExactHeight(pos.x, pos.z);
+    
+    fp.pos = glm::vec3(pos.x, groundY + 0.02f, pos.z); // Fixed 2cm bias from precise surface
     fp.rotation = rotation;
     fp.life = 10.0f;
     
@@ -101,6 +125,10 @@ void FootprintSystem::Render(GLuint shaderProgram) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_DST_COLOR, GL_ZERO); 
     
+    // POLYGON OFFSET: Pull depth closer to camera to prevent floating while avoiding z-fighting
+    glEnable(GL_POLYGON_OFFSET_FILL);
+    glPolygonOffset(-2.5f, -2.5f); // Strong bias towards camera
+
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     GLint instancedLoc = glGetUniformLocation(shaderProgram, "u_IsInstanced");
     glUniform1i(instancedLoc, 0);
@@ -116,8 +144,11 @@ void FootprintSystem::Render(GLuint shaderProgram) {
         model = glm::rotate(model, glm::radians(fp.rotation), glm::vec3(0,1,0));
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
         
-        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        
+        glDrawArrays(GL_TRIANGLES, 0, m_vertexCount);
     }
     
+    glDisable(GL_POLYGON_OFFSET_FILL);
     glDisable(GL_BLEND);
 }

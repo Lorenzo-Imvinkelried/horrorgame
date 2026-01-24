@@ -43,7 +43,7 @@ void main()
     // If drawing a shadow/footprint, snap strictly to terrain height
     if (u_ConformToTerrain) {
         float terrainY = GetVisualHeight(worldPos.x, worldPos.z);
-        worldPos.y = terrainY + 0.05; // 0.05 bias to stay above ground
+        worldPos.y = terrainY + 0.001; // Minimal bias, rely on PolygonOffset
     } else {
         // -- WIND SYSTEM --
         // STRUCTURAL SOLUTION (Final): Explicit Control from CPU.

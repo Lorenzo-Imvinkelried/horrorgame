@@ -5,6 +5,7 @@
 #include <SFML/Window/Mouse.hpp>
 #include "WeaponSystem.h"
 #include "ParticleSystem.h"
+#include <ctime>
 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -19,6 +20,7 @@
 #include "WindSystem.h"
 #include "FootprintSystem.h"
 #include "ChunkManager.h"
+#include "Config.h"
 
 // Shader loader helper
 GLuint LoadShader(const char* vertPath, const char* fragPath) {
@@ -235,6 +237,10 @@ int main() {
     // Render Distance Increased (User Request)
     ChunkManager chunkManager(12); 
 
+    // Seed Randomness
+    srand((unsigned int)time(NULL));
+    WorldGenerator::SetSeed(rand()); 
+
     // SKY COLOR (Clear Color)
     glClearColor(0.4f, 0.6f, 1.0f, 1.0f); // Sky Blue
     
@@ -323,8 +329,8 @@ int main() {
 
     // -- RETRO RESOLUTION SETUP --
     // Increased to 640x480 (VGA) for less extreme pixelation, while keeping fixed retro aspect
-    int const INTERNAL_W = 640;
-    int const INTERNAL_H = 480;
+    int const INTERNAL_W = Config::Graphics::InternalWidth;
+    int const INTERNAL_H = Config::Graphics::InternalHeight;
     float const INTERNAL_ASPECT = (float)INTERNAL_W / (float)INTERNAL_H;
 
     // FBO
@@ -383,17 +389,66 @@ int main() {
     ScentManager scentManager;
     Monster monster(glm::vec3(0)); 
 
-    // Procedural Spawning ("The Donut")
+    // Procedural Spawning ("The Donut" + Tree Collision Check)
     {
-        float px = (float)(rand() % 300 - 150);
-        float pz = (float)(rand() % 300 - 150);
-        player.Position = glm::vec3(px, WorldGenerator::GetHeight(px, pz) + 1.0f, pz);
+        // CONSTANTS (Must match ChunkManager)
+        const int C_SIZE = 16;
+        const float C_SCALE = 2.0f;
+        const float TREE_CHECK_RADIUS = 1.0f; // Minimal distance from tree center
+
+        auto IsPositionCurrentSafe = [&](float x, float z) {
+            int cx = (int)floor(x / (C_SIZE * C_SCALE));
+            int cz = (int)floor(z / (C_SIZE * C_SCALE));
+            
+            // Check trees in 3x3 chunks to be safe
+            for(int dx=-1; dx<=1; dx++) {
+                for(int dz=-1; dz<=1; dz++) {
+                     auto trees = WorldGenerator::GetChunkTreeLocations(cx+dx, cz+dz, C_SIZE, C_SCALE);
+                     for(const auto& t : trees) {
+                         // t is x,z. Scale roughly 1.0 (visual height calc inside generator)
+                         // But we need exact tree pos. 
+                         // WorldGenerator::GenerateChunkTrees does scale calc.
+                         // Let's re-calculate scale roughly or just assume max radius 1.5
+                         
+                         // Replicating scale logic from WorldGenerator:
+                         float scaleNoise = sin(t.x * 12.9898 + t.y * 78.233) * 43758.5453;
+                         scaleNoise = scaleNoise - floor(scaleNoise);
+                         float tScale = 0.8f + scaleNoise * 0.7f;
+                         
+                         float treeRadius = 0.6f * tScale; // The AABB half-width
+                         
+                         float dist = sqrt(pow(x - t.x, 2) + pow(z - t.y, 2));
+                         if(dist < (treeRadius + 0.5f)) return false; // Too close
+                     }
+                }
+            }
+            return true;
+        };
+
+        // 1. Spawn Player
+        int attempts = 0;
+        glm::vec3 pPos;
+        do {
+            float px = (float)(rand() % 300 - 150);
+            float pz = (float)(rand() % 300 - 150);
+            pPos = glm::vec3(px, WorldGenerator::GetHeight(px, pz) + 1.0f, pz);
+            attempts++;
+        } while(!IsPositionCurrentSafe(pPos.x, pPos.z) && attempts < 100);
+        player.Position = pPos;
+
+        // 2. Spawn Monster (Donut)
+        attempts = 0;
+        glm::vec3 mPos;
+        do {
+             float angle = (float)(rand() % 360) * 3.14159f / 180.0f;
+             float dist = 150.0f + (float)(rand() % 100); 
+             float mx = pPos.x + cos(angle) * dist;
+             float mz = pPos.z + sin(angle) * dist;
+             mPos = glm::vec3(mx, WorldGenerator::GetHeight(mx, mz), mz);
+             attempts++;
+        } while(!IsPositionCurrentSafe(mPos.x, mPos.z) && attempts < 100);
         
-        float angle = (float)(rand() % 360) * 3.14159f / 180.0f;
-        float dist = 150.0f + (float)(rand() % 100); 
-        float mx = px + cos(angle) * dist;
-        float mz = pz + sin(angle) * dist;
-        monster.SetPosition(glm::vec3(mx, WorldGenerator::GetHeight(mx, mz), mz));
+        monster.SetPosition(mPos);
         monster.LookAt(player.Position);
     }
 
@@ -439,7 +494,7 @@ int main() {
             player.Update(deltaTime);
         } else {
             // Free Cam Movement
-            float camSpeed = 20.0f * deltaTime;
+            float camSpeed = Config::Gameplay::DebugCamSpeed * deltaTime;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) freeCamPos += freeCamFront * camSpeed;
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) freeCamPos -= freeCamFront * camSpeed;
             glm::vec3 camRight = glm::normalize(glm::cross(freeCamFront, glm::vec3(0,1,0)));
@@ -468,7 +523,7 @@ int main() {
                 freeCamFront = glm::normalize(f);
             }
 
-            if (sf::Mouse::isButtonPressed(sf::Mouse::Left) && !debugCam) {
+            if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
                 weapon.TryFire(player.Position, player.Front, particles, footprints, chunkManager);
             }
         }
@@ -541,12 +596,17 @@ int main() {
         }
 
         // 3. Footprints
-        glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 1); // Snap footprints too
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0); // DISABLED: Using CPU Exact Height
         glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f); // STATIC FOOTPRINTS
         footprints.Render(shaderProgram);
         glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
 
-        particles.Render(shaderProgram, player.Position);
+        glm::vec3 activeCamPos = debugCam ? freeCamPos : player.Position;
+        if (!debugCam && player.IsGrounded) {
+             activeCamPos.y += sin(player.HeadBobTimer) * player.HeadBobAmount;
+        }
+
+        particles.Render(shaderProgram, activeCamPos);
         
         // 4. Monster Render (Normal)
         monster.Render(shaderProgram);
@@ -604,7 +664,10 @@ int main() {
 
         // Wind Arrow
         float windAngle = atan2(windDir.y, windDir.x);
-        DrawArrow(0.9f, 0.1f, 0.05f, -windAngle, uiVAO, uiVBO); 
+        float playerYawRad = glm::radians(player.Yaw);
+        // Relative Angle: PlayerYaw - WindAngle + 90deg (Offset for Arrow UP)
+        float relativeAngle = playerYawRad - windAngle + 1.5708f; 
+        DrawArrow(0.9f, 0.1f, 0.05f, relativeAngle, uiVAO, uiVBO); 
 
         glEnable(GL_DEPTH_TEST);
         glDepthRange(0, 1.0); // Restore Depth

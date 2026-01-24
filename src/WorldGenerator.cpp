@@ -1,11 +1,20 @@
 #include "WorldGenerator.h"
 #include <cstdlib>
 #include <cmath>
+#include "Config.h"
+
+unsigned int WorldGenerator::GlobalSeed = 0;
+float WorldGenerator::OffsetX = 0.0f;
+float WorldGenerator::OffsetZ = 0.0f;
 
 float WorldGenerator::GetHeight(float x, float z) {
+    // Apply Random Offset for Per-Run Variety
+    x += OffsetX;
+    z += OffsetZ;
+
     // Smooth mathematical noise for fluid physics
-    float y = std::abs(sin(x * 0.05f)) * std::abs(cos(z * 0.05f)) * 4.0f;
-    y += std::abs(sin(x * 0.2f + z * 0.1f)) * 1.5f;
+    float y = std::abs(sin(x * Config::Terrain::BaseFreqX)) * std::abs(cos(z * Config::Terrain::BaseFreqZ)) * Config::Terrain::BaseAmplitude;
+    y += std::abs(sin(x * Config::Terrain::DetailFreqX + z * Config::Terrain::DetailFreqZ)) * Config::Terrain::DetailAmplitude;
     return y;
 }
 
@@ -21,7 +30,7 @@ std::vector<glm::vec2> WorldGenerator::GetChunkTreeLocations(int chunkX, int chu
     float startX = chunkX * chunkSize * scale;
     float startZ = chunkZ * chunkSize * scale;
 
-    unsigned int seed = (unsigned int)(chunkX * 73856093 ^ chunkZ * 19349663);
+    unsigned int seed = (unsigned int)(chunkX * 73856093 ^ chunkZ * 19349663 ^ GlobalSeed);
     srand(seed);
 
     int treeCount = 3 + rand() % 5; 

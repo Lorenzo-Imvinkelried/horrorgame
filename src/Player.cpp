@@ -4,12 +4,14 @@
 #include <SFML/Window/Keyboard.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glad/glad.h>
+#include "Config.h"
 
 Player::Player(glm::vec3 startPos) 
     : Position(startPos), Front(glm::vec3(0.0f, 0.0f, -1.0f)), WorldUp(glm::vec3(0.0f, 1.0f, 0.0f)),
       Yaw(-90.0f), Pitch(0.0f), Velocity(glm::vec3(0.0f)), IsGrounded(false),
       HeadBobTimer(0.0f), WeaponSwayPos(glm::vec3(0.0f))
 {
+    WalkSpeed = Config::Gameplay::PlayerSpeed;
     updateCameraVectors();
 }
 
@@ -76,8 +78,8 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
             float dz = nextPos.z - treePos.z;
             float dist = sqrt(dx*dx + dz*dz);
             
-            // Base radius for trunk is 0.25 (scaled)
-            float scaledRadius = 0.35f * treeScale; 
+            // Base radius for trunk is 0.6 (matches WorldGenerator::trunkW)
+            float scaledRadius = 0.6f * treeScale; 
             float minDist = PlayerRadius + scaledRadius;
 
             if (dist < minDist) {
@@ -189,6 +191,43 @@ void Player::RenderDebug(GLuint shaderProgram) {
 
     glBindVertexArray(debugVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
+
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
+    glEnable(GL_DEPTH_TEST);
+
+    // DRAW VIEW VECTOR (Blue Line)
+    glDisable(GL_DEPTH_TEST);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 2); // 2 = Blue
+
+    glm::vec3 lineStart = Position;
+    glm::vec3 lineEnd = Position + Front * 5.0f; // 5 meters long (longer than monster's)
+
+    std::vector<float> lineData = {
+        lineStart.x, lineStart.y, lineStart.z,   0,0,1,  0,0,0, // Start (Pos, Col, Norm)
+        lineEnd.x, lineEnd.y, lineEnd.z,         0,0,1,  0,0,0  // End
+    };
+
+    GLuint lineVAO, lineVBO;
+    glGenVertexArrays(1, &lineVAO);
+    glGenBuffers(1, &lineVBO);
+    glBindVertexArray(lineVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, lineVBO);
+    glBufferData(GL_ARRAY_BUFFER, lineData.size() * sizeof(float), lineData.data(), GL_STREAM_DRAW);
+
+    // Pos
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // Col
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3*sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    // Reset Model Matrix for Line (Already in World Space)
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+
+    glDrawArrays(GL_LINES, 0, 2);
+
+    glDeleteVertexArrays(1, &lineVAO);
+    glDeleteBuffers(1, &lineVBO);
 
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
     glEnable(GL_DEPTH_TEST);
