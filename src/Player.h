@@ -44,6 +44,11 @@ public:
     float HeadBobAmount = 0.1f;
     float HeadBobSpeed = 10.0f;
     
+    // Idle Breathing
+    float BreathTimer = 0.0f;
+    float BreathAmount = 0.035f; // Subtle breathing
+    float BreathSpeed = 2.5f;
+
     // Weapon Sway
     glm::vec3 WeaponSwayPos;
     float SwayAmount = 0.05f;

@@ -9,7 +9,7 @@
 Player::Player(glm::vec3 startPos) 
     : Position(startPos), Front(glm::vec3(0.0f, 0.0f, -1.0f)), WorldUp(glm::vec3(0.0f, 1.0f, 0.0f)),
       Yaw(-90.0f), Pitch(0.0f), Velocity(glm::vec3(0.0f)), IsGrounded(false),
-      HeadBobTimer(0.0f), WeaponSwayPos(glm::vec3(0.0f))
+      HeadBobTimer(0.0f), BreathTimer(0.0f), WeaponSwayPos(glm::vec3(0.0f))
 {
     WalkSpeed = Config::Gameplay::PlayerSpeed;
     updateCameraVectors();
@@ -115,6 +115,9 @@ void Player::Update(float deltaTime) {
     Velocity.y -= Gravity * deltaTime;
     Position.y += Velocity.y * deltaTime;
 
+    // Breathing Animation
+    BreathTimer += deltaTime * BreathSpeed;
+
     float terrainHeight = WorldGenerator::GetHeight(Position.x, Position.z);
     
     if (Position.y < terrainHeight + PlayerHeight) {
@@ -142,7 +145,11 @@ void Player::Update(float deltaTime) {
 glm::mat4 Player::GetViewMatrix() {
     glm::vec3 pos = Position;
     if(IsGrounded) {
-        pos.y += sin(HeadBobTimer) * HeadBobAmount;
+        if (HeadBobTimer > 0.001f) {
+            pos.y += sin(HeadBobTimer) * HeadBobAmount;
+        } else {
+            pos.y += sin(BreathTimer) * BreathAmount;
+        }
     }
     return glm::lookAt(pos, pos + Front, Up);
 }

@@ -803,7 +803,13 @@ int main() {
 
         glm::vec3 activeCamPos = debugCam ? freeCamPos : player.Position;
         if (!debugCam && player.IsGrounded) {
-             activeCamPos.y += sin(player.HeadBobTimer) * player.HeadBobAmount;
+             if (player.HeadBobTimer > 0.001f) {
+                 // Walking Head Bob
+                 activeCamPos.y += sin(player.HeadBobTimer) * player.HeadBobAmount;
+             } else {
+                 // Idle Breathing
+                 activeCamPos.y += sin(player.BreathTimer) * player.BreathAmount;
+             }
         }
 
         particles.Render(shaderProgram, activeCamPos);
