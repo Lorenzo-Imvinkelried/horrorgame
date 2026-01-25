@@ -5,6 +5,9 @@
 #include <SFML/Window/Mouse.hpp>
 #include "WeaponSystem.h"
 #include "ParticleSystem.h"
+#include "ScentSystem.h"
+#include "Monster.h"
+#include "BirdSystem.h" // NEW
 #include <ctime>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -364,10 +367,13 @@ int main() {
     float globalTime = 0.0f;
     bool debugCam = false;
     bool showSpawnArea = false; // New toggle
+    bool showHitboxes = false; // Toggle for tree hitboxes (H key)
     glm::vec3 freeCamPos(0, 50, 0);
     glm::vec3 freeCamFront(0, -1, 0);
     float freeCamYaw = -90.0f;
     float freeCamPitch = -45.0f;
+
+
 
     // SKY COLOR (Clear Color)
     glClearColor(0.4f, 0.6f, 1.0f, 1.0f); // Sky Blue
@@ -511,6 +517,16 @@ int main() {
     ParticleSystem particles;
     ScentSystem scentSystem;
     Monster monster(glm::vec3(0)); 
+    
+    // Bird System (Sparrows)
+    BirdSystem birds;
+
+    // Chunk Manager - NOW needs bird system
+    // ChunkManager was already instantiated at top of main
+    chunkManager.SetBirdSystem(&birds);
+    chunkManager.Init(); // Load world NOW, after birds are hooked up
+    
+    chunkManager.Update(player.Position); // Initial load 
 
     // Procedural Spawning ("The Donut" + Tree Collision Check)
     {
@@ -637,6 +653,18 @@ int main() {
                 
                 // Spawn Area Toggle (Only in F3)
                 if (debugCam && event.key.code == sf::Keyboard::G) showSpawnArea = !showSpawnArea;
+
+                // Hitbox Toggle (H key)
+                if (event.key.code == sf::Keyboard::H) {
+                    showHitboxes = !showHitboxes;
+                    std::cout << "H Key Pressed! Toggle: " << (showHitboxes ? "ON" : "OFF") << std::endl;
+                }
+                
+                // Bird Debug Toggle (J key)
+                if (event.key.code == sf::Keyboard::J) {
+                    birds.ToggleDebug();
+                    std::cout << "J Key Pressed! Toggled Bird Debug" << std::endl;
+                }
             }
         }
 
@@ -657,6 +685,9 @@ int main() {
         // Monster Update (Now takes ScentSystem)
         monster.Update(deltaTime, player.Position, windDir, 
                       chunkManager, scentSystem, particles);
+        
+        // Update Birds
+        birds.Update(deltaTime, player.Position, monster.GetPosition());
         
         if (!debugCam) {
             player.ProcessKeyboard(0, deltaTime, chunkManager, footprints);
@@ -778,7 +809,19 @@ int main() {
         particles.Render(shaderProgram, activeCamPos);
         
         // 4. Monster Render (Normal)
-        monster.Render(shaderProgram);
+        // Explicitly bind noise texture to match terrain style (Render will switch to white for eyes)
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        monster.Render(shaderProgram, whiteTexID);
+        
+        // Render Birds (Using noise texture)
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        birds.Render(shaderProgram);
+        
+        // --- 4b. Render Water (Transparent) ---
+        // Render LAST for correct blending with terrain/trees
+        // Use Noise Texture for water surface details (if any) or just color
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        chunkManager.RenderWater(shaderProgram);
 
         // 5. Render Projectiles (World Space) - VISIBLE IN NORMAL MODE
         // Reuse debug VBO or creating a new one?
@@ -793,6 +836,13 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, whiteTexID);
         
         weapon.RenderProjectiles(shaderProgram, projVAO, projVBO);
+
+        // 6. DEBUG HITBOXES
+        if (showHitboxes) {
+            // Using same state as projectiles (White Tex, No instance, No terrain conform)
+            glm::vec3 activeCamPos = debugCam ? freeCamPos : player.Position;
+            chunkManager.RenderDebug(shaderProgram, activeCamPos);
+        }
         
         // Debug Highlights (Always on top)
         if (debugCam) {
@@ -863,6 +913,9 @@ int main() {
         glClear(GL_DEPTH_BUFFER_BIT); 
         glm::mat4 viewIdentity = glm::mat4(1.0f);
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(viewIdentity));
+        
+        // Use NOISE texture for weapon
+        glBindTexture(GL_TEXTURE_2D, textureID);
         weapon.Render(shaderProgram);
 
         // 4. UI Pass (SEPARATE SHADER PASS - IN FBO FOR RETRO LOOK)

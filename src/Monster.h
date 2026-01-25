@@ -7,6 +7,7 @@
 #include "ChunkManager.h"
 #include "ScentSystem.h"
 #include "HideTronco.h" // NEW
+#include "ModelLoader.h"
 
 // Reset state enum
 enum class MonsterState {
@@ -21,8 +22,8 @@ public:
     void Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
                 ChunkManager& chunkManager, ScentSystem& scentSystem, class ParticleSystem& particles);
     
-    // Updated Render to accept camPos for distance scaling
-    void Render(GLuint shaderProgram); 
+    // Updated Render to accept texture for eyes
+    void Render(GLuint shaderProgram, GLuint whiteTexID); 
     void RenderDebug(GLuint shaderProgram);
 
     // Combat
@@ -39,8 +40,14 @@ private:
     void BuildDeformedMesh();
     void AnimateMesh();
     float m_animTime;
+    
+    // Body Mesh (Noisy)
     std::vector<float> m_meshVertices;
     GLuint VAO, VBO;
+
+    // Eye Mesh (Solid/No Noise)
+    std::vector<float> m_eyeVertices;
+    GLuint VAO_Eyes, VBO_Eyes;
     
     // AI & Physics (Smooth/Real)
     glm::vec3 m_pos;
@@ -61,4 +68,11 @@ private:
 
     // AI Components
     HideTronco m_stealthAI; // NEW
+    
+    // Model Data (Loaded from file)
+    std::vector<struct BoxDef> m_basePose;
+    
+    // Dynamic Hitboxes (Calculated from m_basePose)
+    glm::vec3 m_bodyMin, m_bodyMax;
+    glm::vec3 m_headMin, m_headMax;
 };

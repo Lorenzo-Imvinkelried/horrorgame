@@ -7,6 +7,7 @@
 #include "WorldGenerator.h"
 #include "Frustum.h"
 #include "Config.h" // Needed for default args
+#include <iostream> // Fixed: Needed for cout/endl
 
 struct Chunk {
     int x, z;
@@ -29,6 +30,8 @@ public:
     void Update(glm::vec3 playerPos);
     void UpdateVisibility(const glm::mat4& viewProj); // New Method
     void RenderTerrain(GLuint shaderProgram);
+    void RenderWater(GLuint shaderProgram); // Water Pass (Transparent)
+    void RenderDebug(GLuint shaderProgram, glm::vec3 playerPos);
     
     // Instancing support
     void CollectAllTreePositions(std::vector<glm::vec4>& outPositions);
@@ -40,15 +43,19 @@ public:
     struct RenderBatch {
         int bx, bz;
         GLuint VAO, VBO;
+        GLuint waterVAO, waterVBO; // New buffers for water
         int vertexCount;
+        int waterVertexCount;
         bool visible;
         bool dirty;
         
-        RenderBatch() : VAO(0), VBO(0), vertexCount(0), visible(false), dirty(true) {}
+        RenderBatch() : VAO(0), VBO(0), waterVAO(0), waterVBO(0), vertexCount(0), waterVertexCount(0), visible(false), dirty(true) {}
         void Cleanup() {
             if(VAO) glDeleteVertexArrays(1, &VAO);
             if(VBO) glDeleteBuffers(1, &VBO);
-            VAO=0; VBO=0; vertexCount=0;
+            if(waterVAO) glDeleteVertexArrays(1, &waterVAO);
+            if(waterVBO) glDeleteBuffers(1, &waterVBO);
+            VAO=0; VBO=0; waterVAO=0; waterVBO=0; vertexCount=0;
         }
     };
 
@@ -65,11 +72,25 @@ private:
 
     void LoadChunk(int x, int z);
     
+public:
     // Optimized: Pre-load entire world
+    void Init() {
+        std::cout << "[ChunkManager] Pre-loading World (" << Config::World::MapRadius << " chunk radius)..." << std::endl;
+        LoadWorld(); 
+    }
+private:
     void LoadWorld();
     
     // Batching Helpers
     RenderBatch* GetBatch(int bx, int bz);
     void RebuildBatch(RenderBatch& batch);
     void MarkBatchDirty(int cx, int cz);
+    
+    // Bird System Integration
+    class BirdSystem* m_birdSystem = nullptr;
+public:
+    void SetBirdSystem(class BirdSystem* birds) { 
+        m_birdSystem = birds; 
+        std::cout << "[ChunkManager] BirdSystem linked: " << (birds ? "YES" : "NO") << std::endl;
+    }
 };

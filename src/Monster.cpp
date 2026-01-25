@@ -11,29 +11,105 @@ Monster::Monster(glm::vec3 startPos)
       m_animTime(0.0f), m_velocity(0.0f), m_targetYaw(0.0f), m_headYaw(0.0f),
       m_speed(Config::Gameplay::MonsterSpeed), m_isDead(false)
 {
+    // Load Model
+    std::string path = "assets/models/monster.txt";
+    m_basePose = ModelLoader::Load(path);
+    if (m_basePose.empty()) {
+        std::cerr << "Failed to load monster model from " << path << std::endl;
+        // Fallback: Simple Box
+        BoxDef b; b.Pos=glm::vec3(0,1.5,0); b.Scale=glm::vec3(0.5,1.8,0.5); b.Color=glm::vec3(1,0,0); b.Name="TORSO";
+        m_basePose.push_back(b);
+    }
+
+    // --- CALCULATE DYNAMIC HITBOXES ---
+    // Initialize with inverted infinity
+    m_bodyMin = glm::vec3(10000.0f); m_bodyMax = glm::vec3(-10000.0f);
+    m_headMin = glm::vec3(10000.0f); m_headMax = glm::vec3(-10000.0f);
+    
+    bool headFound = false;
+
+    for (const auto& box : m_basePose) {
+        // Calculate box min/max in local space (assuming scaling is applied to a unit cube centered at origin)
+        // Unit cube is [-0.5, 0.5]. 
+        // Box Range: Pos +/- (Scale * 0.5)
+        glm::vec3 halfSize = box.Scale * 0.5f;
+        glm::vec3 boxMin = box.Pos - halfSize;
+        glm::vec3 boxMax = box.Pos + halfSize;
+
+        // Union with Body AABB (Include everything)
+        m_bodyMin = glm::min(m_bodyMin, boxMin);
+        m_bodyMax = glm::max(m_bodyMax, boxMax);
+
+        // Specific Head AABB
+        if (box.Name == "HEAD") {
+            // Expand head slightly for fairness
+            m_headMin = boxMin - glm::vec3(0.05f); 
+            m_headMax = boxMax + glm::vec3(0.05f);
+            headFound = true;
+        }
+    }
+    
+    // Safety if limits are invalid (e.g. empty model)
+    if (m_bodyMin.x > m_bodyMax.x) { m_bodyMin = glm::vec3(-0.5, 0, -0.5); m_bodyMax = glm::vec3(0.5, 2, 0.5); }
+    // If no head found, approximate top of body
+    if (!headFound) {
+        m_headMin = m_bodyMax - glm::vec3(0.3, 0.5, 0.3); // Top 50cm center
+        m_headMax = m_bodyMax;  
+    } else {
+        // Ensure Head is also part of body (it is by logic above), but let's make sure Body covers it well
+        // Actually, we usually want separate detectors. 
+        // Logic: Headshot > BodyShot.
+    }
+
     BuildDeformedMesh();
 
+    // Body VAO/VBO
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
-    // Use GL_DYNAMIC_DRAW since we will update it often
     glBufferData(GL_ARRAY_BUFFER, m_meshVertices.size() * sizeof(float), m_meshVertices.data(), GL_DYNAMIC_DRAW);
 
     // Pos
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     // Color
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3*sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3*sizeof(float)));
     glEnableVertexAttribArray(1);
+    // TexCoord
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6*sizeof(float)));
+    glEnableVertexAttribArray(2);
     // Normal
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6*sizeof(float)));
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8*sizeof(float)));
+    glEnableVertexAttribArray(3);
+
+    // Eyes VAO/VBO
+    glGenVertexArrays(1, &VAO_Eyes);
+    glGenBuffers(1, &VBO_Eyes);
+    glBindVertexArray(VAO_Eyes);
+    glBindBuffer(GL_ARRAY_BUFFER, VBO_Eyes);
+    glBufferData(GL_ARRAY_BUFFER, m_eyeVertices.size() * sizeof(float), m_eyeVertices.data(), GL_STATIC_DRAW);
+    
+    // Same Attributes
+    // Pos
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    // Color
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3*sizeof(float)));
+    glEnableVertexAttribArray(1);
+    // TexCoord
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6*sizeof(float)));
+    glEnableVertexAttribArray(2);
+    // Normal
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8*sizeof(float)));
     glEnableVertexAttribArray(3);
 }
 
 Monster::~Monster() {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
+    glDeleteVertexArrays(1, &VAO_Eyes);
+    glDeleteBuffers(1, &VBO_Eyes);
 }
 
 void Monster::BuildDeformedMesh() {
@@ -43,73 +119,25 @@ void Monster::BuildDeformedMesh() {
 }
 
 void Monster::AnimateMesh() {
+    // STATIC MESH BUILD (No Animation)
     m_meshVertices.clear();
+    m_eyeVertices.clear();
     
-    // Helper to add faces
-    auto addFace = [&](glm::vec3 p, glm::vec3 n, glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, glm::vec3 p4, glm::vec3 color) {
-        auto push = [&](glm::vec3 v) {
-            // APPLY 180 DEGREE ROTATION PERMANENTLY TO MESH (Fixing Backwards Model)
-            // Rotate around Y axis: x' = -x, z' = -z
-            float vx = -(v.x + p.x);
-            float vy = v.y + p.y;
-            float vz = -(v.z + p.z);
-            float nx = -n.x;
-            float ny = n.y;
-            float nz = -n.z;
+    // Split boxes into Body and Eyes
+    std::vector<BoxDef> bodyBoxes;
+    std::vector<BoxDef> eyeBoxes;
 
-            m_meshVertices.push_back(vx); m_meshVertices.push_back(vy); m_meshVertices.push_back(vz);
-            m_meshVertices.push_back(color.r); m_meshVertices.push_back(color.g); m_meshVertices.push_back(color.b);
-            m_meshVertices.push_back(nx); m_meshVertices.push_back(ny); m_meshVertices.push_back(nz);
-        };
-        push(p1); push(p2); push(p3);
-        push(p1); push(p3); push(p4);
-    };
+    for (const auto& box : m_basePose) {
+        if (box.Name.find("EYE") != std::string::npos) {
+            eyeBoxes.push_back(box);
+        } else {
+            bodyBoxes.push_back(box);
+        }
+    }
 
-    auto addBox = [&](glm::vec3 p, glm::vec3 size, glm::vec3 color, float rotX = 0.0f) {
-        // Simple rotation around X axis (for swinging limbs)
-        auto rot = [&](glm::vec3 v) {
-            if (rotX == 0.0f) return v;
-            float c = cos(rotX);
-            float s = sin(rotX);
-            return glm::vec3(v.x, v.y * c - v.z * s, v.y * s + v.z * c);
-        };
-        
-        float w = size.x * 0.5f; float h = size.y * 0.5f; float l = size.z * 0.5f;
-        // Apply rotation to local offsets
-        glm::vec3 v1 = rot({-w,h,l}); glm::vec3 v2 = rot({w,h,l}); 
-        glm::vec3 v3 = rot({w,-h,l}); glm::vec3 v4 = rot({-w,-h,l});
-        glm::vec3 v5 = rot({w,h,-l}); glm::vec3 v6 = rot({-w,h,-l}); 
-        glm::vec3 v7 = rot({-w,-h,-l}); glm::vec3 v8 = rot({w,-h,-l});
-
-        // Face normals need rotation too ideally, but for PS1 style checking, static is ok or approximate
-        addFace(p, {0,0,1}, v1, v2, v3, v4, color); // Front
-        addFace(p, {0,0,-1}, v5, v6, v7, v8, color); // Back
-        addFace(p, {0,1,0}, v6, v5, v2, v1, color); // Top
-        addFace(p, {0,-1,0}, v4, v3, v8, v7, color); // Bottom
-        addFace(p, {1,0,0}, v2, v5, v8, v3, color); // Right
-        addFace(p, {-1,0,0}, v6, v1, v4, v7, color); // Left
-    };
-
-    glm::vec3 bone(0.75f, 0.72f, 0.65f); // Grey-Pale
-    
-    // Animation offsets
-    float walkSpeed = 10.0f;
-    bool isMoving = glm::length(m_velocity) > 0.1f;
-    float lLegRot = isMoving ? sin(m_animTime * walkSpeed) * 0.6f : 0.0f;
-    float rLegRot = isMoving ? sin(m_animTime * walkSpeed + 3.14159f) * 0.6f : 0.0f;
-    float lArmRot = isMoving ? sin(m_animTime * walkSpeed + 3.14159f) * 0.5f : 0.0f;
-    float rArmRot = isMoving ? sin(m_animTime * walkSpeed) * 0.5f : 0.0f;
-
-    // Body parts
-    addBox({0, 1.3f, 0}, {0.4f, 0.3f, 0.25f}, bone); // Hips (Root)
-    addBox({0, 1.7f, -0.1f}, {0.5f, 0.6f, 0.35f}, bone); // Torso
-    addBox({0, 2.4f, -0.25f}, {0.25f, 0.3f, 0.25f}, bone * 0.9f); // Head
-    
-    // Pivot adjustments for limbs (simple translate-rotate-translate simulation via offset p)
-    addBox({-0.35f, 1.3f, -0.1f}, {0.1f, 1.8f, 0.1f}, bone, lArmRot); // L Arm
-    addBox({0.35f, 1.3f, -0.1f}, {0.1f, 1.8f, 0.1f}, bone, rArmRot); // R Arm
-    addBox({-0.15f, 0.6f, 0.1f}, {0.12f, 1.2f, 0.12f}, bone, lLegRot); // L Leg
-    addBox({0.15f, 0.6f, 0.1f}, {0.12f, 1.2f, 0.12f}, bone, rLegRot); // R Leg
+    // Generate Meshes
+    ModelLoader::GenerateMesh(bodyBoxes, m_meshVertices);
+    ModelLoader::GenerateMesh(eyeBoxes, m_eyeVertices);
 }
 
 #include "ParticleSystem.h" // Needed for particles
@@ -124,7 +152,9 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
     if (m_isDead) return; // Do nothing if dead (or just fade out?)
 
     // Minimal Update Loop
-    m_animTime += deltaTime;
+    // Animate based on distance traveled (Speed sync)
+    float speed = glm::length(m_velocity);
+    m_animTime += speed * deltaTime; 
 
     // Bleeding Effect (If injured)
     if (m_health < 2.0f) {
@@ -143,8 +173,7 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
     bool smellsPlayer = scentSystem.IsPointInScent(m_pos, trackDir);
 
     if (smellsPlayer) {
-        static float lastLog = 0.0f;
-        m_animTime += deltaTime; // Hack to use animTime for log timer if needed, or just use static
+        // ... (Log removed or minimized) ...
         // Use a simple static timer
         // We can reuse lastLogTime logic if available, or just log occasionally
         // For debugging "early smell", log EVERY frame if smell is true initially? No, too spammy.
@@ -181,7 +210,7 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
             m_yaw += yawDiff * rotSpeed;
             m_visualYaw = m_yaw; 
 
-            // 2. Move
+            // 2. Move (Tentative)
             glm::vec3 displacement = desiredDir * m_speed * deltaTime;
             glm::vec3 nextPos = m_pos + displacement;
             
@@ -200,6 +229,12 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
             
              float limit = (Config::World::MapRadius - 1) * Config::World::ChunkSize * Config::World::ChunkScale;
              if (abs(nextPos.x) < limit && abs(nextPos.z) < limit) {
+                 // Calculate ACTUAL velocity based on moved distance (handles collisions)
+                 if (deltaTime > 0.0001f) {
+                    m_velocity = (nextPos - m_pos) / deltaTime;
+                 } else {
+                    m_velocity = glm::vec3(0.0f);
+                 }
                  m_pos = nextPos;
              }
         } else {
@@ -207,6 +242,7 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
              // std::cout << "[Monster] Holding Position (Peeking/Arrived)." << std::endl;
              // Ideally here we look AT the player if peeking?
              // For now just don't move.
+             m_velocity = glm::vec3(0.0f);
         }
 
         m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
@@ -215,25 +251,23 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
     } else {
         // SCENT LOST: Stop Moving Immediately (User Request)
         m_stealthAI.Reset(); 
+        m_velocity = glm::vec3(0.0f);
         // Just do nothing -> transitions to IDLE effectively by not moving
     }
 
     // Visual Decoupling (15 FPS PS1 effect)
     m_visualTickTimer += deltaTime;
-    if (m_visualTickTimer >= 1.0f / m_visualFPS) {
-        m_visualTickTimer = 0.0f;
+    // Visual Decoupling (REMOVED: User requested 60 FPS / Smooth)
+    m_visualTickTimer = 0.0f; // Unused
+    {
         m_visualPos = m_pos;
         m_visualYaw = m_yaw;
         
-        // Update Animation VBO
-        AnimateMesh();
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferSubData(GL_ARRAY_BUFFER, 0, m_meshVertices.size() * sizeof(float), m_meshVertices.data());
+        // No animation update needed, VBO is static
     }
 }
 
-void Monster::Render(GLuint shaderProgram) {
+void Monster::Render(GLuint shaderProgram, GLuint whiteTexID) {
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     
     // Draw Body using m_visualPos/m_visualYaw (PS1 15 FPS effect)
@@ -243,16 +277,18 @@ void Monster::Render(GLuint shaderProgram) {
     bodyModel = glm::rotate(bodyModel, glm::radians(m_visualYaw), glm::vec3(0,1,0));
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(bodyModel));
     
+    // 1. Draw Body (Noise Texture - Assumed bound by caller)
     glBindVertexArray(VAO);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(m_meshVertices.size()/9 - 6)); 
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(m_meshVertices.size()/11)); 
 
-    // Draw Head separately
-    glm::mat4 headModel = bodyModel;
-    headModel = glm::translate(headModel, glm::vec3(0, 2.1f, -0.25f)); 
-    headModel = glm::rotate(headModel, glm::radians(m_headYaw), glm::vec3(0,1,0));
-    headModel = glm::translate(headModel, -glm::vec3(0, 2.1f, -0.25f)); 
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(headModel));
-    glDrawArrays(GL_TRIANGLES, (GLsizei)(m_meshVertices.size()/9 - 6), 6); 
+    // 2. Draw Eyes (Solid - No Noise)
+    // Bind White Texture to disable noise modulation
+    glBindTexture(GL_TEXTURE_2D, whiteTexID);
+    glBindVertexArray(VAO_Eyes);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(m_eyeVertices.size()/11));
+    
+    // Note: Caller (Main) will need to re-bind noise texture if needed for next object, 
+    // or we can rely on Main to set state per object loop.
 }
 
 void Monster::RenderDebug(GLuint shaderProgram) {
@@ -407,28 +443,14 @@ bool Monster::IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& i
     localOrigin = rotateY(localOrigin);
     glm::vec3 localDir = rotateY(dir);
 
-    // Define AABBs in Local Space (Based on BuildDeformedMesh)
-    // Note: In AnimateMesh, we noticed a 180 flip. 
-    // If m_pos matches the feet, and we rotated by m_yaw...
-    // The mesh is built around (0,0,0) offset.
-    
+    // Use Pre-Calculated Dynamic AABBs
     // HEAD (Local)
-    // Visual Center: (0, 2.4, 0.25)
-    // Visual Size: 0.25 x 0.3 x 0.25 (Extents: 0.125, 0.15, 0.125)
-    // Hitbox: Expanded significantly for gameplay feel
-    glm::vec3 hMin(-0.25f, 2.1f, 0.0f); 
-    glm::vec3 hMax(0.25f, 2.8f, 0.5f);
+    float tHead = 10000.0f;
+    bool hitHead = RayAABBLocal(localOrigin, localDir, m_headMin, m_headMax, tHead);
 
     // BODY (Local)
-    // Visual Center ~ (0, 1.1, 0)
-    // Hitbox: Expanded to remove neck gap and cover shoulders better
-    glm::vec3 bMin(-0.35f, 0.0f, -0.2f);
-    glm::vec3 bMax(0.35f, 2.3f, 0.45f); // 2.3 overlaps with Head(2.1), checking Head first handles this.
-
-    float tHead = 10000.0f;
     float tBody = 10000.0f;
-    bool hitHead = RayAABBLocal(localOrigin, localDir, hMin, hMax, tHead);
-    bool hitBody = RayAABBLocal(localOrigin, localDir, bMin, bMax, tBody);
+    bool hitBody = RayAABBLocal(localOrigin, localDir, m_bodyMin, m_bodyMax, tBody);
 
     if (hitHead && hitBody) {
         // Prioritize Head if depths are similar or if head is reasonably close

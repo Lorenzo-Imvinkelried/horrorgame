@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cmath>
 #include "Config.h"
+#include <iostream> // Fixed: Added for logging
 
 unsigned int WorldGenerator::GlobalSeed = 0;
 float WorldGenerator::OffsetX = 0.0f;
@@ -46,6 +47,20 @@ float WorldGenerator::GetHeight(float x, float z) {
     // Octave 2: Detail (Roughness)
     y += SmoothNoise(x * Config::Terrain::DetailFreqX, z * Config::Terrain::DetailFreqZ) * Config::Terrain::DetailAmplitude;
     
+    // --- LAGOON CARVING ---
+    // If this area is "Wet", sink the terrain to make room for water.
+    float moisture = GetMoisture(x, z);
+    if (moisture > (1.0f - Config::Water::Chance)) {
+        // Calculate factor 0..1 based on how deep into the wet zone we are
+        float factor = (moisture - (1.0f - Config::Water::Chance)) / Config::Water::Chance;
+        
+        // Smooth the hole shape (Smoothstep) to avoid sharp cliffs
+        factor = factor * factor * (3.0f - 2.0f * factor);
+        
+        // Sink the terrain!
+        y -= factor * Config::Water::Depth;
+    }
+
     return y;
 }
 
@@ -89,40 +104,82 @@ std::vector<glm::vec2> WorldGenerator::GetChunkTreeLocations(int chunkX, int chu
         }
 
         if (valid) {
-            treePositions.push_back(glm::vec2(tx, tz));
-            placedPositions.push_back(glm::vec2(tx, tz));
+            float h = GetExactHeight(tx, tz);
+            // Check for Lagoon
+            if (IsLagoon(tx, tz, h)) {
+                // Don't spawn trees in water
+                valid = false;
+            } else {
+                treePositions.push_back(glm::vec2(tx, tz));
+                placedPositions.push_back(glm::vec2(tx, tz));
+            }
         }
     }
     return treePositions;
 }
 
 glm::vec3 WorldGenerator::GetTerrainColor(float x, float z, float y) {
-    // Noise for Dirt Patches
-    float noise = (float)sin(x * 0.1f) + (float)cos(z * 0.13f); // Base low freq
-    noise += (float)sin(x * 0.4f + z * 0.3f) * 0.5f; // Detail
+    // Organic Noise for Terrain Blending
+    // Octave 1: Large Shapes (Biome-like)
+    float n1 = SmoothNoise(x * 0.03f, z * 0.03f); 
+    
+    // Octave 2: Medium Detail
+    float n2 = SmoothNoise(x * 0.1f, z * 0.1f);
+    
+    // Octave 3: Fine Grit
+    float n3 = SmoothNoise(x * 0.5f, z * 0.5f);
+    
+    // Composite Noise (Weighted)
+    float finalNoise = n1 * 0.6f + n2 * 0.3f + n3 * 0.1f;
     
     glm::vec3 baseColor;
-    if (noise > 0.8f) {
-         // DIRT / DRY PATCH
+    
+    // Threshold for blending
+    // Use a smooth mix instead of hard if/else for better transitions? 
+    // For retro PS1 style, hard patches might be better, or slight dithering.
+    // Let's use a slightly soft threshold.
+    
+    if (finalNoise > 0.55f) {
+         // DIRT / MUD (Browns)
          baseColor = glm::vec3(0.35f, 0.28f, 0.18f); 
-         // Add some noise texture to dirt
-         float dirtNoise = (float)sin(x * 2.0f) * 0.5f;
-         baseColor += glm::vec3(0.02f) * dirtNoise; 
+         
+         // Add grit
+         baseColor += glm::vec3(0.04f) * (n3 - 0.5f); 
     } else {
-         // GRASS (Varied Green)
-         baseColor = glm::vec3(0.1f, 0.3f, 0.12f);
-         // Add tonal variation to grass based on height/noise
-         float grassTone = (float)sin(x * 0.2f + z * 0.2f);
-         baseColor += glm::vec3(0.02f, 0.04f, 0.01f) * grassTone;
+         // GRASS (Greens)
+         // Varied green based on large noise
+         float tone = n1; 
+         baseColor = glm::mix(glm::vec3(0.1f, 0.25f, 0.1f), glm::vec3(0.15f, 0.35f, 0.15f), tone);
+         
+         // Add grit
+         baseColor += glm::vec3(0.03f, 0.05f, 0.02f) * (n3 - 0.5f);
     }
 
     // Height darkening (Valleys darker)
-    baseColor += glm::vec3(0.01f, (y + 2.0f) * 0.02f, 0.01f);
+    baseColor += glm::vec3(0.01f, (y + 5.0f) * 0.015f, 0.01f);
+    
     return baseColor;
 }
 
-std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale) {
-    // Legacy wrappers: Generate trees on the fly (Slow)
+// --- LAGOON LOGIC ---
+float WorldGenerator::GetMoisture(float x, float z) {
+    // Moisture Noise (Large, rare patches)
+    return SmoothNoise(x * 0.015f + 500.0f, z * 0.015f + 500.0f);
+}
+
+bool WorldGenerator::IsLagoon(float x, float z, float h) {
+    // Rely on moisture and depth check
+    // We can just check if height is below water level, 
+    // BUT since we are carving, the height IS below water level because of moisture.
+    // So checking (VisualHeight < WaterLevel) is correct.
+    return (h < Config::Water::Level);
+}
+
+float WorldGenerator::GetExactHeight(float x, float z) {
+    return GetExactHeight_Impl(x, z);
+}
+
+WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale) {
     std::vector<glm::vec2> nearbyTrees;
     for (int dx = -1; dx <= 1; dx++) {
         for (int dz = -1; dz <= 1; dz++) {
@@ -133,10 +190,11 @@ std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ,
     return GenerateChunkTerrain(chunkX, chunkZ, chunkSize, scale, nearbyTrees);
 }
 
-std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale, const std::vector<glm::vec2>& nearbyTrees) {
-    std::vector<Vertex> vertices;
-    // Pre-allocate to avoid resize overhead (16*16*6 = 1536 vertices)
-    vertices.reserve(chunkSize * chunkSize * 6);
+WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale, const std::vector<glm::vec2>& nearbyTrees) {
+    WorldData data;
+    // Pre-allocate
+    data.vertices.reserve(chunkSize * chunkSize * 6);
+    data.waterVertices.reserve(chunkSize * chunkSize / 2); // Roughly
     
     float startX = chunkX * chunkSize * scale;
     float startZ = chunkZ * chunkSize * scale;
@@ -148,7 +206,52 @@ std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ,
             float x1 = startX + (x + 1) * scale;
             float z1 = startZ + (z + 1) * scale;
             
-            // Helper lambda for vertex shadow (Optimized)
+            // 1. Calculate Heights First
+            float y00 = GetVisualHeight(x0, z0);
+            float y10 = GetVisualHeight(x1, z0);
+            float y01 = GetVisualHeight(x0, z1);
+            float y11 = GetVisualHeight(x1, z1);
+            
+            // 2. Calculate Base Colors
+            glm::vec3 c00 = GetTerrainColor(x0, z0, y00);
+            glm::vec3 c10 = GetTerrainColor(x1, z0, y10);
+            glm::vec3 c01 = GetTerrainColor(x0, z1, y01);
+            glm::vec3 c11 = GetTerrainColor(x1, z1, y11);
+            
+            // 3. Check for Lagoon (Water)
+            float cx = (x0 + x1) * 0.5f;
+            float cz = (z0 + z1) * 0.5f;
+            float cy = (y00 + y10 + y01 + y11) * 0.25f;
+            
+            if (IsLagoon(cx, cz, cy)) {
+                // Ground becomes Mud
+                glm::vec3 mud = glm::vec3(0.25f, 0.2f, 0.15f);
+                c00 = c10 = c01 = c11 = mud; 
+                
+                // --- GENERATE WATER SURFACE (Transparent Pass) ---
+                float wY = Config::Water::Level;
+                // Translucent Blue
+                glm::vec3 wCol = glm::vec3(0.2f, 0.5f, 0.8f); 
+                
+                // Expansion to avoid gaps/square edges (User Request)
+                // "atraviese un poco el terreno"
+                float pad = scale * 0.5f; // overlap by 50% of a tile? 
+                
+                Vertex w1 = { glm::vec3(x0 - pad, wY, z0 - pad), wCol, glm::vec2(0,0), glm::vec3(0,1,0) };
+                Vertex w2 = { glm::vec3(x0 - pad, wY, z1 + pad), wCol, glm::vec2(0,1), glm::vec3(0,1,0) }; 
+                Vertex w3 = { glm::vec3(x1 + pad, wY, z0 - pad), wCol, glm::vec2(1,0), glm::vec3(0,1,0) };
+                Vertex w4 = { glm::vec3(x1 + pad, wY, z1 + pad), wCol, glm::vec2(1,1), glm::vec3(0,1,0) };
+                
+                data.waterVertices.push_back(w1); 
+                data.waterVertices.push_back(w2); 
+                data.waterVertices.push_back(w3);
+                
+                data.waterVertices.push_back(w3); 
+                data.waterVertices.push_back(w2); 
+                data.waterVertices.push_back(w4);
+            }
+
+            // 4. Calculate Shadows (Optimized)
             auto GetShadowFactor = [&](float vx, float vz) {
                 float shadow = 0.0f;
                 const float radiusSq = 2.5f * 2.5f;
@@ -156,11 +259,9 @@ std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ,
                 for (const auto& t : nearbyTrees) {
                     float dx = vx - t.x;
                     float dz = vz - t.y;
-                    // Optimization: Check bounding box first? No, simple float math is fast.
-                    // Optimization: Squared Distance
                     float d2 = dx*dx + dz*dz;
                     if (d2 < radiusSq) { 
-                        float dist = sqrt(d2); // Only sqrt if hit
+                        float dist = sqrt(d2); 
                         float val = 1.0f - (dist / 2.5f);
                         shadow = std::max(shadow, val);
                     }
@@ -168,21 +269,22 @@ std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ,
                 return std::min(shadow * 1.5f, 0.95f);
             };
 
-            // Calculate heights & shadows
-            float y00 = GetVisualHeight(x0, z0); float s00 = GetShadowFactor(x0, z0);
-            float y10 = GetVisualHeight(x1, z0); float s10 = GetShadowFactor(x1, z0);
-            float y01 = GetVisualHeight(x0, z1); float s01 = GetShadowFactor(x0, z1);
-            float y11 = GetVisualHeight(x1, z1); float s11 = GetShadowFactor(x1, z1);
+            float s00 = GetShadowFactor(x0, z0);
+            float s10 = GetShadowFactor(x1, z0);
+            float s01 = GetShadowFactor(x0, z1);
+            float s11 = GetShadowFactor(x1, z1);
 
-            auto ApplyShadow = [](glm::vec3 baseColor, float shadow) {
-                return baseColor * (1.0f - shadow);
+            // Apply Shadows
+            auto ApplyShadow = [](glm::vec3& baseColor, float shadow) {
+                baseColor *= (1.0f - shadow);
             };
 
-            glm::vec3 c00 = ApplyShadow(GetTerrainColor(x0, z0, y00), s00);
-            glm::vec3 c10 = ApplyShadow(GetTerrainColor(x1, z0, y10), s10);
-            glm::vec3 c01 = ApplyShadow(GetTerrainColor(x0, z1, y01), s01);
-            glm::vec3 c11 = ApplyShadow(GetTerrainColor(x1, z1, y11), s11);
+            ApplyShadow(c00, s00);
+            ApplyShadow(c10, s10);
+            ApplyShadow(c01, s01);
+            ApplyShadow(c11, s11);
 
+            // 5. Generate Terrain Vertices
             glm::vec3 p1(x0, y00, z0);
             glm::vec3 p2(x0, y01, z1);
             glm::vec3 p3(x1, y10, z0);
@@ -193,21 +295,21 @@ std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ,
             glm::vec3 p6(x1, y11, z1);
             glm::vec3 n2 = glm::normalize(glm::cross(p5 - p4, p6 - p4));
 
-            vertices.push_back(Vertex{ p1, c00, glm::vec2(0.0f, 0.0f), n1 });
-            vertices.push_back(Vertex{ p2, c01, glm::vec2(0.0f, 1.0f), n1 });
-            vertices.push_back(Vertex{ p3, c10, glm::vec2(1.0f, 0.0f), n1 });
+            data.vertices.push_back(Vertex{ p1, c00, glm::vec2(0.0f, 0.0f), n1 });
+            data.vertices.push_back(Vertex{ p2, c01, glm::vec2(0.0f, 1.0f), n1 });
+            data.vertices.push_back(Vertex{ p3, c10, glm::vec2(1.0f, 0.0f), n1 });
 
-            vertices.push_back(Vertex{ p4, c10, glm::vec2(1.0f, 0.0f), n2 });
-            vertices.push_back(Vertex{ p5, c01, glm::vec2(0.0f, 1.0f), n2 });
-            vertices.push_back(Vertex{ p6, c11, glm::vec2(1.0f, 1.0f), n2 });
+            data.vertices.push_back(Vertex{ p4, c10, glm::vec2(1.0f, 0.0f), n2 });
+            data.vertices.push_back(Vertex{ p5, c01, glm::vec2(0.0f, 1.0f), n2 });
+            data.vertices.push_back(Vertex{ p6, c11, glm::vec2(1.0f, 1.0f), n2 });
         }
     }
-    return vertices;
+    return data;
 }
-
 std::vector<glm::vec4> WorldGenerator::GenerateChunkTrees(int chunkX, int chunkZ, int chunkSize, float scale) {
     // Reuse the helper to get positions, then just add height/scale
     auto positions = GetChunkTreeLocations(chunkX, chunkZ, chunkSize, scale);
+    if(positions.empty() && chunkX==0 && chunkZ==0) std::cout << "[WorldGenerator] Warning: No trees in chunk 0,0!" << std::endl;
     std::vector<glm::vec4> treeData;
     
     // We do need to re-seed here to maintain the same "scale" randomness if we want it perfect, 

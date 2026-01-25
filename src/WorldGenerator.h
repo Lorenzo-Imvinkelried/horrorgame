@@ -19,6 +19,7 @@ struct Tree {
 
 struct WorldData {
     std::vector<Vertex> vertices;
+    std::vector<Vertex> waterVertices; // Transparent pass
     std::vector<Tree> trees;
 };
 
@@ -38,10 +39,12 @@ public:
     }
     // Generates a grid mesh for a specific 32x32 chunk
     // Original (Procedural)
-    static std::vector<Vertex> GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale);
+    // Generates a grid mesh + water mesh + trees for a specific 32x32 chunk
+    // Original (Procedural)
+    static WorldData GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale);
     
     // Optimized (Uses cached trees for shadows)
-    static std::vector<Vertex> GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale, const std::vector<glm::vec2>& neighborTrees);
+    static WorldData GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale, const std::vector<glm::vec2>& neighborTrees);
 
     // Returns a list of tree positions + scale (vec4) for a specific chunk
     static std::vector<glm::vec4> GenerateChunkTrees(int chunkX, int chunkZ, int chunkSize, float scale);
@@ -58,6 +61,9 @@ public:
     // Calculates SMOOTH height at a given (x, z) for physics/collision
     static float GetHeight(float x, float z);
 
+    // Helper: Returns moisture value (0..1) for biome/lagoon logic
+    static float GetMoisture(float x, float z);
+
     // Calculates QUANTIZED height for visual terrain rendering
     static float GetVisualHeight(float x, float z);
 
@@ -66,7 +72,14 @@ public:
 
     // Calculates EXACT height on the terrain mesh (Interpolated)
     // Matches the triangulation (0,0)-(1,0)-(0,1) and (1,0)-(1,1)-(0,1)
-    static float GetExactHeight(float x, float z) {
+    // Calculates EXACT height on the terrain mesh (Interpolated)
+    // Matches the triangulation (0,0)-(1,0)-(0,1) and (1,0)-(1,1)-(0,1)
+    static float GetExactHeight(float x, float z);
+    
+    // Check if a point is in a lagoon (Water + Low Height)
+    static bool IsLagoon(float x, float z, float h);
+
+    static float GetExactHeight_Impl(float x, float z) {
         // Assume default scale (1.0f) or pass it if variable
         float scale = 1.0f; 
         

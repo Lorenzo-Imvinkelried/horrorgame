@@ -5,7 +5,7 @@ namespace Config {
         // Base Hills (The main shape of the world)
         constexpr float BaseFreqX = 0.02f;   // Lower = Wider hills (Reduced from 0.50)
         constexpr float BaseFreqZ = 0.02f;   // Reduced from 0.65
-        constexpr float BaseAmplitude = 20.0f; // Higher = Taller hills
+        constexpr float BaseAmplitude = 22.0f; // Higher = Taller hills
 
         // Detail Noise (Roughness)
         constexpr float DetailFreqX = 0.2f;
@@ -51,9 +51,21 @@ namespace Config {
         constexpr float MonsterSpawnMaxRadius = 260.0f;
         
         // Projectile Physics (Exaggerated for gameplay feel)
-        constexpr float ProjectileSpeed = 300.0f;       // Slower to see arc (was 400)
-        constexpr float ProjectileGravity = -35.0f;     // Heavy drop (approx 3x real gravity)
-        constexpr float ProjectileWindInfluence = 15.0f; // Strong wind effect
-        constexpr float ProjectileDrag = 1.5f;          // Air resistance
+        constexpr float ProjectileSpeed = 600.0f;       // Fast/Heavy (was 300)
+        constexpr float ProjectileGravity = -45.0f;     // Heavy drop
+        constexpr float ProjectileWindInfluence = 0.5f; // Negligible wind (Lead is heavy)
+        constexpr float ProjectileDrag = 0.1f;          // Low drag (Aerodynamic)
+    }
+    namespace Bird {
+        constexpr float SpawnChance = 0.4f; // 1.5% chance per tree (Reduced from 5%)
+        constexpr float TriggerDistance = 8.0f;
+        constexpr float FlySpeed = 10.0f;
+        constexpr float HideDistance = 30.0f; // Distance to fly before finding new perch
+    }
+
+    namespace Water {
+        constexpr float Level = 2.0f; // Height of water surface
+        constexpr float Chance = 0.10f; // Chance of a low area becoming a lagoon
+        constexpr float Depth = 4.5f; // How much to sink the terrain in lagoons
     }
 }

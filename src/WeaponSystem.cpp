@@ -3,8 +3,73 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <algorithm>
-#include "Monster.h"
+#include "Monster.h" // Needed for collision
 #include "Config.h" // NEW
+
+// Möller–Trumbore Ray-Triangle Intersection
+bool IntersectTriangle(glm::vec3 orig, glm::vec3 dir, glm::vec3 v0, glm::vec3 v1, glm::vec3 v2, float& t) {
+    const float EPSILON = 0.0000001f;
+    glm::vec3 edge1, edge2, h, s, q;
+    float a, f, u, v;
+    edge1 = v1 - v0;
+    edge2 = v2 - v0;
+    h = glm::cross(dir, edge2);
+    a = glm::dot(edge1, h);
+    if (a > -EPSILON && a < EPSILON) return false; // Parallel
+    f = 1.0f / a;
+    s = orig - v0;
+    u = f * glm::dot(s, h);
+    if (u < 0.0f || u > 1.0f) return false;
+    q = glm::cross(s, edge1);
+    v = f * glm::dot(dir, q);
+    if (v < 0.0f || u + v > 1.0f) return false;
+    t = f * glm::dot(edge2, q);
+    if (t > EPSILON) return true;
+    return false;
+}
+
+// Check Ray against 6 triangles of the pyramid shell
+bool GetRayPyramidMeshIntersection(glm::vec3 origin, glm::vec3 dir, glm::vec3 baseCenter, float w, float h, float& tNear, float& tFar) {
+    glm::vec3 apex(baseCenter.x, baseCenter.y + h, baseCenter.z);
+    
+    // Base Corners (Clockwise or CCW doesn't matter much for double sided check, but consistent winding is good)
+    glm::vec3 c1 = baseCenter + glm::vec3(-w, 0, -w);
+    glm::vec3 c2 = baseCenter + glm::vec3(w, 0, -w);
+    glm::vec3 c3 = baseCenter + glm::vec3(w, 0, w);
+    glm::vec3 c4 = baseCenter + glm::vec3(-w, 0, w);
+    
+    float tMin = 999999.0f;
+    float tMax = -999999.0f;
+    bool hitAny = false;
+    
+    auto checkTri = [&](glm::vec3 p1, glm::vec3 p2, glm::vec3 p3) {
+        float t;
+        if (IntersectTriangle(origin, dir, p1, p2, p3, t)) {
+            hitAny = true;
+            if (t < tMin) tMin = t;
+            if (t > tMax) tMax = t;
+        }
+    };
+    
+    // 4 SIDES
+    checkTri(c1, c2, apex); // Front
+    checkTri(c2, c3, apex); // Right
+    checkTri(c3, c4, apex); // Back
+    checkTri(c4, c1, apex); // Left
+    
+    // BASE (2 aabb triangles)
+    checkTri(c1, c3, c2);
+    checkTri(c1, c4, c3);
+    
+    if (hitAny) {
+        tNear = tMin;
+        tFar = tMax;
+        // If inside (tMin < 0), logic might need adjustment but usually standard raycast is outside-in.
+        if (tMin < 0 && tMax > 0) tNear = 0; // Started inside
+        return true;
+    }
+    return false;
+}
 
 WeaponSystem::WeaponSystem() : currentAmmo(2), maxAmmo(2), recoilTimer(0.0f), cooldownTimer(0.0f) {
     BuildShotgunMesh();
@@ -16,13 +81,16 @@ WeaponSystem::WeaponSystem() : currentAmmo(2), maxAmmo(2), recoilTimer(0.0f), co
     glBufferData(GL_ARRAY_BUFFER, gunVertices.size() * sizeof(float), gunVertices.data(), GL_STATIC_DRAW);
 
     // Pos
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
     // Color
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3*sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3*sizeof(float)));
     glEnableVertexAttribArray(1);
+    // TexCoord
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6*sizeof(float)));
+    glEnableVertexAttribArray(2);
     // Normal
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(6*sizeof(float)));
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8*sizeof(float)));
     glEnableVertexAttribArray(3);
 }
 
@@ -31,85 +99,30 @@ WeaponSystem::~WeaponSystem() {
     glDeleteBuffers(1, &VBO);
 }
 
+#include "ModelLoader.h"
+
 void WeaponSystem::BuildShotgunMesh() {
-    // Simple Double Barrel: 2 Cylinders (Hexagons) + 1 Box Stock
-    auto addQuad = [&](glm::vec3 p1, glm::vec3 p2, glm::vec3 p3, glm::vec3 p4, glm::vec3 color) {
-         glm::vec3 normal = glm::normalize(glm::cross(p2 - p1, p3 - p1));
-         // Tri 1
-         gunVertices.push_back(p1.x); gunVertices.push_back(p1.y); gunVertices.push_back(p1.z); 
-         gunVertices.push_back(color.r); gunVertices.push_back(color.g); gunVertices.push_back(color.b);
-         gunVertices.push_back(normal.x); gunVertices.push_back(normal.y); gunVertices.push_back(normal.z);
-
-         gunVertices.push_back(p2.x); gunVertices.push_back(p2.y); gunVertices.push_back(p2.z); 
-         gunVertices.push_back(color.r); gunVertices.push_back(color.g); gunVertices.push_back(color.b);
-         gunVertices.push_back(normal.x); gunVertices.push_back(normal.y); gunVertices.push_back(normal.z);
-
-         gunVertices.push_back(p3.x); gunVertices.push_back(p3.y); gunVertices.push_back(p3.z); 
-         gunVertices.push_back(color.r); gunVertices.push_back(color.g); gunVertices.push_back(color.b);
-         gunVertices.push_back(normal.x); gunVertices.push_back(normal.y); gunVertices.push_back(normal.z);
-
-         // Tri 2
-         gunVertices.push_back(p1.x); gunVertices.push_back(p1.y); gunVertices.push_back(p1.z); 
-         gunVertices.push_back(color.r); gunVertices.push_back(color.g); gunVertices.push_back(color.b);
-         gunVertices.push_back(normal.x); gunVertices.push_back(normal.y); gunVertices.push_back(normal.z);
-
-         gunVertices.push_back(p3.x); gunVertices.push_back(p3.y); gunVertices.push_back(p3.z); 
-         gunVertices.push_back(color.r); gunVertices.push_back(color.g); gunVertices.push_back(color.b);
-         gunVertices.push_back(normal.x); gunVertices.push_back(normal.y); gunVertices.push_back(normal.z);
-
-         gunVertices.push_back(p4.x); gunVertices.push_back(p4.y); gunVertices.push_back(p4.z); 
-         gunVertices.push_back(color.r); gunVertices.push_back(color.g); gunVertices.push_back(color.b);
-         gunVertices.push_back(normal.x); gunVertices.push_back(normal.y); gunVertices.push_back(normal.z);
-    };
-
-    glm::vec3 metal(0.15f, 0.15f, 0.18f); // Darker steel
-    glm::vec3 wood(0.35f, 0.18f, 0.08f);  // Warm walnut wood
-
-    // BARRELS
-    float L = 1.5f;
-    float W = 0.05f;
+    gunVertices.clear();
     
-    // Left Barrel
-    float offX = -0.055f;
-    addQuad({offX-W, W, 0}, {offX+W, W, 0}, {offX+W, W, -L}, {offX-W, W, -L}, metal); // Top
-    addQuad({offX+W, W, 0}, {offX+W, -W, 0}, {offX+W, -W, -L}, {offX+W, W, -L}, metal); // Right
-    addQuad({offX-W, -W, 0}, {offX-W, W, 0}, {offX-W, W, -L}, {offX-W, -W, -L}, metal); // Left
-    addQuad({offX-W, -W, 0}, {offX+W, -W, 0}, {offX+W, -W, -L}, {offX-W, -W, -L}, metal); // Bottom
+    // Load local file from assets
+    // Path needs to be relative to CWD (usually bin/ or project root depending on run)
+    // Assets are copied to bin/assets. So if CWD is bin, path is assets/models/shotgun.txt.
+    // If running from project root, path is assets/models/shotgun.txt.
+    std::string path = "assets/models/shotgun.txt";
+    
+    std::vector<BoxDef> boxes = ModelLoader::Load(path);
+    if (boxes.empty()) {
+        std::cerr << "Failed to load shotgun model from " << path << ". Using fallback." << std::endl;
+        // Fallback: A simple box so it's not invisible
+        BoxDef fallback;
+        fallback.Pos = glm::vec3(0,0,0); fallback.Scale = glm::vec3(0.1, 0.1, 1.0); fallback.Color = glm::vec3(1,0,1);
+        boxes.push_back(fallback);
+    }
 
-    // Right Barrel
-    offX = 0.055f;
-    addQuad({offX-W, W, 0}, {offX+W, W, 0}, {offX+W, W, -L}, {offX-W, W, -L}, metal);
-    addQuad({offX+W, W, 0}, {offX+W, -W, 0}, {offX+W, -W, -L}, {offX+W, W, -L}, metal);
-    addQuad({offX-W, -W, 0}, {offX-W, W, 0}, {offX-W, W, -L}, {offX-W, -W, -L}, metal);
-    addQuad({offX-W, -W, 0}, {offX+W, -W, 0}, {offX+W, -W, -L}, {offX-W, -W, -L}, metal);
-
-    // CONNECTOR (Upper part of barrels)
-    addQuad({-0.12f, 0.04f, -0.2f}, {0.12f, 0.04f, -0.2f}, {0.12f, 0.04f, -0.6f}, {-0.12f, 0.04f, -0.6f}, metal);
-
-    // STOCK (Culata) - Tapered wooden piece
-    // Starting after the barrels
-    float sL = 0.6f; // Length of stock
-    float sW1 = 0.12f; // Width at front (connecting to barrels)
-    float sW2 = 0.20f; // Width at back (buttplate)
-    float sH1 = 0.10f; // Height at front
-    float sH2 = 0.25f; // Height at back
-    float sZ = 0.0f;   // Starts at origin (relative to cam)
-    float sZB = 0.6f;  // Goes backwards
-
-    // Top
-    addQuad({-sW1, sH1, sZ}, {sW1, sH1, sZ}, {sW2, sH2, sZB}, {-sW2, sH2, sZB}, wood);
-    // Bottom
-    addQuad({-sW1, -sH1, sZ}, {sW2, -sH2, sZB}, {sW2, -sH2, sZB}, {-sW1, -sH1, sZ}, wood); // Simplified
-    addQuad({-sW1, -sH1, sZ}, {sW1, -sH1, sZ}, {sW2, -sH2, sZB}, {-sW2, -sH2, sZB}, wood);
-    // Left
-    addQuad({-sW1, sH1, sZ}, {-sW2, sH2, sZB}, {-sW2, -sH2, sZB}, {-sW1, -sH1, sZ}, wood);
-    // Right
-    addQuad({sW1, sH1, sZ}, {sW1, -sH1, sZ}, {sW2, -sH2, sZB}, {sW2, sH2, sZB}, wood);
-    // Back (Buttplate)
-    addQuad({-sW2, sH2, sZB}, {sW2, sH2, sZB}, {sW2, -sH2, sZB}, {-sW2, -sH2, sZB}, wood);
+    ModelLoader::GenerateMesh(boxes, gunVertices);
 }
 
-// Helper for Ray-Box Intersection (Returns Entry and Exit times)
+// Helper for Ray-Box Intersection
 bool GetRayAABBIntersections(glm::vec3 origin, glm::vec3 dir, glm::vec3 minB, glm::vec3 maxB, float& tNear, float& tFar) {
      float t1 = (minB.x - origin.x)/dir.x;
      float t2 = (maxB.x - origin.x)/dir.x;
@@ -136,15 +149,6 @@ bool RayAABB(glm::vec3 origin, glm::vec3 dir, glm::vec3 minB, glm::vec3 maxB, fl
      }
      return false;
 }
-
-#include "Monster.h" // Needed for collision
-// Note: Can't easily fwd declare in cpp if we use methods, so just include.
-// Actually we need to add include at top if not there. But it's risky in replace block.
-// Let's assume headers are OK or we add include via separate block if needed.
-// WeaponSystem.cpp usually includes WeaponSystem.h which fwd declares Monster.
-// But we need Monster definition to call IntersectRay.
-// So we must include "Monster.h" at top of file.
-// I will do that in a separate block to be safe.
 
 void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength, ChunkManager& chunkManager, FootprintSystem& craters, ParticleSystem& particles, Monster& monster) {
     if (recoilTimer > 0.0f) recoilTimer -= deltaTime * 5.0f; // Recovery speed
@@ -249,19 +253,15 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
                 break; 
             }
 
-            // 2. LEAVES COLLISION (Pass-through + Particles)
-            // Leaves AABB: Expanded to cover "Pyramid" top and wider branches
-            float leavesW = 4.0f * treeScale; // Wider
+            // 2. LEAVES COLLISION (Pyramid MESH Check - Robust)
+            float leavesW = 3.0f * treeScale; 
             float leavesBase = treePos.y + 6.0f * treeScale;
-            float leavesTop = treePos.y + 25.0f * treeScale; // Much Taller to catch the top
+            float leavesH = 19.0f * treeScale; // 25.0 (Top) - 6.0 (Base)
             
-            glm::vec3 lMin = treePos - glm::vec3(leavesW, 0, leavesW);
-            glm::vec3 lMax = treePos + glm::vec3(leavesW, 0, leavesW);
-            lMin.y = leavesBase;
-            lMax.y = leavesTop;
-
+            glm::vec3 pyrCenter(treePos.x, leavesBase, treePos.z);
+            
             float tNear, tFar;
-            if (GetRayAABBIntersections(oldPos, dir, lMin, lMax, tNear, tFar)) {
+            if (GetRayPyramidMeshIntersection(oldPos, dir, pyrCenter, leavesW, leavesH, tNear, tFar)) {
                 auto SpawnLeafParticles = [&](glm::vec3 pos) {
                     for(int i=0; i<6; i++) {
                         glm::vec3 rVel = glm::vec3((rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f);
@@ -272,11 +272,11 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
 
                 // Check Entry
                 if (tNear >= 0.0f && tNear <= dist) {
-                    SpawnLeafParticles(oldPos + dir * (tNear - 0.2f)); // Bias Entry
+                    SpawnLeafParticles(oldPos + dir * (tNear - 0.2f)); 
                 }
                 // Check Exit
                 if (tFar >= 0.0f && tFar <= dist) {
-                     SpawnLeafParticles(oldPos + dir * (tFar + 0.5f)); // Push Exit OUTWARD
+                     SpawnLeafParticles(oldPos + dir * (tFar + 0.5f));
                 }
             }
         }
@@ -331,13 +331,33 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
     cooldownTimer = 1.7f; 
     recoilTimer = 1.0f;
 
+    // Calculate Camera Basis Vectors
+    glm::vec3 worldUp(0, 1, 0);
+    
+    // SAFETY: Handle looking straight up/down
+    glm::vec3 right;
+    if (abs(glm::dot(camDir, worldUp)) > 0.99f) {
+        // Looking vertical, use Z as temporary up
+        right = glm::normalize(glm::cross(camDir, glm::vec3(0, 0, 1)));
+    } else {
+        right = glm::normalize(glm::cross(camDir, worldUp));
+    }
+    
+    glm::vec3 up = glm::cross(right, camDir);
+
+    // Calculate Muzzle Position (Barrel Tip)
+    // Matches Visual Render: Right 0.2, Down 0.2, Forward ~1.5 (Mesh Length) + 0.5 (Offset) = 2.0
+    // Adjust slightly to align perfectly with visual model tip
+    glm::vec3 currMuzzleOffset = (right * 0.25f) + (up * -0.2f) + (camDir * 1.8f); 
+    glm::vec3 muzzlePos = camPos + currMuzzleOffset;
+
     // 1. Muzzle Flash (Small, bright)
-    glm::vec3 muzzlePos = camPos + camDir * 1.5f + glm::vec3(0.08f, -0.15f, 0.0f);
     particles.SpawnParticle(muzzlePos, glm::vec3(0,0,0), glm::vec4(1.0f, 0.9f, 0.3f, 1.0f), 0.12f, 0.04f, 0.0f);
     
     // Spawn Smoke (Whiter and very transparent: alpha 0.05)
     for(int i=0; i<3; i++) {
-        glm::vec3 rndVel = glm::vec3((rand()%100)/100.0f - 0.5f, 1.2f, (rand()%100)/100.0f - 0.5f) * 0.4f;
+        // Smoke velocity generally forwards + random
+        glm::vec3 rndVel = (camDir * 0.5f) + glm::vec3((rand()%100)/100.0f - 0.5f, 0.5f, (rand()%100)/100.0f - 0.5f) * 0.2f;
         particles.SpawnParticle(muzzlePos, rndVel, glm::vec4(0.98f, 0.98f, 0.98f, 0.05f), 0.4f, 1.0f, 0.3f);
     }
 
@@ -345,8 +365,15 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
     Projectile p;
     p.Active = true;
     p.LifeTime = 10.0f; // Long lifetime to see arc
-    p.Position = camPos + camDir * 0.5f; 
-    p.Velocity = camDir * Config::Gameplay::ProjectileSpeed; 
+    p.Position = muzzlePos; 
+    
+    // Calculate Fire Direction (Convergence)
+    // Bullet should hit what the crosshair is looking at (Infinite or 50m away)
+    // If we just use camDir, bullet flies parallel to sight (Offset right).
+    glm::vec3 targetPoint = camPos + camDir * 50.0f; // Converge at 50 meters
+    glm::vec3 fireDir = glm::normalize(targetPoint - muzzlePos);
+    
+    p.Velocity = fireDir * Config::Gameplay::ProjectileSpeed; 
     projectiles.push_back(p);
 }
 
@@ -354,58 +381,26 @@ void WeaponSystem::Render(GLuint shaderProgram) {
     // Draw Gun Model in Screen Space (or overlay)
     // We attach it to the camera.
     // In main loop, View Matrix is already set. We just need to Model Matrix it relative to camera.
-    // Wait, typically HUD weapons are drawn with Identity View Matrix (Local Space).
-    // Let's do that.
-    
-    // We assume View/Projection are set to "UI Mode" or we manually set them?
-    // main.cpp sets View/Projection for world.
-    
-    // Better: Draw with a specialized "Weapon View" matrix which is static (Identity at 0,0,0) so it doesn't move with world,
-    // but we simulate bobbing.
-    // Actually, simple Hack: Draw it at the end, clear depth, use Identity View.
-    // The "Bob" is handled by the Player's view matrix usually, but if we clear View, we lose bob.
-    // Let's just draw it relative to Camera Position/Rotation in World Space?
-    // No, that clips into walls.
     
     // Standard Way: Clear Depth. Set View = Identity. Set Model = Translation/Recoil.
     
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     GLint viewLoc = glGetUniformLocation(shaderProgram, "u_View");
     
-    // Save current view
-    // glm::mat4 oldView; // Can't easily get back from GPU without uniform sync.
-    // We will handle this in main.cpp by modifying the Render order.
-    // Here we just draw.
-    
     float recoilOffset = sin(recoilTimer * 3.14f) * 0.2f; // Back and up
     
     glm::mat4 model = glm::mat4(1.0f);
     // Position on screen (Right hand side, slightly down)
-    model = glm::translate(model, glm::vec3(0.2f, -0.2f, -0.5f + recoilOffset)); 
+    model = glm::translate(model, glm::vec3(0.2f, -0.2f, -0.9f + recoilOffset)); 
     // Aim slightly up
     model = glm::rotate(model, glm::radians(5.0f - recoilTimer * 10.0f), glm::vec3(1,0,0));
     model = glm::scale(model, glm::vec3(0.5f)); 
 
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
     
-    // For View, caller should have set Identity.
-    
     glBindVertexArray(VAO);
     // Override color uniform if needed, or rely on vertex attributes
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(gunVertices.size()/9));
-    
-    // Draw Projectiles
-    if (projectiles.empty()) return;
-
-    // Simple Point/Line drawing for projectiles
-    // NOTE: This usually needs World Space ViewMatrix, but we are inside Weapon Render which might be Identity
-    // IF we are in identity, we cannot draw world space projectiles here easily.
-    // However, in main.cpp, Weapon.Render is called with Identity View.
-    // Solution: Draw projectiles in main.cpp or restore View Matrix?
-    // Hack: WeaponSystem::Render only draws the GUN.
-    // We should implement WeaponSystem::RenderProjectiles(shaderProgram) separately using World View?
-    // OR: Temporarily use Identity here.
-    // Wait, the user plan was to modify main.cpp.
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(gunVertices.size()/11));
 }
 
 // Separate Render helper for Projectiles using World View

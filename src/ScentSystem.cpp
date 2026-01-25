@@ -57,23 +57,12 @@ void ScentSystem::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 windDir
 bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
     if (m_packets.empty()) return false;
 
-    // Iterate segments between packets to check "Ribbon" containment
     // We assume packets are ordered.
     
-    // Helper: Distance squared from point P to segment AB
-    auto distSqToSegment = [](glm::vec3 p, glm::vec3 a, glm::vec3 b) {
-        glm::vec3 ab = b - a;
-        glm::vec3 ap = p - a;
-        float t = glm::dot(ap, ab) / glm::dot(ab, ab);
-        t = glm::clamp(t, 0.0f, 1.0f);
-        glm::vec3 closest = a + ab * t;
-        glm::vec3 distVec = p - closest;
-        return glm::dot(distVec, distVec);
-    };
-
     glm::vec3 prevPos(0);
     float prevWidth = 0;
     bool hasPrev = false;
+    
 
     for (const auto& p : m_packets) {
         float age = m_globalTime - p.spawnTime;
@@ -81,9 +70,9 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
         
         float distTravelled = 5.0f * age; 
         glm::vec3 currentPos = p.spawnPos + p.windDir * distTravelled;
-        float currentWidth = BaseWidth + (distTravelled * ExpansionRate); 
-        
-        // 1. Check Puff (Circle) - Good for single packets
+        float currentWidth = BaseWidth + (distTravelled * ExpansionRate);
+
+        // 1. Check Puff (Circle) - Standard radial check
         float distXZ = glm::length(glm::vec2(pos.x - currentPos.x, pos.z - currentPos.z));
         if (distXZ <= currentWidth) {
              outTrackDir = -p.windDir;
@@ -94,34 +83,28 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
         if (hasPrev) {
              // Basic strict continuity check (same wind source approx)
              if (glm::distance(currentPos, prevPos) < 20.0f) { // 20m gap max
-                // CLIP FORWARD CAP: Ensure point is behind the wave front
-                // currentPos is the leading edge. p.windDir is the direction of travel.
-                // If dot > 0, we are ahead of the front.
-                if (glm::dot(pos - currentPos, p.windDir) > 0.0f) {
-                    // Ahead of the wave (Invisible Capsule Cap) -> Ignore
-                    prevPos = currentPos;
-                    prevWidth = currentWidth;
-                    continue; 
-                }
-
-                 float dSq = distSqToSegment(pos, prevPos, currentPos);
-                 // Interpolate width roughly? Use max for safety.
-                 float maxWidth = std::max(currentWidth, prevWidth);
                  
-
-                     if (dSq <= (maxWidth * maxWidth)) {
-                         // DEBUG: Log Hit
-                         static float lastLogTime = 0.0f;
-                         if (m_globalTime - lastLogTime > 0.5f) {
-                             std::cout << "[ScentSystem] HIT! DistSq: " << dSq << " RadiusSq: " << (maxWidth*maxWidth) << "\n"
-                                       << "   Monster: (" << pos.x << ", " << pos.y << ", " << pos.z << ")\n"
-                                       << "   SegStart: (" << prevPos.x << ", " << prevPos.y << ", " << prevPos.z << ")\n"
-                                       << "   SegEnd:   (" << currentPos.x << ", " << currentPos.y << ", " << currentPos.z << ")" << std::endl;
-                             lastLogTime = m_globalTime;
-                         }
+                 // Calculate t for interpolation
+                 glm::vec3 ab = currentPos - prevPos;
+                 glm::vec3 ap = pos - prevPos;
+                 float dotAB = glm::dot(ab, ab);
+                 
+                 if (dotAB > 0.0001f) {
+                     float t = glm::dot(ap, ab) / dotAB;
+                     t = glm::clamp(t, 0.0f, 1.0f);
+                     
+                     glm::vec3 closest = prevPos + ab * t;
+                     glm::vec3 distVec = pos - closest;
+                     float distSq = glm::dot(distVec, distVec);
+                     
+                     // Interpolate width based on t
+                     float checkWidth = glm::mix(prevWidth, currentWidth, t);
+                     
+                     if (distSq <= (checkWidth * checkWidth)) {
                          outTrackDir = -p.windDir; // Use current packet wind
                          return true;
-                     } // End Hit Check
+                     }
+                 }
              }
         }
         
@@ -133,12 +116,11 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
 }
 
 void ScentSystem::RenderDebug(GLuint shaderProgram) {
-    // VISUALIZATION: RIBBON (Connected Lines)
-    
     if (m_packets.empty()) return;
 
     std::vector<float> lines;
     
+    // Helper to add a 3D line
     auto addLine = [&](glm::vec3 a, glm::vec3 b) {
         lines.push_back(a.x); lines.push_back(a.y); lines.push_back(a.z); 
         lines.push_back(0); lines.push_back(1); lines.push_back(0); 
@@ -149,14 +131,25 @@ void ScentSystem::RenderDebug(GLuint shaderProgram) {
         lines.push_back(0); lines.push_back(0); lines.push_back(0);
     };
 
+    // Helper to add a circle on XZ plane
+    auto addCircle = [&](glm::vec3 center, float radius) {
+        const int segments = 16;
+        const float angleStep = 6.2831853f / segments;
+        
+        for(int i = 0; i < segments; i++) {
+            float a1 = i * angleStep;
+            float a2 = (i + 1) * angleStep;
+            
+            glm::vec3 p1 = center + glm::vec3(cos(a1), 0, sin(a1)) * radius;
+            glm::vec3 p2 = center + glm::vec3(cos(a2), 0, sin(a2)) * radius;
+            
+            addLine(p1, p2);
+        }
+    };
+
     glm::vec3 prevL, prevR;
     bool hasPrev = false;
 
-    // Packets are likely ordered by spawn time? 
-    // Newest is last?
-    // We want to connect them in order.
-    // Iterating begin() to end() should follow the order of creation.
-    
     for (const auto& p : m_packets) {
         float age = m_globalTime - p.spawnTime;
         if (age < 0) continue;
@@ -165,20 +158,17 @@ void ScentSystem::RenderDebug(GLuint shaderProgram) {
         glm::vec3 currentPos = p.spawnPos + p.windDir * distTravelled;
         float currentWidth = BaseWidth + (distTravelled * ExpansionRate);
         
+        // Draw the collision circle
+        addCircle(currentPos, currentWidth);
+        
         glm::vec3 up(0, 1, 0);
         glm::vec3 right = glm::normalize(glm::cross(p.windDir, up));
         
         glm::vec3 L = currentPos - right * currentWidth;
         glm::vec3 R = currentPos + right * currentWidth;
         
-        // Draw the "Wave Front" (The current pulse line)
-        addLine(L, R);
-        
-        // Connect to previous packet (Ribbon sides)
-        // User requested: "uni esas dos lineas" (Close the area)
+        // Use user requested "Lines" to connect the tunnel (Ribbon sides)
         if (hasPrev) {
-             // Check if packets are related (same wind source?)
-             // Simple heuristic: distance check. If too far, don't connect (new trail)
              if (glm::distance(currentPos, (prevL+prevR)*0.5f) < 20.0f) {
                  addLine(L, prevL);
                  addLine(R, prevR);
@@ -202,7 +192,9 @@ void ScentSystem::RenderDebug(GLuint shaderProgram) {
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     glBufferData(GL_ARRAY_BUFFER, lines.size() * sizeof(float), lines.data(), GL_DYNAMIC_DRAW);
     
+    // Position (3) + Color (3) + Normal (3) = 9 floats per vertex
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0); glEnableVertexAttribArray(0);
+    // Debug shader might use color as normal or generic param, ensuring attrib 1 is bound
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
 
     glDrawArrays(GL_LINES, 0, lines.size() / 9);

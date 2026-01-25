@@ -1,0 +1,29 @@
+# Shotgun Model Definition
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+
+# Cañón
+BOX  0.0 0.06 -0.8   0.08 0.08 2.2   0 0 0   0.6 0.6 0.7  BARREL
+
+# Receptor
+BOX  0.0 0.0 0.3     0.12 0.22 0.6   0 0 0   0.6 0.6 0.7  RECEIVER
+
+# Guardamanos (Handguard)
+BOX  0.0 -0.04 -0.4  0.11 0.13 0.9   0 0 0   0.8 0.5 0.3  HANDGUARD
+
+# Empuñadura (Grip)
+BOX  0.0 -0.15 0.75  0.10 0.15 0.4   0.5 0 0   0.8 0.5 0.3  GRIP
+
+# Culata (Stock)
+BOX  0.0 -0.12 1.3   0.13 0.28 0.9   0 0 0   0.8 0.5 0.3  STOCK
+
+# Cantonera (Buttpad)
+BOX  0.0 -0.12 1.76  0.14 0.29 0.05  0 0 0   0.05 0.05 0.05  BUTTPAD
+
+# Alza (Rear Sight)
+BOX  0.0 0.12 -0.2   0.04 0.04 0.04  0 0 0   0.6 0.6 0.7  REAR_SIGHT
+
+# Punto Mira (Front Sight)
+BOX  0.0 0.12 -1.85  0.02 0.06 0.02  0 0 0   0.6 0.6 0.7  FRONT_SIGHT
+
+# Gatillo (Trigger)
+BOX  0.0 -0.15 0.45  0.02 0.08 0.02  0 0 0   0.6 0.6 0.7  TRIGGER
