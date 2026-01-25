@@ -37,7 +37,11 @@ public:
         OffsetZ = (float)(rand() % 10000);
     }
     // Generates a grid mesh for a specific 32x32 chunk
+    // Original (Procedural)
     static std::vector<Vertex> GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale);
+    
+    // Optimized (Uses cached trees for shadows)
+    static std::vector<Vertex> GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale, const std::vector<glm::vec2>& neighborTrees);
 
     // Returns a list of tree positions + scale (vec4) for a specific chunk
     static std::vector<glm::vec4> GenerateChunkTrees(int chunkX, int chunkZ, int chunkSize, float scale);

@@ -122,11 +122,7 @@ glm::vec3 WorldGenerator::GetTerrainColor(float x, float z, float y) {
 }
 
 std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale) {
-    std::vector<Vertex> vertices;
-    float startX = chunkX * chunkSize * scale;
-    float startZ = chunkZ * chunkSize * scale;
-
-    // Collect trees from this chunk AND neighbors for correct shadow blending
+    // Legacy wrappers: Generate trees on the fly (Slow)
     std::vector<glm::vec2> nearbyTrees;
     for (int dx = -1; dx <= 1; dx++) {
         for (int dz = -1; dz <= 1; dz++) {
@@ -134,6 +130,16 @@ std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ,
             nearbyTrees.insert(nearbyTrees.end(), chunkTrees.begin(), chunkTrees.end());
         }
     }
+    return GenerateChunkTerrain(chunkX, chunkZ, chunkSize, scale, nearbyTrees);
+}
+
+std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale, const std::vector<glm::vec2>& nearbyTrees) {
+    std::vector<Vertex> vertices;
+    // Pre-allocate to avoid resize overhead (16*16*6 = 1536 vertices)
+    vertices.reserve(chunkSize * chunkSize * 6);
+    
+    float startX = chunkX * chunkSize * scale;
+    float startZ = chunkZ * chunkSize * scale;
 
     for (int z = 0; z < chunkSize; z++) {
         for (int x = 0; x < chunkSize; x++) {
@@ -142,22 +148,24 @@ std::vector<Vertex> WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ,
             float x1 = startX + (x + 1) * scale;
             float z1 = startZ + (z + 1) * scale;
             
-            // Helper lambda for vertex shadow
+            // Helper lambda for vertex shadow (Optimized)
             auto GetShadowFactor = [&](float vx, float vz) {
                 float shadow = 0.0f;
+                const float radiusSq = 2.5f * 2.5f;
                 // Simple distance check against all nearby trees
                 for (const auto& t : nearbyTrees) {
                     float dx = vx - t.x;
                     float dz = vz - t.y;
-                    float dist = sqrt(dx*dx + dz*dz);
-                    if (dist < 2.5f) { // Shadow Radius
-                        // Smooth shadow edge
+                    // Optimization: Check bounding box first? No, simple float math is fast.
+                    // Optimization: Squared Distance
+                    float d2 = dx*dx + dz*dz;
+                    if (d2 < radiusSq) { 
+                        float dist = sqrt(d2); // Only sqrt if hit
                         float val = 1.0f - (dist / 2.5f);
                         shadow = std::max(shadow, val);
                     }
                 }
-                // Cap shadow darkness (0.0 = no shadow, 1.0 = FULL dark)
-                return std::min(shadow * 1.5f, 0.95f); // Much clearer shadows (up to 95% dark)
+                return std::min(shadow * 1.5f, 0.95f);
             };
 
             // Calculate heights & shadows

@@ -22,14 +22,18 @@ namespace Config {
         constexpr float DistantScaleStart = 20.0f;
         constexpr float DistantScaleFactor = 0.05f; // 5% growth per unit
         constexpr float DistantScaleMax = 5.0f;
+
+        constexpr bool VSyncEnabled = true; // Use VSync to cap FPS and prevent tearing
     }
 
     namespace World {
         constexpr int ChunkSize = 16;
         constexpr float ChunkScale = 2.0f;
-        constexpr int RenderDistance = 16; // Radius in chunks
-        constexpr float FogDistStart = 450.0f;
-        constexpr float FogDistEnd = 550.0f; // Max visibility
+        constexpr int MapRadius = 24; // Reduce to 24 (Width 49) to prevent VSync drops. 32 was hitting GPU limits.
+        constexpr int RenderDistance = 24; // Fog/Culling distance (keep high)
+        constexpr int RenderBatchSize = 2; // NxN chunks per batch (2x2 = 4 chunks). 4x4 was too heavy on CPU gen.
+        constexpr float FogDistStart = 600.0f;
+        constexpr float FogDistEnd = 750.0f; // Max visibility
     }
 
     namespace Trees {
@@ -40,11 +44,11 @@ namespace Config {
     namespace Gameplay {
         constexpr float PlayerSpeed = 6.0f;
         constexpr float DebugCamSpeed = 60.0f;
-        constexpr float MonsterSpeed = 3.5f; // Initial value
+        constexpr float MonsterSpeed = 5.5f; // Initial value
         
-        // Monster Spawn - Donut Distribution
-        constexpr float MonsterSpawnMinRadius = 450.0f;
-        constexpr float MonsterSpawnMaxRadius = 500.0f;
+        // Monster Spawn - Donut Distribution //550, 600
+        constexpr float MonsterSpawnMinRadius = 150.0f;
+        constexpr float MonsterSpawnMaxRadius = 260.0f;
         
         // Projectile Physics (Exaggerated for gameplay feel)
         constexpr float ProjectileSpeed = 300.0f;       // Slower to see arc (was 400)

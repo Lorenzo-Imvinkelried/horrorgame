@@ -10,48 +10,54 @@ void Chunk::Cleanup() {
     VAO = VBO = 0;
 }
 
-ChunkManager::ChunkManager(int renderDistance) : m_renderDistance(renderDistance) {}
+ChunkManager::ChunkManager(int renderDistance) : m_renderDistance(renderDistance) {
+    // PRE-LOAD WORLD (Static Optimization)
+    std::cout << "[ChunkManager] Pre-loading World (" << Config::World::MapRadius << " chunk radius)..." << std::endl;
+    LoadWorld();
+}
 
 ChunkManager::~ChunkManager() {
     for (auto& pair : m_chunks) {
         pair.second.Cleanup();
     }
+    for (auto& pair : m_batches) {
+        pair.second.Cleanup();
+    }
+}
+
+void ChunkManager::LoadWorld() {
+    int r = Config::World::MapRadius;
+    
+    // 1. Load All Chunks
+    for (int z = -r; z <= r; z++) {
+        for (int x = -r; x <= r; x++) {
+            LoadChunk(x, z);
+        }
+    }
+    
+    // 2. Build All Batches IMMEDIATELY
+    // This forces the "loading time" to happen here, not during gameplay
+    int batchesBuilt = 0;
+    for (auto& pair : m_batches) {
+        if (pair.second.dirty) {
+            RebuildBatch(pair.second);
+            batchesBuilt++;
+        }
+    }
+    std::cout << "[ChunkManager] World Loaded. Built " << batchesBuilt << " batches." << std::endl;
 }
 
 void ChunkManager::Update(glm::vec3 playerPos) {
+    // STATIC WORLD: No dynamic loading/unloading!
+    // We only update logic that needs per-frame attention if any.
+    // Currently nothing.
+    // Visibility is handled in UpdateVisibility.
+    
+    // Just in case we add logic later...
     int pCX = (int)floor(playerPos.x / (m_chunkSize * m_scale));
     int pCZ = (int)floor(playerPos.z / (m_chunkSize * m_scale));
-
-    // INCREMENTAL LOADING: Load a limited number of chunks per frame to avoid lag spikes
-    int loadedThisFrame = 0;
-    const int MaxwellLoadPerFrame = 1; 
-
-    // Sort potential chunks by distance to player for better streaming priority
-    std::vector<std::pair<int, int>> potentialChunks;
-    for (int r = 0; r <= m_renderDistance; r++) {
-        for (int z = -r; z <= r; z++) {
-            for (int x = -r; x <= r; x++) {
-                if (abs(x) != r && abs(z) != r) continue; 
-                potentialChunks.push_back({pCX + x, pCZ + z});
-            }
-        }
-    }
-
-    // Load first N missing chunks
-    for (auto& pos : potentialChunks) {
-         if (m_chunks.find(pos) == m_chunks.end()) {
-             LoadChunk(pos.first, pos.second);
-             loadedThisFrame++;
-             if (loadedThisFrame >= MaxwellLoadPerFrame) goto end_loops;
-         }
-    }
-
-end_loops:
-    // Only unload occasionally or when far away to keep it smooth
-    static int frameCounter = 0;
-    if (frameCounter++ % 60 == 0) {
-        UnloadFarChunks(pCX, pCZ);
-    }
+    
+    // Optional: We could trigger physics updates for nearby chunks here?
 }
 
 void ChunkManager::LoadChunk(int x, int z) {
@@ -64,64 +70,133 @@ void ChunkManager::LoadChunk(int x, int z) {
     newChunk.z = z;
     newChunk.chunkSize = (float)m_chunkSize;
     newChunk.scale = m_scale;
-    newChunk.visible = true;
-
-    auto vertices = WorldGenerator::GenerateChunkTerrain(x, z, m_chunkSize, m_scale);
+    newChunk.visible = true; // Visibility is now handled by batch usually, but we keep this for logic queries?
+    
+    // We DON'T generate individual VBOs anymore to save VRAM and Setup time.
+    // But we DO need tree positions immediately for gameplay.
+    // WorldGenerator::GenerateChunkTerrain is called in RebuildBatch now.
+    
+    // Wait, for Trees we need to call it here.
     newChunk.treePositions = WorldGenerator::GenerateChunkTrees(x, z, m_chunkSize, m_scale);
-    newChunk.vertexCount = (int)vertices.size();
-
-    glGenVertexArrays(1, &newChunk.VAO);
-    glGenBuffers(1, &newChunk.VBO);
-
-    glBindVertexArray(newChunk.VAO);
-    glBindBuffer(GL_ARRAY_BUFFER, newChunk.VBO);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
-
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position));
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));
-    glEnableVertexAttribArray(3);
+    
+    // VAO/VBO/VertexCount are 0/Unused for individual chunks now.
+    newChunk.VAO = 0;
+    newChunk.VBO = 0;
+    newChunk.vertexCount = 0;
 
     m_chunks[key] = newChunk;
+    
+    // Trigger Batch Update
+    MarkBatchDirty(x, z);
 }
 
-void ChunkManager::UnloadFarChunks(int pCX, int pCZ) {
-    for (auto it = m_chunks.begin(); it != m_chunks.end(); ) {
-        int dx = abs(it->first.first - pCX);
-        int dz = abs(it->first.second - pCZ);
-        // Larger buffer for unloading to avoid thrashing
-        if (dx > m_renderDistance + 4 || dz > m_renderDistance + 4) {
-            it->second.Cleanup();
-            it = m_chunks.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
+// UnloadFarChunks removed (Static World)
 
 void ChunkManager::UpdateVisibility(const glm::mat4& viewProj) {
     Frustum frustum;
     frustum.Update(viewProj);
 
-    for (auto& pair : m_chunks) {
-        Chunk& c = pair.second;
+    // Update BATCH Visibility
+    for (auto& pair : m_batches) {
+        RenderBatch& b = pair.second;
         
-        // Calculate AABB for chunk
-        float minX = (float)c.x * m_chunkSize * m_scale;
-        float minZ = (float)c.z * m_chunkSize * m_scale;
-        float maxX = minX + m_chunkSize * m_scale;
-        float maxZ = minZ + m_chunkSize * m_scale;
+        // Calculate AABB for BATCH
+        // Size: BatchSize * ChunkSize * Scale
+        float batchWorldSize = Config::World::RenderBatchSize * m_chunkSize * m_scale;
+        float minX = (float)b.bx * batchWorldSize;
+        float minZ = (float)b.bz * batchWorldSize;
+        float maxX = minX + batchWorldSize;
+        float maxZ = minZ + batchWorldSize;
         
-        // Use conservative height bounds (-10 to 30) to cover valleys and tall trees
+        // Use conservative height bounds (-10 to 30)
         glm::vec3 min(minX, -10.0f, minZ);
         glm::vec3 max(maxX, 30.0f, maxZ);
 
-        c.visible = frustum.IsBoxVisible(min, max);
+        b.visible = frustum.IsBoxVisible(min, max);
     }
+}
+
+// Helper to get Batch Coord from Chunk Coord
+// Bx = floor(cx / 4)
+int GetBatchCoord(int c) {
+    if (c >= 0) return c / Config::World::RenderBatchSize;
+    // Handle negative correctly: -1 -> -1 (if size 4, -4..-1 is -1)
+    return (c - Config::World::RenderBatchSize + 1) / Config::World::RenderBatchSize;
+}
+
+void ChunkManager::MarkBatchDirty(int cx, int cz) {
+    int bx = GetBatchCoord(cx);
+    int bz = GetBatchCoord(cz);
+    auto it = m_batches.find({bx, bz});
+    if (it != m_batches.end()) {
+        it->second.dirty = true;
+    } else {
+        // Create if not exists (Lazy creation)
+        RenderBatch batch;
+        batch.bx = bx;
+        batch.bz = bz;
+        m_batches[{bx, bz}] = batch;
+    }
+}
+
+void ChunkManager::RebuildBatch(RenderBatch& batch) {
+    // Combine geometry of all loaded chunks in this batch
+    std::vector<Vertex> batchVertices;
+    
+    int B_SIZE = Config::World::RenderBatchSize;
+    int startCX = batch.bx * B_SIZE;
+    int startCZ = batch.bz * B_SIZE;
+    
+    for (int z = 0; z < B_SIZE; z++) {
+        for (int x = 0; x < B_SIZE; x++) {
+            int cx = startCX + x;
+            int cz = startCZ + z;
+            
+            // Check if chunk exists (loaded)
+            auto it = m_chunks.find({cx, cz});
+            if (it == m_chunks.end()) continue;
+            
+            // OPTIMIZATION: Collect nearby trees from cached chunks instead of regenerating logic
+            std::vector<glm::vec2> nearbyTrees;
+            // Scan 3x3 area around this chunk
+            for(int dx=-1; dx<=1; dx++) {
+                for(int dz=-1; dz<=1; dz++) {
+                    auto nIt = m_chunks.find({cx+dx, cz+dz});
+                    if (nIt != m_chunks.end()) {
+                        // Extract XZ from vec4
+                        for(const auto& t : nIt->second.treePositions) {
+                            nearbyTrees.push_back(glm::vec2(t.x, t.z));
+                        }
+                    } else {
+                         // Fallback: If neighbor not loaded, likely edge of world.
+                         // Generating on fly is slow, skipping might cause missing shadows at edges.
+                         // For performance, let's skip shadows from unloaded chunks.
+                    }
+                }
+            }
+            
+            auto vertices = WorldGenerator::GenerateChunkTerrain(cx, cz, m_chunkSize, m_scale, nearbyTrees);
+            batchVertices.insert(batchVertices.end(), vertices.begin(), vertices.end());
+        }
+    }
+    
+    // Upload to Batch VBO
+    if (batch.VAO == 0) {
+        glGenVertexArrays(1, &batch.VAO);
+        glGenBuffers(1, &batch.VBO);
+    }
+    
+    glBindVertexArray(batch.VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, batch.VBO);
+    glBufferData(GL_ARRAY_BUFFER, batchVertices.size() * sizeof(Vertex), batchVertices.data(), GL_STATIC_DRAW);
+    
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
+    
+    batch.vertexCount = (int)batchVertices.size();
+    batch.dirty = false;
 }
 
 void ChunkManager::RenderTerrain(GLuint shaderProgram) {
@@ -129,8 +204,11 @@ void ChunkManager::RenderTerrain(GLuint shaderProgram) {
     glm::mat4 identity(1.0f);
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(identity));
 
-    for (auto& pair : m_chunks) {
-        if (!pair.second.visible) continue; // CULLING
+    // Render BATCHES instead of CHUNKS
+    for (auto& pair : m_batches) {
+        if (!pair.second.visible) continue;
+        if (pair.second.vertexCount == 0) continue;
+        
         glBindVertexArray(pair.second.VAO);
         glDrawArrays(GL_TRIANGLES, 0, pair.second.vertexCount);
     }

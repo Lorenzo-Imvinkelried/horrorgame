@@ -17,7 +17,7 @@ public:
         bool Active;
     };
 
-    void Update(float deltaTime, glm::vec2 windDir, float windStrength, class ChunkManager& chunkManager, class FootprintSystem& craters, class ParticleSystem& particles);
+    void Update(float deltaTime, glm::vec2 windDir, float windStrength, class ChunkManager& chunkManager, class FootprintSystem& craters, class ParticleSystem& particles, class Monster& monster);
     void Render(GLuint shaderProgram); // Draw Gun Model
     void RenderProjectiles(GLuint shaderProgram, GLuint vao, GLuint vbo); // Draw Tracers (Needs World View)
     void TryFire(glm::vec3 camPos, glm::vec3 camDir, class ParticleSystem& particles);

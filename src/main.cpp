@@ -11,16 +11,17 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <vector>
-#include <string>
+#include <cmath>
+#include <ctime> // For time()
 #include <random> // NEW: For better RNG
 
 #include "Monster.h"
-#include "ScentManager.h"
 #include "WorldGenerator.h"
 #include "Player.h"
 #include "WindSystem.h"
 #include "FootprintSystem.h"
 #include "ChunkManager.h"
+#include "ScentSystem.h"
 #include "Config.h"
 
 // Shader loader helper
@@ -124,6 +125,7 @@ void DrawDigitSolid(int d, float x, float y, float size, GLuint vao, GLuint vbo)
 }
 
 // Helper to draw a rotating arrow
+// Helper to draw a rotating arrow
 void DrawArrow(float x, float y, float size, float angle, GLuint vao, GLuint vbo) {
     // Arrow shape pointing Right (0 radians)
     // Triangle Head: (0.5, 0), (-0.2, 0.3), (-0.2, -0.3)
@@ -154,6 +156,46 @@ void DrawArrow(float x, float y, float size, float angle, GLuint vao, GLuint vbo
     glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size()/3));
+}
+
+// 3D Arrow (XZ Plane) for Wind Debug
+void DrawArrow3D(glm::vec3 pos, float size, float angle, glm::vec3 color, GLuint vao, GLuint vbo) {
+    std::vector<float> data;
+    auto push = [&](float lx, float lz) {
+        float rx = lx * cos(angle) - lz * sin(angle);
+        float rz = lx * sin(angle) + lz * cos(angle);
+        
+        // Pos
+        data.push_back(pos.x + rx * size);
+        data.push_back(pos.y);
+        data.push_back(pos.z + rz * size);
+        
+        // Color
+        data.push_back(color.r); data.push_back(color.g); data.push_back(color.b);
+        
+        // UV, Norm
+        data.push_back(0); data.push_back(0);
+        data.push_back(0); data.push_back(1); data.push_back(0);
+    };
+
+    // Arrow pointing Right (0 rad) -> (1,0)
+    // Tip
+    push(1.0f, 0.0f); push(0.0f, 0.5f); push(0.0f, -0.5f);
+    
+    // Tail
+    push(0.0f, 0.2f); push(-1.0f, 0.2f); push(-1.0f, -0.2f);
+    push(0.0f, 0.2f); push(-1.0f, -0.2f); push(0.0f, -0.2f);
+    
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
+    glBindVertexArray(vao);
+    
+    // Setup Layout (Matches standard 3D layout)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0); glEnableVertexAttribArray(0); // Pos
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3*sizeof(float))); glEnableVertexAttribArray(1); // Col
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8*sizeof(float))); glEnableVertexAttribArray(3); // Norm
+    
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size()/11));
 }
 
 // Helper to draw a DONUT (Ring)
@@ -242,7 +284,7 @@ int main() {
     // Use Borderless Fullscreen
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
     sf::Window window(desktop, "GamePS1Horror", sf::Style::None, settings);
-    window.setVerticalSyncEnabled(true);
+    window.setVerticalSyncEnabled(Config::Graphics::VSyncEnabled);
     window.setMouseCursorVisible(false);
 
     if (!gladLoadGL()) {
@@ -309,12 +351,12 @@ int main() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    // Render Distance Increased (User Request)
-    ChunkManager chunkManager(12); 
-
-    // Seed Randomness
+    // Seed Randomness (MUST BE BEFORE LOADING WORLD)
     srand((unsigned int)time(NULL));
     WorldGenerator::SetSeed(rand()); 
+
+    // Render Distance Increased (User Request)
+    ChunkManager chunkManager(Config::World::RenderDistance); 
 
     // SKY COLOR (Clear Color)
     glClearColor(0.4f, 0.6f, 1.0f, 1.0f); // Sky Blue
@@ -449,6 +491,11 @@ int main() {
     GLuint quadVAO, quadVBO;
     glGenVertexArrays(1, &quadVAO);
     glGenBuffers(1, &quadVBO);
+    // ...
+    
+    GLuint debugVAO, debugVBO;
+    glGenVertexArrays(1, &debugVAO);
+    glGenBuffers(1, &debugVBO);
     glBindVertexArray(quadVAO);
     glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
@@ -462,7 +509,7 @@ int main() {
     FootprintSystem footprints;
     WeaponSystem weapon;           // NEW
     ParticleSystem particles;
-    ScentManager scentManager;
+    ScentSystem scentSystem;
     Monster monster(glm::vec3(0)); 
 
     // Procedural Spawning ("The Donut" + Tree Collision Check)
@@ -472,8 +519,9 @@ int main() {
         const float C_SCALE = Config::World::ChunkScale;
         
         // Modern RNG Setup
-        std::random_device rd;
-        std::mt19937 gen(rd());
+    srand(time(NULL)); // Legacy RNG for simpler rand() calls
+    std::random_device rd;
+    std::mt19937 gen(rd());
         std::uniform_real_distribution<float> angleDist(0.0f, 360.0f); // Degrees
         std::uniform_real_distribution<float> radiusDist(Config::Gameplay::MonsterSpawnMinRadius, Config::Gameplay::MonsterSpawnMaxRadius);
         std::uniform_real_distribution<float> coordDist(-150.0f, 150.0f); // For player
@@ -557,11 +605,32 @@ int main() {
             if (event.type == sf::Event::KeyPressed) {
                 if (event.key.code == sf::Keyboard::Escape) window.close();
                 
-                // Manual Wind Control (Arrow Keys)
-                if (event.key.code == sf::Keyboard::Left)  windSystem.SetDirection(-1.0f, 0.0f);
-                if (event.key.code == sf::Keyboard::Right) windSystem.SetDirection(1.0f, 0.0f);
-                if (event.key.code == sf::Keyboard::Up)    windSystem.SetDirection(0.0f, -1.0f); // Up is Z-
-                if (event.key.code == sf::Keyboard::Down)  windSystem.SetDirection(0.0f, 1.0f);  // Down is Z+
+                if (!debugCam) {
+                    // ...
+                } else {
+                     // Debug Camera Movement
+                }
+                
+                // Manual Wind Control (Arrow Keys - Rotation)
+                // Use isKeyPressed for smooth holding
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+                    // Rotate Counter-Clockwise
+                    float angle = -2.0f * deltaTime; // Speed
+                    glm::vec2 current = windSystem.GetDirection();
+                    float c = cos(angle); float s = sin(angle);
+                    float nx = current.x * c - current.y * s;
+                    float ny = current.x * s + current.y * c;
+                    windSystem.SetDirection(nx, ny);
+                }
+                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+                    // Rotate Clockwise
+                    float angle = 2.0f * deltaTime;
+                    glm::vec2 current = windSystem.GetDirection();
+                    float c = cos(angle); float s = sin(angle);
+                    float nx = current.x * c - current.y * s;
+                    float ny = current.x * s + current.y * c;
+                    windSystem.SetDirection(nx, ny);
+                }
                 
                 // Debug Camera Toggle
                 if (event.key.code == sf::Keyboard::F3) debugCam = !debugCam;
@@ -572,8 +641,22 @@ int main() {
         }
 
         chunkManager.Update(player.Position);
-        scentManager.Update(player.Position, deltaTime);
-        monster.Update(deltaTime, player.Position, player.Front, windSystem.GetDirection(), chunkManager, scentManager);
+        // Wind System Update
+        windSystem.Update(deltaTime);
+        glm::vec2 windDir = windSystem.GetDirection();
+        float windStrength = 1.0f; 
+        
+        // SCENT UPDATE
+        // Pass 3D wind if needed, but Wind is 2D. Convert to 3D (x,0,y) inside or pass 2D.
+        // ScentSystem expects vec3 windDir + float speed
+        scentSystem.Update(deltaTime, player.Position, glm::vec3(windDir.x, 0, windDir.y), windStrength);
+
+        weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles, monster);
+        particles.Update(deltaTime);
+
+        // Monster Update (Now takes ScentSystem)
+        monster.Update(deltaTime, player.Position, windDir, 
+                      chunkManager, scentSystem, particles);
         
         if (!debugCam) {
             player.ProcessKeyboard(0, deltaTime, chunkManager, footprints);
@@ -640,13 +723,6 @@ int main() {
         // FRUSTUM CULLING UPDATE
         chunkManager.UpdateVisibility(projection * view);
 
-        // Wind System Update
-        windSystem.Update(deltaTime);
-        glm::vec2 windDir = windSystem.GetDirection();
-        float windStrength = 1.0f; // Assuming simpler wind system, or expose strength getter
-        
-        weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles);     // NEW SIGNATURE
-        particles.Update(deltaTime);  // NEW
         glUniform2f(glGetUniformLocation(shaderProgram, "u_WindDirection"), windDir.x, windDir.y);
 
         // 1. Terrain Render
@@ -720,8 +796,22 @@ int main() {
         
         // Debug Highlights (Always on top)
         if (debugCam) {
-            monster.RenderDebug(shaderProgram);
+            // Render from FreeCam Perspective
+            // World
+            chunkManager.RenderTerrain(shaderProgram);
+            
+            // Visualization of Scent (Trapezoids)
+            scentSystem.RenderDebug(shaderProgram);
+            
+            // Wind Indicator (Blue Arrow above player)
+            glm::vec2 w = windSystem.GetDirection();
+            float wAngle = atan2(w.y, w.x); // Radians
+            // Draw Arrow 3 meters above player
+            DrawArrow3D(glm::vec3(player.Position.x, player.Position.y + 3.0f, player.Position.z), 
+                      1.0f, wAngle, glm::vec3(0,0,1), debugVAO, debugVBO); 
+            
             player.RenderDebug(shaderProgram);
+            monster.RenderDebug(shaderProgram);
             
             if (showSpawnArea) {
                 // Use a dynamic VBO for debug drawing (can reuse shadowVBO or create a dedicated debug one?)

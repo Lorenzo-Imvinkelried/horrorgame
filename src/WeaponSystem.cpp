@@ -3,6 +3,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <algorithm>
+#include "Monster.h"
 #include "Config.h" // NEW
 
 WeaponSystem::WeaponSystem() : currentAmmo(2), maxAmmo(2), recoilTimer(0.0f), cooldownTimer(0.0f) {
@@ -136,7 +137,16 @@ bool RayAABB(glm::vec3 origin, glm::vec3 dir, glm::vec3 minB, glm::vec3 maxB, fl
      return false;
 }
 
-void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength, ChunkManager& chunkManager, FootprintSystem& craters, ParticleSystem& particles) {
+#include "Monster.h" // Needed for collision
+// Note: Can't easily fwd declare in cpp if we use methods, so just include.
+// Actually we need to add include at top if not there. But it's risky in replace block.
+// Let's assume headers are OK or we add include via separate block if needed.
+// WeaponSystem.cpp usually includes WeaponSystem.h which fwd declares Monster.
+// But we need Monster definition to call IntersectRay.
+// So we must include "Monster.h" at top of file.
+// I will do that in a separate block to be safe.
+
+void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength, ChunkManager& chunkManager, FootprintSystem& craters, ParticleSystem& particles, Monster& monster) {
     if (recoilTimer > 0.0f) recoilTimer -= deltaTime * 5.0f; // Recovery speed
     if (recoilTimer < 0.0f) recoilTimer = 0.0f;
     
@@ -181,6 +191,37 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
         glm::vec4 hitColor(1.0f);
         bool hit = false;
         bool hitTree = false;
+
+        // 0. MONSTER COLLISION (Highest Priority)
+        // Only check if alive
+        if (!monster.IsDead()) {
+             float mDist = 0.0f;
+             bool isHeadshot = false;
+             // Check against ray segment [oldPos, p.Position]
+             // IntersectRay returns distance from oldPos
+             if (monster.IntersectRay(oldPos, dir, mDist, isHeadshot)) {
+                 if (mDist <= dist) {
+                     hit = true;
+                     hitPoint = oldPos + dir * mDist;
+                     
+                     // Apply Damage
+                     float dmg = isHeadshot ? 2.0f : 1.0f;
+                     monster.TakeDamage(dmg, isHeadshot);
+                     
+                     // Visuals: BLOOD
+                     // Red Burst
+                     int bloodCount = isHeadshot ? 25 : 12; // More blood for headshot
+                     for(int i=0; i<bloodCount; i++) {
+                         glm::vec3 rndVel = glm::vec3((rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f);
+                         rndVel = glm::normalize(rndVel) * (2.0f + (rand()%100)/50.0f); // High speed burst
+                         particles.SpawnParticle(hitPoint, rndVel, glm::vec4(0.7f, 0.0f, 0.0f, 1.0f), 0.1f, 0.4f, -9.8f);
+                     }
+                     
+                     p.Active = false;
+                     continue; // Skip other checks
+                 }
+             }
+        }
 
         // A. Trees
         std::vector<glm::vec4> nearbyTrees;

@@ -91,6 +91,15 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
             }
         }
         
+        // Limit to World Bounds (Invisible Wall)
+        // Use MapRadius - 1 to be safe (avoid seeing the void)
+        float limit = (Config::World::MapRadius - 1) * Config::World::ChunkSize * Config::World::ChunkScale;
+        
+        if (nextPos.x > limit) nextPos.x = limit;
+        if (nextPos.x < -limit) nextPos.x = -limit;
+        if (nextPos.z > limit) nextPos.z = limit;
+        if (nextPos.z < -limit) nextPos.z = -limit;
+
         Position.x = nextPos.x;
         Position.z = nextPos.z;
 

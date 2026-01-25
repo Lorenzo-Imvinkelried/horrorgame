@@ -36,12 +36,40 @@ public:
     // Collision support
     void GetTreesInRange(glm::vec3 pos, float range, std::vector<glm::vec4>& outTrees);
 
+    // Batched Rendering Support
+    struct RenderBatch {
+        int bx, bz;
+        GLuint VAO, VBO;
+        int vertexCount;
+        bool visible;
+        bool dirty;
+        
+        RenderBatch() : VAO(0), VBO(0), vertexCount(0), visible(false), dirty(true) {}
+        void Cleanup() {
+            if(VAO) glDeleteVertexArrays(1, &VAO);
+            if(VBO) glDeleteBuffers(1, &VBO);
+            VAO=0; VBO=0; vertexCount=0;
+        }
+    };
+
 private:
     int m_renderDistance;
     int m_chunkSize = Config::World::ChunkSize;
     float m_scale = Config::World::ChunkScale;
-    std::map<std::pair<int, int>, Chunk> m_chunks;
+    
+    // Logic Map (Collision, Trees)
+    std::map<std::pair<int, int>, Chunk> m_chunks; // Still used for logic
+    
+    // Render Map (Batches)
+    std::map<std::pair<int, int>, RenderBatch> m_batches;
 
     void LoadChunk(int x, int z);
-    void UnloadFarChunks(int playerCX, int playerCZ);
+    
+    // Optimized: Pre-load entire world
+    void LoadWorld();
+    
+    // Batching Helpers
+    RenderBatch* GetBatch(int bx, int bz);
+    void RebuildBatch(RenderBatch& batch);
+    void MarkBatchDirty(int cx, int cz);
 };

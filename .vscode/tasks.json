@@ -11,7 +11,7 @@
                 "-B",
                 "build",
                 "-G",
-                "MinGW Makefiles"
+                "Ninja"
             ],
             "options": {
                 "env": {

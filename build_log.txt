@@ -1,0 +1,20 @@
+[1/2] Building CXX object CMakeFiles/GamePS1Horror.dir/src/main.cpp.obj
+FAILED: [code=1] CMakeFiles/GamePS1Horror.dir/src/main.cpp.obj 
+C:\msys64\ucrt64\bin\c++.exe  -IC:/Users/HP/Desktop/LORENZO/horrorgame/src -IC:/Users/HP/Desktop/LORENZO/horrorgame/build/_deps/glad-src/include -IC:/Users/HP/Desktop/LORENZO/horrorgame/build/_deps/sfml-src/include -IC:/Users/HP/Desktop/LORENZO/horrorgame/build/_deps/glm-src/glm/.. -IC:/Users/HP/Desktop/LORENZO/horrorgame/build/_deps/tinyobjloader-src -IC:/Users/HP/Desktop/LORENZO/horrorgame/build/_deps/stb-src -std=gnu++20 -MD -MT CMakeFiles/GamePS1Horror.dir/src/main.cpp.obj -MF CMakeFiles\GamePS1Horror.dir\src\main.cpp.obj.d -o CMakeFiles/GamePS1Horror.dir/src/main.cpp.obj -c C:/Users/HP/Desktop/LORENZO/horrorgame/src/main.cpp
+C:/Users/HP/Desktop/LORENZO/horrorgame/src/main.cpp: In function 'int main()':
+C:/Users/HP/Desktop/LORENZO/horrorgame/src/main.cpp:660:19: error: redeclaration of 'glm::vec2 windDir'
+  660 |         glm::vec2 windDir = windSystem.GetDirection();
+      |                   ^~~~~~~
+C:/Users/HP/Desktop/LORENZO/horrorgame/src/main.cpp:578:19: note: 'glm::vec2 windDir' previously declared here
+  578 |         glm::vec2 windDir = windSystem.GetDirection();
+      |                   ^~~~~~~
+C:/Users/HP/Desktop/LORENZO/horrorgame/src/main.cpp:661:15: error: redeclaration of 'float windStrength'
+  661 |         float windStrength = 1.0f; // Assuming simpler wind system, or expose strength getter
+      |               ^~~~~~~~~~~~
+C:/Users/HP/Desktop/LORENZO/horrorgame/src/main.cpp:579:15: note: 'float windStrength' previously declared here
+  579 |         float windStrength = 1.0f;
+      |               ^~~~~~~~~~~~
+C:/Users/HP/Desktop/LORENZO/horrorgame/src/main.cpp:749:24: error: 'class FootprintSystem' has no member named 'RenderDebug'
+  749 |             footprints.RenderDebug(shaderProgram);
+      |                        ^~~~~~~~~~~
+ninja: build stopped: subcommand failed.

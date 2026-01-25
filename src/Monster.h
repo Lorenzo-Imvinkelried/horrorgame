@@ -4,9 +4,9 @@
 #include <string>
 #include <glm/glm.hpp>
 #include <glad/glad.h>
-#include "WorldGenerator.h"
 #include "ChunkManager.h"
-#include "ScentManager.h"
+#include "ScentSystem.h"
+#include "HideTronco.h" // NEW
 
 // Reset state enum
 enum class MonsterState {
@@ -18,14 +18,17 @@ public:
     Monster(glm::vec3 startPos);
     ~Monster();
 
-    void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront, glm::vec2 windDir,
-                ChunkManager& chunkManager, ScentManager& scentManager);
+    void Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
+                ChunkManager& chunkManager, ScentSystem& scentSystem, class ParticleSystem& particles);
     
     // Updated Render to accept camPos for distance scaling
     void Render(GLuint shaderProgram); 
     void RenderDebug(GLuint shaderProgram);
 
-    void TakeDamage(float amount);
+    // Combat
+    void TakeDamage(float amount, bool isHeadshot);
+    bool IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& isHeadshot);
+    bool IsDead() const { return m_isDead; }
     
     glm::vec3 GetPosition() const { return m_pos; }
     MonsterState GetState() const { return m_state; }
@@ -47,6 +50,7 @@ private:
     float m_headYaw;
     MonsterState m_state;
     float m_health;
+    bool m_isDead;
     float m_speed;
     
     // Visual Decoupling (15 FPS)
@@ -54,4 +58,7 @@ private:
     float m_visualYaw;
     float m_visualTickTimer;
     float m_visualFPS = 15.0f;
+
+    // AI Components
+    HideTronco m_stealthAI; // NEW
 };
