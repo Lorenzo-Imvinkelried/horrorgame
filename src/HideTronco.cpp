@@ -56,16 +56,27 @@ glm::vec3 HideTronco::Update(glm::vec3 monsterPos, glm::vec3 scentDir, ChunkMana
     }
 
     // Find New Target
+    // THROTTLING: Only scan every 0.2s (5Hz)
+    // If we already have a target, we don't need to re-scan constantly unless we lose it?
+    // Actually, we re-scan when we DON'T have a target.
+    // If m_hasTarget is false, we scan.
+    
+    m_updateTimer -= deltaTime;
+    if (m_updateTimer > 0.0f) {
+        return monsterPos; // Wait for next tick
+    }
+    m_updateTimer = 0.2f; // Reset timer (5Hz)
+
     // 1. Get Trees
-    std::vector<glm::vec4> trees;
-    chunkManager.GetTreesInRange(monsterPos, m_searchRadius, trees);
+    m_treeCache.clear();
+    chunkManager.GetTreesInRange(monsterPos, m_searchRadius, m_treeCache);
     
     if (m_state != State::PEEKING) {
         // Only log during search to avoid spam
-         std::cout << "[HideTronco] Scanning... Found " << trees.size() << " trees in radius " << m_searchRadius << std::endl;
+         // std::cout << "[HideTronco] Scanning... Found " << m_treeCache.size() << " trees in radius " << m_searchRadius << std::endl;
     }
 
-    if (trees.empty()) return monsterPos; 
+    if (m_treeCache.empty()) return monsterPos; 
     
     // We use the scent direction as the target direction
     glm::vec3 dirToTarget = glm::normalize(scentDir);
@@ -74,12 +85,13 @@ glm::vec3 HideTronco::Update(glm::vec3 monsterPos, glm::vec3 scentDir, ChunkMana
     int bestTreeIdx = -1;
     float closestDist = 10000.0f;
     
-    for (int i = 0; i < trees.size(); i++) {
-        glm::vec3 tPos(trees[i].x, trees[i].y, trees[i].z);
+    for (int i = 0; i < m_treeCache.size(); i++) {
+        glm::vec4& t = m_treeCache[i];
+        glm::vec3 tPos(t.x, t.y, t.z);
         
         // AVOID LAST TREE
         if (glm::length(tPos - m_lastTreePos) < 2.0f) {
-             std::cout << "  Tree " << i << ": EXCLUDED (Last Tree)" << std::endl;
+             // std::cout << "  Tree " << i << ": EXCLUDED (Last Tree)" << std::endl;
              continue; 
         }
 
@@ -87,7 +99,7 @@ glm::vec3 HideTronco::Update(glm::vec3 monsterPos, glm::vec3 scentDir, ChunkMana
         float distToTree = glm::length(toTree);
         
         if (distToTree < 1.0f || distToTree > m_searchRadius) {
-            std::cout << "  Tree " << i << ": Skip Radius (Dist: " << distToTree << ")" << std::endl;
+            // std::cout << "  Tree " << i << ": Skip Radius (Dist: " << distToTree << ")" << std::endl;
             continue;
         }
         
@@ -95,12 +107,12 @@ glm::vec3 HideTronco::Update(glm::vec3 monsterPos, glm::vec3 scentDir, ChunkMana
         float forwardDist = glm::dot(toTree, dirToTarget);
         
         if (forwardDist < 3.0f) {
-            std::cout << "  Tree " << i << ": Rejected (Backwards/Sideways: " << forwardDist << "m)" << std::endl;
+            // std::cout << "  Tree " << i << ": Rejected (Backwards/Sideways: " << forwardDist << "m)" << std::endl;
             continue; 
         }
         
         // Valid candidate
-        std::cout << "  Tree " << i << ": Candidate! Forward: " << forwardDist << "m, Dist: " << distToTree << "m" << std::endl;
+        // std::cout << "  Tree " << i << ": Candidate! Forward: " << forwardDist << "m, Dist: " << distToTree << "m" << std::endl;
 
         if (distToTree < closestDist) {
             closestDist = distToTree;
@@ -109,8 +121,8 @@ glm::vec3 HideTronco::Update(glm::vec3 monsterPos, glm::vec3 scentDir, ChunkMana
     }
     
     if (bestTreeIdx != -1) {
-        std::cout << "[HideTronco] SELECTED Tree Index " << bestTreeIdx << " at dist " << closestDist << std::endl;
-        m_targetTreePos = glm::vec3(trees[bestTreeIdx].x, trees[bestTreeIdx].y, trees[bestTreeIdx].z);
+        // std::cout << "[HideTronco] SELECTED Tree Index " << bestTreeIdx << " at dist " << closestDist << std::endl;
+        m_targetTreePos = glm::vec3(m_treeCache[bestTreeIdx].x, m_treeCache[bestTreeIdx].y, m_treeCache[bestTreeIdx].z);
         m_hasTarget = true;
         m_moveTimer = 0.0f; // Reset Failsafe
         
@@ -127,7 +139,7 @@ glm::vec3 HideTronco::Update(glm::vec3 monsterPos, glm::vec3 scentDir, ChunkMana
         
         return m_targetHidePos;
     } else {
-        std::cout << "[HideTronco] Failed to find ANY valid tree in direction." << std::endl;
+        // std::cout << "[HideTronco] Failed to find ANY valid tree in direction." << std::endl;
     }
     
     return monsterPos; // No valid tree found

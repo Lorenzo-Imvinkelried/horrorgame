@@ -149,75 +149,96 @@ void Monster::AnimateMesh() {
 void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
                      ChunkManager& chunkManager, ScentSystem& scentSystem, ParticleSystem& particles) 
 {
-    if (m_isDead) return; // Do nothing if dead (or just fade out?)
+    if (m_isDead) return;
+
+    // THROTTLE LOGIC TIMER
+    static float logicTimer = 0.0f;
+    logicTimer += deltaTime;
+    bool doHeavyLogic = (logicTimer >= 0.1f);
+    if (doHeavyLogic) logicTimer = 0.0f;
 
     // Minimal Update Loop
     // Animate based on distance traveled (Speed sync)
     float speed = glm::length(m_velocity);
     m_animTime += speed * deltaTime; 
-
-    // Bleeding Effect (If injured)
+    
+    // Bleeding Effect (If injured) - Keep visual updates smooth, don't throttle
     if (m_health < 2.0f) {
         static float bleedTimer = 0.0f;
         bleedTimer += deltaTime;
-        if (bleedTimer > 0.3f) { // Leak blood every 0.3s
+        if (bleedTimer > 0.3f) { 
             bleedTimer = 0.0f;
-            // Drip from body center
             glm::vec3 bleedPos = m_pos + glm::vec3((rand()%100/200.0f - 0.25f), 1.5f, (rand()%100/200.0f - 0.25f));
             particles.SpawnParticle(bleedPos, glm::vec3(0, -2.0f, 0), glm::vec4(0.8f, 0.0f, 0.0f, 1.0f), 0.1f, 1.0f, -9.8f);
         }
     }
 
-    // 4. SCENT TRACKING AI (STEALTH: HideTronco)
-    glm::vec3 trackDir; // Direction UPWIND (Towards player usually)
-    bool smellsPlayer = scentSystem.IsPointInScent(m_pos, trackDir);
-
-    if (smellsPlayer) {
-        // ... (Log removed or minimized) ...
-        // Use a simple static timer
-        // We can reuse lastLogTime logic if available, or just log occasionally
-        // For debugging "early smell", log EVERY frame if smell is true initially? No, too spammy.
-        // Let's log if state changes or every 1s.
-        std::cout << "[Monster] SMELLS PLAYER! Dir: (" << trackDir.x << ", " << trackDir.z << ")" << std::endl;
-        // Find best tree to hide behind while moving towards player
-        glm::vec3 targetHidePos = m_stealthAI.Update(m_pos, trackDir, chunkManager, deltaTime);
-        
-        // If we have a valid hide target, move there. 
-        // If not (open field?), maybe just move upwind directly?
-        glm::vec3 moveTarget;
-        
-        if (m_stealthAI.HasTarget()) {
-             moveTarget = targetHidePos;
+    // HEAVY LOGIC (10 times per second)
+    if (doHeavyLogic) {
+        // 4. SCENT TRACKING AI (STEALTH: HideTronco)
+        glm::vec3 trackDir; 
+        bool smellsPlayer = scentSystem.IsPointInScent(m_pos, trackDir);
+    
+        if (smellsPlayer) {
+            glm::vec3 targetHidePos = m_stealthAI.Update(m_pos, trackDir, chunkManager, deltaTime); // logic delta? Use 0.1f? No, use deltaTime for smooth integration if needed, but Update is reduced freq.
+            
+            glm::vec3 moveTarget;
+            if (m_stealthAI.HasTarget()) {
+                 moveTarget = targetHidePos;
+            } else {
+                 moveTarget = m_pos + trackDir * 5.0f;
+            }
+            
+            glm::vec3 diff = moveTarget - m_pos;
+            float distSq = glm::dot(diff, diff);
+            
+            if (distSq > 0.01f) {
+                glm::vec3 desiredDir = glm::normalize(diff);
+                
+                // Set Desired Velocity for Physics Step (which runs every frame effectively via velocity)
+                // Actually, we set Position directly in original code.
+                // To keep it smooth, we should set Velocity, and integrate position every frame?
+                // The original code integrated position inside the logic block. 
+                // Let's calculate the "Target Velocity" here and update Position every frame.
+                
+                // ROTATION TARGET
+                float targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
+                m_targetYaw = targetYaw; // Store for smooth interp
+                
+                // VELOCITY TARGET
+                m_velocity = desiredDir * m_speed;
+            } else {
+                 m_velocity = glm::vec3(0.0f);
+            }
         } else {
-             // Fallback: Just walk upwind (old logic) if no trees
-             moveTarget = m_pos + trackDir * 5.0f;
-             // std::cout << "[Monster] No Hide Target. Falling back to simple Upwind walk." << std::endl;
+            // SCENT LOST
+            m_stealthAI.Reset(); 
+            m_velocity = glm::vec3(0.0f);
         }
         
-        glm::vec3 diff = moveTarget - m_pos;
-        float distSq = glm::dot(diff, diff);
-        
-        if (distSq > 0.01f) {
-            // We have somewhere to go
-            glm::vec3 desiredDir = glm::normalize(diff);
-            
-            // 1. Rotate
-            float targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
-            float rotSpeed = 5.0f * deltaTime;
-            float yawDiff = targetYaw - m_yaw;
-            while (yawDiff < -180) yawDiff += 360;
-            while (yawDiff > 180) yawDiff -= 360;
-            m_yaw += yawDiff * rotSpeed;
-            m_visualYaw = m_yaw; 
+        // COLLISION CHECK (Optimized: Only if moving)
+        if (glm::length(m_velocity) > 0.1f) {
+             m_nearbyTreesCache.clear();
+             chunkManager.GetTreesInRange(m_pos + m_velocity * 0.1f, 3.0f, m_nearbyTreesCache); 
+        }
+    }
 
-            // 2. Move (Tentative)
-            glm::vec3 displacement = desiredDir * m_speed * deltaTime;
-            glm::vec3 nextPos = m_pos + displacement;
-            
-            // Basic Collision (Trees)
-            std::vector<glm::vec4> nearbyTrees;
-            chunkManager.GetTreesInRange(nextPos, 3.0f, nearbyTrees); 
-            for (const auto& t : nearbyTrees) {
+    // ALWAYS RUN: Physics Integration & Smooth Rotation
+    if (glm::length(m_velocity) > 0.01f) {
+        // Smooth Rotation
+        float rotSpeed = 5.0f * deltaTime;
+        float yawDiff = m_targetYaw - m_yaw;
+        while (yawDiff < -180) yawDiff += 360;
+        while (yawDiff > 180) yawDiff -= 360;
+        m_yaw += yawDiff * rotSpeed;
+        m_visualYaw = m_yaw; 
+
+        // Integrate Position
+        glm::vec3 nextPos = m_pos + m_velocity * deltaTime;
+        
+        // Resolve Collisions using Cached Trees
+        if (!m_nearbyTreesCache.empty()) {
+            for (const auto& t : m_nearbyTreesCache) {
                 float dist = glm::length(glm::vec2(nextPos.x - t.x, nextPos.z - t.z));
                 float minD = 0.5f + (0.6f * t.w);
                 if (dist < minD) {
@@ -226,45 +247,17 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
                      nextPos.z += push.y;
                 }
             }
-            
-             float limit = (Config::World::MapRadius - 1) * Config::World::ChunkSize * Config::World::ChunkScale;
-             if (abs(nextPos.x) < limit && abs(nextPos.z) < limit) {
-                 // Calculate ACTUAL velocity based on moved distance (handles collisions)
-                 if (deltaTime > 0.0001f) {
-                    m_velocity = (nextPos - m_pos) / deltaTime;
-                 } else {
-                    m_velocity = glm::vec3(0.0f);
-                 }
-                 m_pos = nextPos;
-             }
-        } else {
-             // Too close to target (Arrived/Peeking), just rotate to look at player?
-             // std::cout << "[Monster] Holding Position (Peeking/Arrived)." << std::endl;
-             // Ideally here we look AT the player if peeking?
-             // For now just don't move.
-             m_velocity = glm::vec3(0.0f);
         }
-
-        m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
-
-        m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
-    } else {
-        // SCENT LOST: Stop Moving Immediately (User Request)
-        m_stealthAI.Reset(); 
-        m_velocity = glm::vec3(0.0f);
-        // Just do nothing -> transitions to IDLE effectively by not moving
-    }
-
-    // Visual Decoupling (15 FPS PS1 effect)
-    m_visualTickTimer += deltaTime;
-    // Visual Decoupling (REMOVED: User requested 60 FPS / Smooth)
-    m_visualTickTimer = 0.0f; // Unused
-    {
-        m_visualPos = m_pos;
-        m_visualYaw = m_yaw;
         
-        // No animation update needed, VBO is static
+        float limit = (Config::World::MapRadius - 1) * Config::World::ChunkSize * Config::World::ChunkScale;
+        if (abs(nextPos.x) < limit && abs(nextPos.z) < limit) {
+             m_pos = nextPos;
+        }
     }
+    
+    // Terrain Snap
+    m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
+    m_visualPos = m_pos;
 }
 
 void Monster::Render(GLuint shaderProgram, GLuint whiteTexID) {

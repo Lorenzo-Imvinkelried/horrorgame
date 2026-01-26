@@ -1,0 +1,32 @@
+# Tree Leaves Model
+# Pyramid Shape simulated with Boxes?
+# No, ModelLoader ONLY supports BOX. The original leaves were a Pyramid (Triangle Fan).
+# If I switch to ModelLoader, I MUST use Boxes.
+# User wants "pyramid shaped" hitboxes/visuals? The original code drew a Pyramid manually.
+# ModelLoader logic: "Init Mesh -> Unit Cube".
+# If I use ModelLoader, I lose the Pyramid shape unless I approximate it with boxes (Voxel style) OR I add PYRAMID support to ModelLoader.
+# Adding PYRAMID support to ModelLoader is better.
+# But for now, let's just make a "Voxel Pyramid" with 3 boxes.
+
+# Leaves Color: 0.05 0.55 0.08
+
+# Bottom Layer (Wide)
+# Y Start: TrunkTop (6.0). 
+# Width: 6.0 (3.0 * 2)
+# Height: 3.0?
+# Original: leavesH = 9.0. Pyramid from 6.0 to 15.0.
+
+# Level 1 (Base)
+# Pos Y: 7.5 (6.0 + 1.5)
+# Scale: 6.0 3.0 6.0
+BOX 0.0 7.5 0.0  6.0 3.0 6.0  0 0 0  0.05 0.55 0.08  LEAVES_L1
+
+# Level 2 (Mid)
+# Pos Y: 10.5 (9.0 + 1.5)
+# Scale: 4.0 3.0 4.0
+BOX 0.0 10.5 0.0  4.0 3.0 4.0  0 0 0  0.05 0.60 0.08  LEAVES_L2
+
+# Level 3 (Top)
+# Pos Y: 13.5 (12.0 + 1.5)
+# Scale: 2.0 3.0 2.0
+BOX 0.0 13.5 0.0  2.0 3.0 2.0  0 0 0  0.05 0.65 0.08  LEAVES_L3

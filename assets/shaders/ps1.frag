@@ -20,6 +20,10 @@ void main()
         return;
     }
     vec4 texColor = texture(u_Texture, vTexCoord);
+    
+    // OPTIMIZATION: Early Discard
+    if (texColor.a < 0.1) discard;
+
     vec3 outColor = vColor * texColor.rgb;
 
     // -- DISTANCE FOG --

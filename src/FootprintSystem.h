@@ -20,7 +20,7 @@ public:
 
 private:
     std::vector<Footprint> footprints;
-    GLuint VAO, VBO, TexID;
+    GLuint VAO, VBO, TexID, instanceVBO;
     int maxFootprints = 100; // Increased
     int m_vertexCount = 6;
 

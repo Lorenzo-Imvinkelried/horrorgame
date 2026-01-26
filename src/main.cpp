@@ -421,19 +421,9 @@ int main() {
     glGenBuffers(1, &instanceVBO);
     glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
     
-    // Setup Instance Attribute for Trunks
-    glBindVertexArray(trunkVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glVertexAttribDivisor(4, 1); 
-
-    // Setup Instance Attribute for Leaves
-    glBindVertexArray(leavesVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-    glEnableVertexAttribArray(4);
-    glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glVertexAttribDivisor(4, 1); 
+    // CLEAN SLATE: Removed Initial Instance Attribute Setup for Trunks & Leaves
+    // ChunkManager now manages Attrib 4 exclusively.
+    // This prevents "Double Setup" conflicts.
 
     // Setup Instance Attribute for Shadows
     glBindVertexArray(shadowVAO);
@@ -688,6 +678,7 @@ int main() {
         
         // Update Birds
         birds.Update(deltaTime, player.Position, monster.GetPosition());
+        birds.CleanupDistantBirds(player.Position, 80.0f); // Optimization
         
         if (!debugCam) {
             player.ProcessKeyboard(0, deltaTime, chunkManager, footprints);
@@ -767,33 +758,32 @@ int main() {
         chunkManager.RenderTerrain(shaderProgram);
 
         // 2. Tree & Shadow Collection
-        std::vector<glm::vec4> treePositions;
-        chunkManager.CollectAllTreePositions(treePositions);
+        // (Shadows remain manual? No, Shadows were instanced too. 
+        // Wait, the plan was to move TREES to batches. Shadows are separate?
+        // Let's check the code. "2. Tree & Shadow Collection"
+        // It collected treePositions and drew Trunks, Leaves.
+        // It did NOT draw shadows here?
+        // Ah, looking at code: `CollectAllTreePositions` -> `treePositions`.
+        // Then drawn Trunks and Leaves.
+        // Where are shadows drawn?
+        // Shadows were drawn earlier? No. 
+        // Wait, "Setup Instance Attribute for Shadows" was in setup.
+        // But actual Draw call?
+        // I don't see a Draw call for Shadows in the provided snippet of main.cpp around line 770.
+        // Let's look at the snippet Step 80 again.
+        // Line 769: // 2. Tree & Shadow Collection
+        // Line 770: chunkManager.CollectAllTreePositions(treePositions);
+        // Line 783: // PASS A: TRUNKS
+        // Line 790: // PASS B: LEAVES
+        // It seems SHADOWS were NOT drawn in that block? 
+        // Ah, maybe I missed it. OR maybe Shadows are drawn as part of the Trunks? No.
+        // Let's assuming the original code only drew Trunks and Leaves there.
+        // I will replace that block with RenderTrees.
         
-        if (!treePositions.empty()) {
-            // Update Shared Instance Data ONCE
-            glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
-            glBufferData(GL_ARRAY_BUFFER, treePositions.size() * sizeof(glm::vec4), treePositions.data(), GL_STREAM_DRAW);
-            
-            // Common Uniforms
-            glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 1);
-            glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0); 
-            glBindTexture(GL_TEXTURE_2D, textureID);
-
-            // PASS A: TRUNKS (RIGID)
-            glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f); // STATIC
-            glBindVertexArray(trunkVAO);
-            // Safety Enables
-            glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2); glEnableVertexAttribArray(3); glEnableVertexAttribArray(4);
-            glDrawArraysInstanced(GL_TRIANGLES, 0, (GLsizei)trunkMesh.size(), (GLsizei)treePositions.size());
-
-            // PASS B: LEAVES (SWAYING)
-            glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 1.0f); // WIND ON
-            glBindVertexArray(leavesVAO);
-            // Safety Enables
-            glEnableVertexAttribArray(0); glEnableVertexAttribArray(1); glEnableVertexAttribArray(2); glEnableVertexAttribArray(3); glEnableVertexAttribArray(4);
-            glDrawArraysInstanced(GL_TRIANGLES, 0, (GLsizei)leavesMesh.size(), (GLsizei)treePositions.size());
-        }
+        // However, I need to make sure I pass the correct counts.
+        // trunkMesh.size() and leavesMesh.size().
+        
+        chunkManager.RenderTrees(shaderProgram, trunkVAO, leavesVAO, (int)trunkMesh.size(), (int)leavesMesh.size());
 
         // 3. Footprints
         glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0); // DISABLED: Using CPU Exact Height
@@ -823,6 +813,18 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, textureID);
         birds.Render(shaderProgram);
         
+        // --- SAFETY RESET (Fix for State Leakage) ---
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+        glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_UseBirdAttribs"), 0); // RESET BIRD MODE
+        
+        glBindVertexArray(0); 
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        
+        // GLOBAL SAFETY: Disable ALL attributes 0-7
+        for(int i=0; i<8; i++) glDisableVertexAttribArray(i);
+        
         // --- 4b. Render Water (Transparent) ---
         // Render LAST for correct blending with terrain/trees
         // Use Noise Texture for water surface details (if any) or just color
@@ -851,13 +853,16 @@ int main() {
         }
         
         // Debug Highlights (Always on top)
+        static bool wasDebug = false;
+        
         if (debugCam) {
+            wasDebug = true;
             // Render from FreeCam Perspective
             // World
             chunkManager.RenderTerrain(shaderProgram);
             
             // Visualization of Scent (Trapezoids)
-            scentSystem.RenderDebug(shaderProgram);
+            scentSystem.RenderDebug(shaderProgram, activeCamPos);
             
             // Wind Indicator (Blue Arrow above player)
             glm::vec2 w = windSystem.GetDirection();
@@ -913,6 +918,13 @@ int main() {
             glm::vec3 startPos = player.Position + glm::vec3(0, -0.5f, 0); 
             glm::vec3 visionEnd = startPos + player.Front * 1000.0f;
             DrawLine(startPos + glm::vec3(0, 0.1f, 0), visionEnd, glm::vec3(0.0f, 0.0f, 1.0f), dbgVAO2, dbgVBO2);
+        } else if (wasDebug) {
+             // TRANSITION: Just exited debug mode. Clear buffers ONCE.
+             wasDebug = false;
+             
+             // CLEAR Debug VBOs to prevent "Ghost" geometry if toggle off
+             glBindBuffer(GL_ARRAY_BUFFER, debugVBO);
+             glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
         }
 
         // 5. Weapon (Overlay - Clear Depth)

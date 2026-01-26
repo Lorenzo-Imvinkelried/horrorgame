@@ -49,8 +49,10 @@ private:
     float m_peekDuration = 1.0f; // Reduced to 1.0s (Was 2.0s) to feel more aggressive
     float m_moveTimer = 0.0f;    // Failsafe for getting stuck
     float m_moveTimeout = 5.0f;  // If moving > 5s, force next
+    float m_updateTimer = 0.0f;  // For throttling (5Hz)
     glm::vec3 m_lastTreePos = glm::vec3(0.0f); // To prevent re-selecting immediately
     
     // Resources
     GLuint VAO, VBO;
+    std::vector<glm::vec4> m_treeCache; // Cache for scanning
 };

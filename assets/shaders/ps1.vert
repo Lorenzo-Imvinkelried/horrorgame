@@ -3,7 +3,13 @@ layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aColor;
 layout (location = 2) in vec2 aTexCoord;
 layout (location = 3) in vec3 aNormal;
+// Tree/Default Attributes
 layout (location = 4) in vec4 aInstanceData; // .xyz = pos, .w = scale
+layout (location = 5) in float aInstanceYaw;  // Rotation (Radians)
+
+// Bird Attributes (Separate to avoid conflict)
+layout (location = 6) in vec4 aBirdInstanceData;
+layout (location = 7) in float aBirdYaw;
 
 out vec3 vColor;
 out vec2 vTexCoord;
@@ -20,55 +26,85 @@ uniform vec2 u_Resolution;
 uniform bool u_Snap;
 uniform bool u_ConformToTerrain;
 uniform bool u_ParticleMode; // Skip lighting for particles
+uniform bool u_UseBirdAttribs; // Toggle for Bird attribute source
 
 uniform vec2 u_WindDirection;
 
-// Terrain Math (Must match WorldGenerator.cpp)
-float GetVisualHeight(float x, float z) {
-    float y = abs(sin(x * 0.05)) * abs(cos(z * 0.05)) * 4.0;
-    y += abs(sin(x * 0.2 + z * 0.1)) * 1.5;
-    return floor(y * 2.0) / 2.0;
-}
+uniform float u_LodDistNear; // Config::Trees::WindLodNear
+uniform float u_LodDistFar;  // Config::Trees::WindLodFar
+
+// Terrain Math REMOVED (CPU Only)
 
 void main()
 {
     vec3 worldPos = aPos;
     if (u_IsInstanced) {
-        // Apply scaling before translation
-        worldPos *= aInstanceData.w;
-        worldPos += aInstanceData.xyz;
-    }
-    
-    // -- SHADOW/FOOTPRINT SNAPPING --
-    // If drawing a shadow/footprint, snap strictly to terrain height
-    if (u_ConformToTerrain) {
-        float terrainY = GetVisualHeight(worldPos.x, worldPos.z);
-        worldPos.y = terrainY + 0.001; // Minimal bias, rely on PolygonOffset
-    } else {
-        // -- WIND SYSTEM --
-        // STRUCTURAL SOLUTION (Final): Explicit Control from CPU.
-        // Trunks are drawn with u_WindStrength = 0.0 (Static).
-        // Leaves are drawn with u_WindStrength = 1.0 (Mobile).
-        if (u_WindStrength > 0.0) {
-            // Use direction from CPU WindSystem
-            // Uniform wave for the entire object (e.g. leaves mesh)
-            // BIASED WAVE: (sin(t) + 1.0) * 0.5 -> Range [0.0, 1.0]
-            // This ensures trees lean WITH the wind, not against it.
-            float rawWave = sin(u_Time * 3.0 + worldPos.x * 0.2 + worldPos.z * 0.2); 
-            // Squaring it makes the "low" periods flatter and "high" periods sharper (gusty feel)
-            float wave = (rawWave + 1.0) * 0.5;
-            wave = wave * wave; 
+        // SELECT SOURCE: Birds or Trees
+        vec4 iData = u_UseBirdAttribs ? aBirdInstanceData : aInstanceData;
+        float iYaw = u_UseBirdAttribs ? aBirdYaw : aInstanceYaw;
 
-            // HEIGHT FACTOR:
-            // Normalize height 0..1 (Base to Tip)
+        // Apply scaling
+        worldPos *= iData.w;
+        
+        // Apply Rotation (Yaw around Y)
+        float c = cos(iYaw);
+        float s = sin(iYaw);
+        // Rotation Matrix for Y axis:
+        // [ c  0  s ]
+        // [ 0  1  0 ]
+        // [-s  0  c ]
+        float newX = worldPos.x * c + worldPos.z * s;
+        float newZ = worldPos.x * -s + worldPos.z * c;
+        worldPos.x = newX;
+        worldPos.z = newZ;
+
+        // Apply Translation
+        worldPos += iData.xyz;
+    }
+
+    // -- SHADOW/FOOTPRINT SNAPPING --
+    // REMOVED: Procedural Height Snapping (caused mismatch with CPU Noise Terrain).
+    // Now we rely strictly on the Y coordinate passed in aInstanceData or aPos.
+
+    // -- WIND SYSTEM --
+    // STRUCTURAL SOLUTION (Final): Explicit Control from CPU.
+    // Trunks are drawn with u_WindStrength = 0.0 (Static).
+    // Leaves are drawn with u_WindStrength = 1.0 (Mobile).
+    // OPTIMIZED WIND SYSTEM (LOD + DistSq)
+    if (u_WindStrength > 0.0) {
+        float windTime = u_Time;
+        float windEnabled = 1.0;
+        
+        // Use View Space position of the INSTANCE to get distance
+        vec4 iData = u_UseBirdAttribs ? aBirdInstanceData : aInstanceData;
+        vec4 viewInst = u_View * vec4(iData.xyz, 1.0);
+        float distSq = dot(viewInst.xyz, viewInst.xyz);
+        
+        float nearSq = u_LodDistNear * u_LodDistNear;
+        float farSq = u_LodDistFar * u_LodDistFar;
+        
+        if (distSq > farSq) { 
+            // Far: DISABLE WIND COMPLETELY
+            windEnabled = 0.0;
+        } 
+        else if (distSq > nearSq) {
+            // Mid: Low FPS (5 FPS)
+            windTime = floor(windTime * 5.0) * 0.2; 
+            windEnabled = 0.5; // Reduced amplitude
+        }
+        
+        if (windEnabled > 0.0) {
+            // Bias wave to be [0.0, 1.0]
+            float rawWave = sin(windTime * 3.0 + worldPos.x * 0.2 + worldPos.z * 0.2); 
+            float wave = (rawWave + 1.0) * 0.5;
+            wave = wave * wave; // Sharp gusts
+
+            // Simple Height Factor
             float normalizedH = clamp((aPos.y - 6.0) / 9.0, 0.0, 1.0);
-            
-            // Base Sway (0.5) + Tip Extra (1.5 * curve)
-            // This ensures the whole canopy moves (0.5) but the tip "whips" (2.0 total)
             float hFactor = 0.5 + 1.5 * (normalizedH * normalizedH);
 
-            // Apply sway
-            worldPos.xz += u_WindDirection * wave * 1.0 * hFactor * u_WindStrength;
+            // Apply Wind
+            worldPos.xz += u_WindDirection * wave * 1.0 * hFactor * u_WindStrength * windEnabled;
         }
     }
 
@@ -86,8 +122,10 @@ void main()
 
     // -- INSTANCE VARIATION (Trees) --
     if (u_IsInstanced) {
+        vec4 iData = u_UseBirdAttribs ? aBirdInstanceData : aInstanceData;
+        
         // Pseudo-random hash based on tree position (XZ)
-        float hash = fract(sin(dot(aInstanceData.xz, vec2(12.9898, 78.233))) * 43758.5453);
+        float hash = fract(sin(dot(iData.xz, vec2(12.9898, 78.233))) * 43758.5453);
         // Vary mostly Green, slightly Red/Blue for "Tonal" difference
         // range: 0.0 to 0.15 extra brightness/color
         vec3 tint = vec3(hash * 0.05, hash * 0.15, hash * 0.05);

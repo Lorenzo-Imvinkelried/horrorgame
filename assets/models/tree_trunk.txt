@@ -1,0 +1,18 @@
+# Tree Trunk Model
+# Simple Rectangular Trunk
+# Height ~6.0, Width ~1.2 (0.6 radius)
+# Center at Base (0,0,0) so it scales up correctly from ground.
+# But original code had Base at y-5.0 and Top at y+6.0 relative to origin?
+# Wait, procedural code: tY_Base = y - 5.0f; tY_Top = y + trunkH;
+# Origin was (x,y,z). So the trunk goes from -5.0 to +6.0.
+# Total H = 11.0. Center = 0.5.
+# Let's define a box that spans this range.
+# Box Center Y = (-5 + 6) / 2 = 0.5
+# Box Scale Y = 11.0
+# Width = 1.2 (0.6 * 2)
+
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+# Color: 0.35 0.25 0.15 (Original) -> 0.4 0.2 0.1 (Internal_AddTreeGeometry)
+# Let's use 0.40 0.25 0.15
+
+BOX 0.0 0.5 0.0  1.2 11.0 1.2  0 0 0  0.40 0.25 0.15  TRUNK_MAIN

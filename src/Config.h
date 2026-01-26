@@ -30,15 +30,21 @@ namespace Config {
         constexpr int ChunkSize = 16;
         constexpr float ChunkScale = 2.0f;
         constexpr int MapRadius = 24; // Reduce to 24 (Width 49) to prevent VSync drops. 32 was hitting GPU limits.
-        constexpr int RenderDistance = 24; // Fog/Culling distance (keep high)
+        constexpr int RenderDistance = 16; // Reduced from 24 to 16 for FPS Stability
         constexpr int RenderBatchSize = 2; // NxN chunks per batch (2x2 = 4 chunks). 4x4 was too heavy on CPU gen.
-        constexpr float FogDistStart = 600.0f;
-        constexpr float FogDistEnd = 750.0f; // Max visibility
+        constexpr float FogDistStart = 450.0f; // Adjusted for new distance
+        constexpr float FogDistEnd = 550.0f; // Max visibility
     }
 
     namespace Trees {
         constexpr float MinScale = 0.8f;
         constexpr float MaxScale = 1.6f; 
+        
+        // Wind Animation LOD (Distance in meters)
+        // Trees beyond Near: Low FPS (5 FPS)
+        // Trees beyond Far: No Animation
+        constexpr float WindLodNear = 60.0f; // Increased from 40.0f as per user request (was hardcoded)
+        constexpr float WindLodFar = 100.0f; // Increased from 60.0f (was hardcoded)
     }
     
     namespace Gameplay {
@@ -57,10 +63,21 @@ namespace Config {
         constexpr float ProjectileDrag = 0.1f;          // Low drag (Aerodynamic)
     }
     namespace Bird {
-        constexpr float SpawnChance = 0.4f; // 1.5% chance per tree (Reduced from 5%)
-        constexpr float TriggerDistance = 8.0f;
-        constexpr float FlySpeed = 10.0f;
-        constexpr float HideDistance = 30.0f; // Distance to fly before finding new perch
+        constexpr float SpawnChance = 0.3f; // REDUCIDO de 1.0f (30% chance)
+        constexpr float TriggerDistance = 12.0f; // REDUCIDO de 25.0f
+        constexpr float FlySpeed = 6.0f; // Aumentado de 4.5f
+        constexpr float HideDistance = 40.0f; // Aumentado de 30.0f
+        constexpr float MaxFlightDistance = 80.0f; // NUEVO: limite distancia
+        constexpr float MaxFlightTime = 8.0f; // NUEVO: tiempo maximo vuelo
+    }
+    
+    namespace Scent {
+        constexpr float MaxDistance = 250.0f; // Max distance scent is tracked (was 150)
+        constexpr float MaxLifeTime = 120.0f;  // Seconds scent stays alive
+        constexpr float SpawnInterval = 3.0f; // Seconds between puffs
+        constexpr float BaseWidth = 1.0f;     // Initial width of puff
+        constexpr float ExpansionRate = 0.3f; // How fast it widens
+        constexpr float WindSpeed = 5.0f;     // Speed of scent travel
     }
 
     namespace Water {

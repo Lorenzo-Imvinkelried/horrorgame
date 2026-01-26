@@ -34,7 +34,9 @@ public:
     void RenderDebug(GLuint shaderProgram, glm::vec3 playerPos);
     
     // Instancing support
-    void CollectAllTreePositions(std::vector<glm::vec4>& outPositions);
+    // Instancing support
+    // (Removed CollectAllTreePositions - using static batching now)
+
 
     // Collision support
     void GetTreesInRange(glm::vec3 pos, float range, std::vector<glm::vec4>& outTrees);
@@ -43,19 +45,26 @@ public:
     struct RenderBatch {
         int bx, bz;
         GLuint VAO, VBO;
-        GLuint waterVAO, waterVBO; // New buffers for water
+        GLuint waterVAO, waterVBO; 
+        
+        // Tree Instance Data (Static per batch)
+        GLuint treeInstanceVBO; 
+        int treeCount;
+
         int vertexCount;
         int waterVertexCount;
         bool visible;
         bool dirty;
+        float distFromCam; // For Front-to-Back Sorting
         
-        RenderBatch() : VAO(0), VBO(0), waterVAO(0), waterVBO(0), vertexCount(0), waterVertexCount(0), visible(false), dirty(true) {}
+        RenderBatch() : VAO(0), VBO(0), waterVAO(0), waterVBO(0), treeInstanceVBO(0), treeCount(0), vertexCount(0), waterVertexCount(0), visible(false), dirty(true), distFromCam(0.0f) {}
         void Cleanup() {
             if(VAO) glDeleteVertexArrays(1, &VAO);
             if(VBO) glDeleteBuffers(1, &VBO);
             if(waterVAO) glDeleteVertexArrays(1, &waterVAO);
             if(waterVBO) glDeleteBuffers(1, &waterVBO);
-            VAO=0; VBO=0; waterVAO=0; waterVBO=0; vertexCount=0;
+            if(treeInstanceVBO) glDeleteBuffers(1, &treeInstanceVBO); // VAO is shared (TrunkVAO/LeavesVAO)
+            VAO=0; VBO=0; waterVAO=0; waterVBO=0; treeInstanceVBO=0; treeCount=0; vertexCount=0;
         }
     };
 
@@ -68,7 +77,15 @@ private:
     std::map<std::pair<int, int>, Chunk> m_chunks; // Still used for logic
     
     // Render Map (Batches)
+    // Render Map (Batches)
     std::map<std::pair<int, int>, RenderBatch> m_batches;
+    std::vector<RenderBatch*> m_batchList; // Cache for fast iteration
+    std::vector<RenderBatch*> m_visibleBatches; // SORTED cache for rendering
+    struct BatchBounds {
+        glm::vec3 min;
+        glm::vec3 max;
+    };
+    std::map<std::pair<int, int>, BatchBounds> m_batchBoundsCache;
 
     void LoadChunk(int x, int z);
     
@@ -78,6 +95,10 @@ public:
         std::cout << "[ChunkManager] Pre-loading World (" << Config::World::MapRadius << " chunk radius)..." << std::endl;
         LoadWorld(); 
     }
+
+    // New Render Method for Trees
+    void RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint leavesVAO, int trunkVertexCount, int leavesVertexCount);
+
 private:
     void LoadWorld();
     

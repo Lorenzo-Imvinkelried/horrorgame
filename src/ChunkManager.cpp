@@ -2,8 +2,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <algorithm>
-#include "Config.h" // Added for Config constants
-#include "BirdSystem.h" // Fixed: Needed for TrySpawnBirds
+#include "Config.h" 
+#include "BirdSystem.h" 
 
 void Chunk::Cleanup() {
     if (VAO) glDeleteVertexArrays(1, &VAO);
@@ -12,8 +12,6 @@ void Chunk::Cleanup() {
 }
 
 ChunkManager::ChunkManager(int renderDistance) : m_renderDistance(renderDistance) {
-    // Constructor just sets params now.
-    // Call Init() to load world.
 }
 
 ChunkManager::~ChunkManager() {
@@ -36,7 +34,6 @@ void ChunkManager::LoadWorld() {
     }
     
     // 2. Build All Batches IMMEDIATELY
-    // This forces the "loading time" to happen here, not during gameplay
     int batchesBuilt = 0;
     for (auto& pair : m_batches) {
         if (pair.second.dirty) {
@@ -44,25 +41,23 @@ void ChunkManager::LoadWorld() {
             batchesBuilt++;
         }
     }
+    
+    // CACHE BATCH LIST
+    m_batchList.clear();
+    m_batchList.reserve(m_batches.size());
+    for(auto& pair : m_batches) {
+        m_batchList.push_back(&pair.second);
+    }
+
     std::cout << "[ChunkManager] World Loaded. Built " << batchesBuilt << " batches." << std::endl;
 }
 
 void ChunkManager::Update(glm::vec3 playerPos) {
-    // STATIC WORLD: No dynamic loading/unloading!
-    // We only update logic that needs per-frame attention if any.
-    // Currently nothing.
-    // Visibility is handled in UpdateVisibility.
-    
-    // Just in case we add logic later...
-    int pCX = (int)floor(playerPos.x / (m_chunkSize * m_scale));
-    int pCZ = (int)floor(playerPos.z / (m_chunkSize * m_scale));
-    
-    // Optional: We could trigger physics updates for nearby chunks here?
+    // Static world update logic if needed
 }
 
 void ChunkManager::LoadChunk(int x, int z) {
     auto key = std::make_pair(x, z);
-    // Double check
     if (m_chunks.find(key) != m_chunks.end()) return;
 
     Chunk newChunk;
@@ -70,62 +65,111 @@ void ChunkManager::LoadChunk(int x, int z) {
     newChunk.z = z;
     newChunk.chunkSize = (float)m_chunkSize;
     newChunk.scale = m_scale;
-    newChunk.visible = true; // Visibility is now handled by batch usually, but we keep this for logic queries?
+    newChunk.visible = true; 
     
-    // We DON'T generate individual VBOs anymore to save VRAM and Setup time.
-    // But we DO need tree positions immediately for gameplay.
-    // WorldGenerator::GenerateChunkTerrain is called in RebuildBatch now.
-    
-    // Wait, for Trees we need to call it here.
     newChunk.treePositions = WorldGenerator::GenerateChunkTrees(x, z, m_chunkSize, m_scale);
     
-    // --- BIRD SYSTEM INTEGRATION ---
     if (m_birdSystem) {
         m_birdSystem->TrySpawnBirds(newChunk.treePositions);
     }
     
-    // VAO/VBO/VertexCount are 0/Unused for individual chunks now.
     newChunk.VAO = 0;
     newChunk.VBO = 0;
     newChunk.vertexCount = 0;
 
     m_chunks[key] = newChunk;
-    
-    // Trigger Batch Update
     MarkBatchDirty(x, z);
 }
-
-// UnloadFarChunks removed (Static World)
 
 void ChunkManager::UpdateVisibility(const glm::mat4& viewProj) {
     Frustum frustum;
     frustum.Update(viewProj);
 
-    // Update BATCH Visibility
-    for (auto& pair : m_batches) {
-        RenderBatch& b = pair.second;
-        
-        // Calculate AABB for BATCH
-        // Size: BatchSize * ChunkSize * Scale
-        float batchWorldSize = Config::World::RenderBatchSize * m_chunkSize * m_scale;
-        float minX = (float)b.bx * batchWorldSize;
-        float minZ = (float)b.bz * batchWorldSize;
-        float maxX = minX + batchWorldSize;
-        float maxZ = minZ + batchWorldSize;
-        
-        // Use conservative height bounds (-10 to 30)
-        glm::vec3 min(minX, -10.0f, minZ);
-        glm::vec3 max(maxX, 30.0f, maxZ);
+    // Pre-calculate batch size ONCE
+    static float batchWorldSize = Config::World::RenderBatchSize * m_chunkSize * m_scale;
+    static float margin = 15.0f; // Margin to prevent popping
 
-        b.visible = frustum.IsBoxVisible(min, max);
+    m_visibleBatches.clear();
+    
+    // Extract Camera Position from View Matrix (Inverse)?
+    // Actually, UpdateVisibility only takes ViewProj. 
+    // We can approximate distance using the ViewProj, but typically we need logic pos.
+    // Let's assume the calling code passes ViewProj built from PlayerPos.
+    // To sort front-to-back, we need distance.
+    // We can obtain camera position if we pass it, OR we can extract it from View Matrix inversed.
+    // However, simply using the CENTER of the batch and checking Z distance in View Space is enough?
+    // Optimization: Just pass player pos to UpdateVisibility? 
+    // Current signature: void UpdateVisibility(const glm::mat4& viewProj);
+    // I can't change signature easily in .h without potentially breaking things if I missed update.
+    // Wait, I just edited .h, I COULD have added arguments.
+    // BUT I can also estimate distance using the Projected Depth of the center?
+    // Easier: Just update signature to take glm::vec3 camPos.
+    // Actually, let's keep it simple. We iterate m_batchList.
+    
+    // NOTE: Need to change signature in .cpp match .h? I didn't change .h signature yet.
+    // Let's stick to existing signature and compute simple distance metric.
+    // We can infer camera position relative to batch by checking the VIEW matrix part?
+    // Or just use the fact that `ChunkManager::Update` takes `playerPos`. 
+    // We can store `m_lastPlayerPos`.
+    // Let's just use `m_lastPlayerPos` if available? 
+    // ChunkManager::Update(playerPos) is called in Main loop BEFORE UpdateVisibility.
+    // So I can store playerPos in member variable?
+    // I didn't add member variable.
+    // Alternative: Use the "Projected W" of the center point? 
+    // Lower W = Closer.
+    
+    for (RenderBatch* bPtr : m_batchList) {
+        RenderBatch& b = *bPtr;
+        
+        // Cache Key
+        auto key = std::make_pair(b.bx, b.bz);
+        
+        // Check Cache
+        if (m_batchBoundsCache.find(key) == m_batchBoundsCache.end()) {
+             // Calculate and Cache
+             float minX = (float)b.bx * batchWorldSize;
+             float minZ = (float)b.bz * batchWorldSize;
+             float maxX = minX + batchWorldSize;
+             float maxZ = minZ + batchWorldSize;
+             
+             BatchBounds bounds;
+             bounds.min = glm::vec3(minX - margin, -50.0f, minZ - margin); 
+             bounds.max = glm::vec3(maxX + margin, 150.0f, maxZ + margin);
+             
+             m_batchBoundsCache[key] = bounds;
+        }
+        
+        const auto& bounds = m_batchBoundsCache[key];
+        b.visible = frustum.IsBoxVisible(bounds.min, bounds.max);
+        
+        if (b.visible) {
+            // Estimate Distance for Sorting (Center of batch)
+            glm::vec3 center = (bounds.min + bounds.max) * 0.5f;
+            // Project Center to Clip Space
+            glm::vec4 clip = viewProj * glm::vec4(center, 1.0f);
+            // W component is roughly linear distance (for perspective)
+            b.distFromCam = clip.w;
+            
+            // STRICT FOG CULLING
+            // If the batch is completely beyond the fog, don't draw it.
+            // Add margin for large batches
+            if (b.distFromCam > (Config::World::FogDistEnd + 50.0f)) {
+                 b.visible = false;
+                 continue;
+            }
+            
+            m_visibleBatches.push_back(bPtr);
+        }
     }
+    
+    // Sort Front-to-Back (Ascending Distance)
+    std::sort(m_visibleBatches.begin(), m_visibleBatches.end(), [](RenderBatch* a, RenderBatch* b) {
+        return a->distFromCam < b->distFromCam;
+    });
 }
 
-// Helper to get Batch Coord from Chunk Coord
-// Bx = floor(cx / 4)
 int GetBatchCoord(int c) {
     if (c >= 0) return c / Config::World::RenderBatchSize;
-    // Handle negative correctly: -1 -> -1 (if size 4, -4..-1 is -1)
     return (c - Config::World::RenderBatchSize + 1) / Config::World::RenderBatchSize;
 }
 
@@ -136,7 +180,6 @@ void ChunkManager::MarkBatchDirty(int cx, int cz) {
     if (it != m_batches.end()) {
         it->second.dirty = true;
     } else {
-        // Create if not exists (Lazy creation)
         RenderBatch batch;
         batch.bx = bx;
         batch.bz = bz;
@@ -145,13 +188,11 @@ void ChunkManager::MarkBatchDirty(int cx, int cz) {
 }
 
 void ChunkManager::RebuildBatch(RenderBatch& batch) {
-    // Combine geometry of all loaded chunks in this batch
     int B_SIZE = Config::World::RenderBatchSize;
 
     std::vector<Vertex> batchVertices;
     std::vector<Vertex> batchWaterVertices; 
     batchVertices.reserve(B_SIZE * B_SIZE * 6 * 256); 
-    batchWaterVertices.reserve(B_SIZE * B_SIZE * 6 * 64);
     
     int startCX = batch.bx * B_SIZE;
     int startCZ = batch.bz * B_SIZE;
@@ -161,11 +202,9 @@ void ChunkManager::RebuildBatch(RenderBatch& batch) {
             int cx = startCX + x;
             int cz = startCZ + z;
             
-            // Check if chunk exists (loaded)
             auto it = m_chunks.find({cx, cz});
             if (it == m_chunks.end()) continue;
             
-            // OPTIMIZATION: Collect nearby trees
             std::vector<glm::vec2> nearbyTrees;
             for(int dx=-1; dx<=1; dx++) {
                 for(int dz=-1; dz<=1; dz++) {
@@ -184,44 +223,80 @@ void ChunkManager::RebuildBatch(RenderBatch& batch) {
         }
     }
     
-    // Upload to Batch VBO (Terrain)
+    // Upload Batch VBO (Terrain)
     if (batch.VAO == 0) { glGenVertexArrays(1, &batch.VAO); glGenBuffers(1, &batch.VBO); }
     glBindVertexArray(batch.VAO);
     glBindBuffer(GL_ARRAY_BUFFER, batch.VBO);
     glBufferData(GL_ARRAY_BUFFER, batchVertices.size() * sizeof(Vertex), batchVertices.data(), GL_STATIC_DRAW);
+    
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));    glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2);
     glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
     batch.vertexCount = (int)batchVertices.size();
 
-    // Upload to Batch VBO (Water)
+    // Upload Batch VBO (Water)
     if (batch.waterVAO == 0) { glGenVertexArrays(1, &batch.waterVAO); glGenBuffers(1, &batch.waterVBO); }
     glBindVertexArray(batch.waterVAO);
     glBindBuffer(GL_ARRAY_BUFFER, batch.waterVBO);
     glBufferData(GL_ARRAY_BUFFER, batchWaterVertices.size() * sizeof(Vertex), batchWaterVertices.data(), GL_STATIC_DRAW);
+    
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));    glEnableVertexAttribArray(1);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2);
     glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
     batch.waterVertexCount = (int)batchWaterVertices.size();
     
+    // Upload Tree Instances
+    std::vector<glm::vec4> batchTrees;
+    for (int z = 0; z < B_SIZE; z++) {
+        for (int x = 0; x < B_SIZE; x++) {
+            int cx = startCX + x;
+            int cz = startCZ + z;
+            auto it = m_chunks.find({cx, cz});
+            if (it != m_chunks.end()) {
+                batchTrees.insert(batchTrees.end(), it->second.treePositions.begin(), it->second.treePositions.end());
+            }
+        }
+    }
+    
+    if (batch.treeInstanceVBO == 0) glGenBuffers(1, &batch.treeInstanceVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, batch.treeInstanceVBO);
+    if (!batchTrees.empty()) {
+        glBufferData(GL_ARRAY_BUFFER, batchTrees.size() * sizeof(glm::vec4), batchTrees.data(), GL_STATIC_DRAW);
+    } else {
+        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_STATIC_DRAW);
+    }
+    batch.treeCount = (int)batchTrees.size();
+
     batch.dirty = false;
+    
+    // SAFETY: Desvincular para no romper nada
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void ChunkManager::RenderTerrain(GLuint shaderProgram) {
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     glm::mat4 identity(1.0f);
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(identity));
+    
+    // --- SAFETY FIX: RESETEAR ESTADOS DEL SHADER ---
+    // Si el BirdSystem o los Arboles corrieron antes, estas variables pueden tener basura.
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0); 
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f); 
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
 
-    // Render Opaque Terrain
-    for (auto& pair : m_batches) {
-        if (!pair.second.visible) continue;
-        if (pair.second.vertexCount > 0) {
-            glBindVertexArray(pair.second.VAO);
-            glDrawArrays(GL_TRIANGLES, 0, pair.second.vertexCount);
+    // Use SORTED visible batches
+    for (RenderBatch* bPtr : m_visibleBatches) {
+        RenderBatch& b = *bPtr;
+        // Visibility already checked
+        if (b.vertexCount > 0) {
+            glBindVertexArray(b.VAO);
+            glDrawArrays(GL_TRIANGLES, 0, b.vertexCount);
         }
     }
+    glBindVertexArray(0);
 }
 
 void ChunkManager::RenderWater(GLuint shaderProgram) {
@@ -229,45 +304,107 @@ void ChunkManager::RenderWater(GLuint shaderProgram) {
     glm::mat4 identity(1.0f);
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(identity));
     
-    // Enable Blending for Water 
+    // Asegurar que el agua no use instancing ni viento raro
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+    
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthMask(GL_FALSE); 
     
-    // Water Pass (Transparent)
-    glDepthMask(GL_FALSE); // Read-only depth for transparency
-    
-    // Fix Z-Fighting with intersecting terrain (User observed flickering)
     glEnable(GL_POLYGON_OFFSET_FILL);
-    glPolygonOffset(-1.0f, -1.0f); // Bias water slightly closer to camera
+    glPolygonOffset(-1.0f, -1.0f); 
 
-    for (auto& pair : m_batches) {
-        if (!pair.second.visible) continue;
-        if (pair.second.waterVertexCount > 0) {
-            glBindVertexArray(pair.second.waterVAO);
-            glDrawArrays(GL_TRIANGLES, 0, pair.second.waterVertexCount);
+    // Use SORTED visible batches (Transparency usually requires Back-to-Front... 
+    // BUT for single-layer water plane, Front-to-Back is fine or irrelevant if depth mask is off but depth test on.
+    // Actually, for transparency, Back-to-Front is strictly better.
+    // Let's reverse iterate for water?
+    // Since water is flat and mostly uniform, it might not matter much for the "forest lag".
+    // Let's just use forward iteration for now, water is not lag source.
+    for (RenderBatch* bPtr : m_visibleBatches) {
+        RenderBatch& b = *bPtr;
+        if (b.waterVertexCount > 0) {
+            glBindVertexArray(b.waterVAO);
+            glDrawArrays(GL_TRIANGLES, 0, b.waterVertexCount);
         }
     }
     
     glDisable(GL_POLYGON_OFFSET_FILL);
     glDepthMask(GL_TRUE);
     glDisable(GL_BLEND);
+    glBindVertexArray(0);
 }
 
-void ChunkManager::CollectAllTreePositions(std::vector<glm::vec4>& outPositions) {
-    // Optimization: reserve space
-    outPositions.reserve(m_chunks.size() * 15);
-    for (auto& pair : m_chunks) {
-        if (!pair.second.visible) continue; // CULLING
-        outPositions.insert(outPositions.end(), pair.second.treePositions.begin(), pair.second.treePositions.end());
+void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint leavesVAO, int trunkVertexCount, int leavesVertexCount) {
+    // Cache Uniforms
+    GLint instancedLoc   = glGetUniformLocation(shaderProgram, "u_IsInstanced");
+    GLint conformLoc     = glGetUniformLocation(shaderProgram, "u_ConformToTerrain");
+    GLint birdAttribsLoc = glGetUniformLocation(shaderProgram, "u_UseBirdAttribs");
+    GLint windStrLoc     = glGetUniformLocation(shaderProgram, "u_WindStrength");
+    
+    // NEW: Wind LOD Uniforms
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_LodDistNear"), Config::Trees::WindLodNear);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_LodDistFar"), Config::Trees::WindLodFar);
+
+    glUniform1i(instancedLoc, 1);
+    glUniform1i(conformLoc, 0);
+    glUniform1i(birdAttribsLoc, 0); // Ensure Tree Mode
+    
+    for (RenderBatch* bPtr : m_visibleBatches) {
+        RenderBatch& b = *bPtr;
+        if (b.treeCount == 0) continue;
+
+        // --- PASS A: TRUNKS ---
+        glUniform1f(windStrLoc, 0.0f);
+        
+        glBindVertexArray(trunkVAO);
+        
+        // Setup Instance Buffer
+        glBindBuffer(GL_ARRAY_BUFFER, b.treeInstanceVBO);
+        
+        // Clean Bird Attributes
+        glDisableVertexAttribArray(6);
+        glDisableVertexAttribArray(7);
+        
+        // Setup Tree Attribute (4)
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+        glVertexAttribDivisor(4, 1); // CRITICAL
+        
+        // Disable potential conflicts
+        glDisableVertexAttribArray(5);
+        
+        glDrawArraysInstanced(GL_TRIANGLES, 0, trunkVertexCount, b.treeCount);
+
+        // --- PASS B: LEAVES ---
+        glUniform1f(windStrLoc, 1.0f);
+        
+        glBindVertexArray(leavesVAO);
+        
+        // Setup Instance Buffer Again (New VAO)
+        glBindBuffer(GL_ARRAY_BUFFER, b.treeInstanceVBO);
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+        glVertexAttribDivisor(4, 1); // CRITICAL
+        
+        glDisableVertexAttribArray(5);
+        glDisableVertexAttribArray(6);
+        glDisableVertexAttribArray(7);
+
+        glDrawArraysInstanced(GL_TRIANGLES, 0, leavesVertexCount, b.treeCount);
+        
+        // Cleanup
+        glDisableVertexAttribArray(4);
     }
+    
+    // Reset States
+    glUniform1i(instancedLoc, 0);
+    glUniform1f(windStrLoc, 0.0f);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
 void ChunkManager::GetTreesInRange(glm::vec3 pos, float range, std::vector<glm::vec4>& outTrees) {
-    // Spatial Optimization: Only check chunks that could possibly contain trees in range
-    // Calculate the min/max chunk coordinates that overlap with the query box (pos +/- range)
-    
     float worldChunkSize = m_chunkSize * m_scale;
-    
     int minCX = (int)floor((pos.x - range - 5.0f) / worldChunkSize);
     int maxCX = (int)floor((pos.x + range + 5.0f) / worldChunkSize);
     int minCZ = (int)floor((pos.z - range - 5.0f) / worldChunkSize);
@@ -276,16 +413,13 @@ void ChunkManager::GetTreesInRange(glm::vec3 pos, float range, std::vector<glm::
     for (int z = minCZ; z <= maxCZ; z++) {
         for (int x = minCX; x <= maxCX; x++) {
             auto it = m_chunks.find({x, z});
-            if (it == m_chunks.end()) continue; // Chunk not loaded
+            if (it == m_chunks.end()) continue;
 
             const Chunk& chunk = it->second;
-            
-            // Check trees in this chunk (Standard logic)
             for (const auto& treeData : chunk.treePositions) {
                 glm::vec3 treePos(treeData.x, treeData.y, treeData.z);
                 float treeScale = treeData.w;
                 float distSq = glm::dot(pos - treePos, pos - treePos);
-                
                 float effectiveRadius = 0.5f * treeScale;
                 if (distSq <= (range + effectiveRadius) * (range + effectiveRadius)) {
                     outTrees.push_back(treeData);
@@ -345,14 +479,16 @@ void ChunkManager::RenderDebug(GLuint shaderProgram, glm::vec3 playerPos) {
     // Debug draw can be heavy, let's just draw all visible chunks.
     
     float radiusSq = 40.0f * 40.0f; // 40 units radius
-
-    for (auto& batchPair : m_batches) {
-        if (!batchPair.second.visible) continue;
+    
+    // Use Cache Iteration
+    for (RenderBatch* bPtr : m_batchList) {
+        RenderBatch& b = *bPtr;
+        if (!b.visible) continue;
         
         // This batch is visible, draw trees in its chunks
         int B_SIZE = Config::World::RenderBatchSize;
-        int startCX = batchPair.second.bx * B_SIZE;
-        int startCZ = batchPair.second.bz * B_SIZE;
+        int startCX = b.bx * B_SIZE;
+        int startCZ = b.bz * B_SIZE;
         
         for (int z = 0; z < B_SIZE; z++) {
             for (int x = 0; x < B_SIZE; x++) {

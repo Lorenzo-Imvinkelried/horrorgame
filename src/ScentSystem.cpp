@@ -1,5 +1,6 @@
 #include "ScentSystem.h"
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/norm.hpp> // Added for distance2
 #include <iostream>
 #include "Config.h" // Needed for World Bounds
 
@@ -22,29 +23,54 @@ void ScentSystem::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 windDir
     // Radius of world in meters
     float worldRadius = Config::World::MapRadius * Config::World::ChunkSize * Config::World::ChunkScale;
     float killDistSq = worldRadius * worldRadius;
+    
+    // Logic Culling Radius (Only simulate scents relevant to player area)
+    float maxLogicDistSq = Config::Scent::MaxDistance * Config::Scent::MaxDistance; 
+    
+    // LIMIT MAX PACKETS (Safety Valve - Stricter)
+    if (m_packets.size() > 50) { // Reduced from 100
+        // Remove oldest
+        m_packets.erase(m_packets.begin(), m_packets.begin() + (m_packets.size() - 50));
+    }
 
-    // Spawn Packet (1 per second)
-    if (m_spawnTimer >= m_spawnInterval) {
+    // Spawn Packet
+    if (m_spawnTimer >= Config::Scent::SpawnInterval) {
         m_spawnTimer = 0.0f;
         
         ScentPacket packet;
         packet.spawnPos = playerPos;
         packet.spawnPos.y += 1.0f; 
         
-        packet.windDir = glm::normalize(glm::vec3(windDir.x, 0.0f, windDir.z)); 
+        // SAFE NORMALIZE
+        glm::vec3 flatWind(windDir.x, 0.0f, windDir.z);
+        if (glm::length(flatWind) > 0.001f) {
+             packet.windDir = glm::normalize(flatWind);
+        } else {
+             packet.windDir = glm::vec3(1,0,0); 
+        }
+
         packet.spawnTime = m_globalTime;
-        
         m_packets.push_back(packet);
     }
 
-    // Cull only if out of world
+    // Culling & Update Loop
     for (auto it = m_packets.begin(); it != m_packets.end(); ) {
         float age = m_globalTime - it->spawnTime;
-        float distTravelled = ScentSystem::WindSpeed * age;
-        glm::vec3 tip = it->spawnPos + it->windDir * distTravelled;
         
-        // Simple distance check from center (0,0)
-        float d2 = tip.x*tip.x + tip.z*tip.z;
+        // Calculate current tip position
+        float distTravelled = Config::Scent::WindSpeed * age;
+        glm::vec3 currentPos = it->spawnPos + it->windDir * distTravelled;
+        
+        // 1. Check Age & Logic Distance
+        float distToPlayerSq = glm::distance2(currentPos, playerPos);
+        
+        if (age > Config::Scent::MaxLifeTime || distToPlayerSq > maxLogicDistSq) {
+             it = m_packets.erase(it);
+             continue;
+        }
+
+        // 2. Check World Bounds (Backup)
+        float d2 = currentPos.x*currentPos.x + currentPos.z*currentPos.z;
         if (d2 > killDistSq) {
             it = m_packets.erase(it);
         } else {
@@ -68,13 +94,21 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
         float age = m_globalTime - p.spawnTime;
         if (age < 0) continue;
         
-        float distTravelled = 5.0f * age; 
+        float distTravelled = Config::Scent::WindSpeed * age; 
         glm::vec3 currentPos = p.spawnPos + p.windDir * distTravelled;
-        float currentWidth = BaseWidth + (distTravelled * ExpansionRate);
+        
+        // OPTIMIZATION: Early Out if too far
+        float distToPoint = glm::distance2(pos, currentPos);
+        if (distToPoint > 10000.0f) continue; // > 100m check (100*100)
+        
+        float currentWidth = Config::Scent::BaseWidth + (distTravelled * Config::Scent::ExpansionRate);
 
         // 1. Check Puff (Circle) - Standard radial check
-        float distXZ = glm::length(glm::vec2(pos.x - currentPos.x, pos.z - currentPos.z));
-        if (distXZ <= currentWidth) {
+        // OPTIMIZATION: Use Squared Distance to avoid costly SQRT
+        float distSqXZ = glm::dot(glm::vec2(pos.x - currentPos.x, pos.z - currentPos.z), 
+                                  glm::vec2(pos.x - currentPos.x, pos.z - currentPos.z));
+        
+        if (distSqXZ <= (currentWidth * currentWidth)) {
              outTrackDir = -p.windDir;
              return true;
         }
@@ -82,7 +116,9 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
         // 2. Check Ribbon Segment (Connection to previous)
         if (hasPrev) {
              // Basic strict continuity check (same wind source approx)
-             if (glm::distance(currentPos, prevPos) < 20.0f) { // 20m gap max
+             // OPTIMIZATION: Squared check for 20.0f (400.0f)
+             float segLenSq = glm::dot(currentPos - prevPos, currentPos - prevPos);
+             if (segLenSq < 400.0f) { // 20m^2 = 400
                  
                  // Calculate t for interpolation
                  glm::vec3 ab = currentPos - prevPos;
@@ -115,10 +151,12 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
     return false;
 }
 
-void ScentSystem::RenderDebug(GLuint shaderProgram) {
+void ScentSystem::RenderDebug(GLuint shaderProgram, glm::vec3 cullPos) {
     if (m_packets.empty()) return;
 
     std::vector<float> lines;
+    // Pre-allocate to avoid resize spikes. 100 packets * 8 segments * 2 verts * 9 floats ~ 14400 floats.
+    lines.reserve(m_packets.size() * 100); 
     
     // Helper to add a 3D line
     auto addLine = [&](glm::vec3 a, glm::vec3 b) {
@@ -132,8 +170,9 @@ void ScentSystem::RenderDebug(GLuint shaderProgram) {
     };
 
     // Helper to add a circle on XZ plane
+    // OPTIMIZED: Reduced segments from 16 to 8 (Octagon) for performance
     auto addCircle = [&](glm::vec3 center, float radius) {
-        const int segments = 16;
+        const int segments = 8;
         const float angleStep = 6.2831853f / segments;
         
         for(int i = 0; i < segments; i++) {
@@ -149,14 +188,23 @@ void ScentSystem::RenderDebug(GLuint shaderProgram) {
 
     glm::vec3 prevL, prevR;
     bool hasPrev = false;
+    float cullDistSq = 60.0f * 60.0f; // 60 Meters Culling
 
     for (const auto& p : m_packets) {
         float age = m_globalTime - p.spawnTime;
         if (age < 0) continue;
         
-        float distTravelled = ScentSystem::WindSpeed * age;
+        float distTravelled = Config::Scent::WindSpeed * age;
         glm::vec3 currentPos = p.spawnPos + p.windDir * distTravelled;
-        float currentWidth = BaseWidth + (distTravelled * ExpansionRate);
+        
+        // CULLING CHECK
+        // If packet is too far from camera, skip adding geometry
+        if (glm::distance2(currentPos, cullPos) > cullDistSq) {
+             hasPrev = false; // Break the ribbon continuity
+             continue;
+        }
+
+        float currentWidth = Config::Scent::BaseWidth + (distTravelled * Config::Scent::ExpansionRate);
         
         // Draw the collision circle
         addCircle(currentPos, currentWidth);

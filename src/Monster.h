@@ -67,7 +67,8 @@ private:
     float m_visualFPS = 15.0f;
 
     // AI Components
-    HideTronco m_stealthAI; // NEW
+    HideTronco m_stealthAI; 
+    std::vector<glm::vec4> m_nearbyTreesCache; // Cache for collision loops
     
     // Model Data (Loaded from file)
     std::vector<struct BoxDef> m_basePose;

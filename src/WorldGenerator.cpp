@@ -2,7 +2,9 @@
 #include <cstdlib>
 #include <cmath>
 #include "Config.h"
-#include <iostream> // Fixed: Added for logging
+#include <iostream> 
+#include "ModelLoader.h"
+#include <map>
 
 unsigned int WorldGenerator::GlobalSeed = 0;
 float WorldGenerator::OffsetX = 0.0f;
@@ -332,61 +334,41 @@ std::vector<glm::vec4> WorldGenerator::GenerateChunkTrees(int chunkX, int chunkZ
 }
 
 // Split into two meshes for independent rendering control (Structural Fix)
-std::vector<Vertex> WorldGenerator::GetTreeTrunkMesh() {
-    std::vector<Vertex> vertices;
-    float x=0, y=0, z=0;
-    float trunkW=0.6f, trunkH=6.0f;
-    
-    glm::vec3 trunkColor(0.35f, 0.25f, 0.15f); // Slightly richer brown
-    float tL = x - trunkW; float tR = x + trunkW;
-    float tB = z - trunkW; float tF = z + trunkW;
-    float tY_Base = y - 5.0f; // Foundation
-    float tY_Top = y + trunkH;
-    
-    glm::vec3 nF(0,0,1), nB(0,0,-1), nL(-1,0,0), nR(1,0,0);
+// Helper to load and cache
+std::vector<Vertex> LoadCachedMesh(const std::string& path) {
+    static std::map<std::string, std::vector<Vertex>> cache;
+    if (cache.find(path) != cache.end()) return cache[path];
 
-    // Front
-    vertices.push_back({{tL,tY_Base,tF}, trunkColor, {0,0}, nF}); vertices.push_back({{tL,tY_Top,tF}, trunkColor, {0,1}, nF}); vertices.push_back({{tR,tY_Base,tF}, trunkColor, {1,0}, nF});
-    vertices.push_back({{tR,tY_Base,tF}, trunkColor, {1,0}, nF}); vertices.push_back({{tL,tY_Top,tF}, trunkColor, {0,1}, nF}); vertices.push_back({{tR,tY_Top,tF}, trunkColor, {1,1}, nF});
-    // Back
-    vertices.push_back({{tR,tY_Base,tB}, trunkColor, {0,0}, nB}); vertices.push_back({{tR,tY_Top,tB}, trunkColor, {0,1}, nB}); vertices.push_back({{tL,tY_Base,tB}, trunkColor, {1,0}, nB});
-    vertices.push_back({{tL,tY_Base,tB}, trunkColor, {1,0}, nB}); vertices.push_back({{tR,tY_Top,tB}, trunkColor, {0,1}, nB}); vertices.push_back({{tL,tY_Top,tB}, trunkColor, {1,1}, nB});
-    // Left
-    vertices.push_back({{tL,tY_Base,tB}, trunkColor, {0,0}, nL}); vertices.push_back({{tL,tY_Top,tB}, trunkColor, {0,1}, nL}); vertices.push_back({{tL,tY_Base,tF}, trunkColor, {1,0}, nL});
-    vertices.push_back({{tL,tY_Base,tF}, trunkColor, {1,0}, nL}); vertices.push_back({{tL,tY_Top,tB}, trunkColor, {0,1}, nL}); vertices.push_back({{tL,tY_Top,tF}, trunkColor, {1,1}, nL});
-    // Right
-    vertices.push_back({{tR,tY_Base,tF}, trunkColor, {0,0}, nR}); vertices.push_back({{tR,tY_Top,tF}, trunkColor, {0,1}, nR}); vertices.push_back({{tR,tY_Base,tB}, trunkColor, {1,0}, nR});
-    vertices.push_back({{tR,tY_Base,tB}, trunkColor, {1,0}, nR}); vertices.push_back({{tR,tY_Top,tF}, trunkColor, {0,1}, nR}); vertices.push_back({{tR,tY_Top,tB}, trunkColor, {1,1}, nR});
+    // Load Model
+    std::vector<BoxDef> boxes = ModelLoader::Load(path);
+    std::vector<float> rawFloats;
+    ModelLoader::GenerateMesh(boxes, rawFloats);
+
+    // Convert float array to Vertex struct
+    std::vector<Vertex> vertices;
+    size_t count = rawFloats.size() / 11;
+    vertices.reserve(count);
     
+    for(size_t i=0; i<count; i++) {
+        size_t b = i * 11;
+        Vertex v;
+        v.position = glm::vec3(rawFloats[b+0], rawFloats[b+1], rawFloats[b+2]);
+        v.color    = glm::vec3(rawFloats[b+3], rawFloats[b+4], rawFloats[b+5]);
+        v.texCoord = glm::vec2(rawFloats[b+6], rawFloats[b+7]);
+        v.normal   = glm::vec3(rawFloats[b+8], rawFloats[b+9], rawFloats[b+10]);
+        vertices.push_back(v);
+    }
+    
+    cache[path] = vertices;
     return vertices;
 }
 
-std::vector<Vertex> WorldGenerator::GetTreeLeavesMesh() {
-    std::vector<Vertex> vertices;
-    float x=0, y=0, z=0;
-    float trunkH=6.0f;
-    float leavesW=3.0f, leavesH=9.0f;
-    
-    glm::vec3 leavesColor(0.05f, 0.55f, 0.08f); // Deep forest green
-    float tY_Top = y + trunkH;
-    float lY1 = tY_Top; float lY2 = tY_Top + leavesH;
-    float lL = x - leavesW; float lR = x + leavesW;
-    float lB = z - leavesW; float lF = z + leavesW;
-    glm::vec3 peak(x, lY2, z);
-    
-    glm::vec3 nF(0,0,1), nB(0,0,-1), nL(-1,0,0), nR(1,0,0), nUp(0,1,0);
+std::vector<Vertex> WorldGenerator::GetTreeTrunkMesh() {
+    return LoadCachedMesh("assets/models/tree_trunk.txt");
+}
 
-    vertices.push_back({{lL,lY1,lF}, leavesColor, {0,0}, nF}); vertices.push_back({peak, leavesColor, {0.5,1}, nUp}); vertices.push_back({{lR,lY1,lF}, leavesColor, {1,0}, nF});
-    vertices.push_back({{lR,lY1,lB}, leavesColor, {0,0}, nB}); vertices.push_back({peak, leavesColor, {0.5,1}, nUp}); vertices.push_back({{lL,lY1,lB}, leavesColor, {1,0}, nB});
-    vertices.push_back({{lL,lY1,lB}, leavesColor, {0,0}, nL}); vertices.push_back({peak, leavesColor, {0.5,1}, nUp}); vertices.push_back({{lL,lY1,lF}, leavesColor, {1,0}, nL});
-    vertices.push_back({{lR,lY1,lF}, leavesColor, {0,0}, nR}); vertices.push_back({peak, leavesColor, {0.5,1}, nUp}); vertices.push_back({{lR,lY1,lB}, leavesColor, {1,0}, nR});
-    
-    // Bottom Face (Closed "Lid" for the pyramid)
-    glm::vec3 nDown(0,-1,0);
-    vertices.push_back({{lL,lY1,lB}, leavesColor, {0,0}, nDown}); vertices.push_back({{lR,lY1,lB}, leavesColor, {1,0}, nDown}); vertices.push_back({{lR,lY1,lF}, leavesColor, {1,1}, nDown});
-    vertices.push_back({{lR,lY1,lF}, leavesColor, {1,1}, nDown}); vertices.push_back({{lL,lY1,lF}, leavesColor, {0,1}, nDown}); vertices.push_back({{lL,lY1,lB}, leavesColor, {0,0}, nDown});
-    
-    return vertices;
+std::vector<Vertex> WorldGenerator::GetTreeLeavesMesh() {
+    return LoadCachedMesh("assets/models/tree_leaves.txt");
 }
 
 std::vector<Vertex> WorldGenerator::GetShadowMesh() {
