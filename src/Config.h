@@ -62,6 +62,11 @@ namespace Config {
         constexpr float ProjectileWindInfluence = 0.5f; // Negligible wind (Lead is heavy)
         constexpr float ProjectileDrag = 0.1f;          // Low drag (Aerodynamic)
     }
+
+    namespace Monster {
+         constexpr float ScentDetectionRadius = 30.0f; // Radius to sniff for new scent
+    }
+
     namespace Bird {
         constexpr float SpawnChance = 0.3f; // REDUCIDO de 1.0f (30% chance)
         constexpr float TriggerDistance = 12.0f; // REDUCIDO de 25.0f

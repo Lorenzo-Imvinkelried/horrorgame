@@ -873,6 +873,7 @@ int main() {
             
             player.RenderDebug(shaderProgram);
             monster.RenderDebug(shaderProgram);
+
             
             if (showSpawnArea) {
                 // Use a dynamic VBO for debug drawing (can reuse shadowVBO or create a dedicated debug one?)

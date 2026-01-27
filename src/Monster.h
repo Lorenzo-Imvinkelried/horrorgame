@@ -26,6 +26,7 @@ public:
     void Render(GLuint shaderProgram, GLuint whiteTexID); 
     void RenderDebug(GLuint shaderProgram);
 
+
     // Combat
     void TakeDamage(float amount, bool isHeadshot);
     bool IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& isHeadshot);
@@ -59,6 +60,10 @@ private:
     float m_health;
     bool m_isDead;
     float m_speed;
+    
+    // Scent Pathfinding State
+    glm::vec3 m_cachedStealthDir;             // For Input Stability (Hysteresis)
+    float m_timeSinceLastScent;               // For Logic Persistence (Memory)
     
     // Visual Decoupling (15 FPS)
     glm::vec3 m_visualPos;

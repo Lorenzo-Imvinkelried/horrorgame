@@ -1,6 +1,7 @@
 #include "ScentSystem.h"
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/gtx/norm.hpp> // Added for distance2
+#include <glm/gtc/type_ptr.hpp>
+// #include <glm/gtx/norm.hpp> // Removed (Manual dot product)
 #include <iostream>
 #include "Config.h" // Needed for World Bounds
 
@@ -62,7 +63,7 @@ void ScentSystem::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 windDir
         glm::vec3 currentPos = it->spawnPos + it->windDir * distTravelled;
         
         // 1. Check Age & Logic Distance
-        float distToPlayerSq = glm::distance2(currentPos, playerPos);
+        float distToPlayerSq = glm::dot(currentPos - playerPos, currentPos - playerPos);
         
         if (age > Config::Scent::MaxLifeTime || distToPlayerSq > maxLogicDistSq) {
              it = m_packets.erase(it);
@@ -98,7 +99,7 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
         glm::vec3 currentPos = p.spawnPos + p.windDir * distTravelled;
         
         // OPTIMIZATION: Early Out if too far
-        float distToPoint = glm::distance2(pos, currentPos);
+        float distToPoint = glm::dot(pos - currentPos, pos - currentPos);
         if (distToPoint > 10000.0f) continue; // > 100m check (100*100)
         
         float currentWidth = Config::Scent::BaseWidth + (distTravelled * Config::Scent::ExpansionRate);
@@ -151,6 +152,85 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
     return false;
 }
 
+std::vector<glm::vec3> ScentSystem::GetPathToStrongestScent(glm::vec3 startPos, float radius) {
+    std::vector<glm::vec3> path;
+    if (m_packets.empty()) return path;
+
+    // 1. Find the closest packet to startPos within radius
+    int closestIdx = -1;
+    float minDistSq = radius * radius;
+    
+    // Packets are chronological (mostly).
+    for (int i = 0; i < m_packets.size(); ++i) {
+        float age = m_globalTime - m_packets[i].spawnTime;
+        float distTravelled = Config::Scent::WindSpeed * age;
+        glm::vec3 packetPos = m_packets[i].spawnPos + m_packets[i].windDir * distTravelled;
+        
+        glm::vec3 diff = startPos - packetPos;
+        float distSq = glm::dot(diff, diff); // Manual distance squared
+        if (distSq < minDistSq) {
+            minDistSq = distSq;
+            closestIdx = i;
+        }
+    }
+
+    if (closestIdx != -1) {
+        // 2. Build path from closest packet to the NEWEST packet (end of vector)
+        // This makes the monster follow the breadcrumbs towards the player
+        for (int i = closestIdx; i < m_packets.size(); ++i) {
+            float age = m_globalTime - m_packets[i].spawnTime;
+            float distTravelled = Config::Scent::WindSpeed * age;
+            glm::vec3 packetPos = m_packets[i].spawnPos + m_packets[i].windDir * distTravelled;
+            path.push_back(packetPos);
+        }
+    }
+
+    return path;
+}
+
+// Static storage for returning pointer (simple hack to avoid managing memory for single node)
+static ScentNode g_tempNode;
+
+ScentNode* ScentSystem::GetStrongestScentInRadius(glm::vec3 startPos, float radius) {
+    if (m_packets.empty()) return nullptr;
+
+    int bestIdx = -1;
+    float minAge = 10000.0f;
+    float radSq = radius * radius;
+
+    // Find NEWEST packet in radius (accounting for puff size)
+    for (int i = 0; i < m_packets.size(); ++i) {
+        float age = m_globalTime - m_packets[i].spawnTime;
+        float distTravelled = Config::Scent::WindSpeed * age;
+        glm::vec3 packetPos = m_packets[i].spawnPos + m_packets[i].windDir * distTravelled;
+        
+        // Calculate dynamic puff width
+        float currentWidth = Config::Scent::BaseWidth + (distTravelled * Config::Scent::ExpansionRate);
+        float combinedRadius = radius + currentWidth;
+
+        glm::vec3 diff = startPos - packetPos;
+        if (glm::dot(diff, diff) < (combinedRadius * combinedRadius)) {
+            if (age < minAge) {
+                minAge = age;
+                bestIdx = i;
+            }
+        }
+    }
+
+    if (bestIdx != -1) {
+        float age = m_globalTime - m_packets[bestIdx].spawnTime;
+        float distTravelled = Config::Scent::WindSpeed * age;
+        g_tempNode.pos = m_packets[bestIdx].spawnPos + m_packets[bestIdx].windDir * distTravelled;
+        g_tempNode.strength = 1.0f; // Dummy strength
+        g_tempNode.windDir = m_packets[bestIdx].windDir; // Pass wind direction
+        g_tempNode.sourcePos = m_packets[bestIdx].spawnPos; // Pass source position
+        return &g_tempNode;
+    }
+
+    return nullptr;
+}
+
+
 void ScentSystem::RenderDebug(GLuint shaderProgram, glm::vec3 cullPos) {
     if (m_packets.empty()) return;
 
@@ -199,7 +279,7 @@ void ScentSystem::RenderDebug(GLuint shaderProgram, glm::vec3 cullPos) {
         
         // CULLING CHECK
         // If packet is too far from camera, skip adding geometry
-        if (glm::distance2(currentPos, cullPos) > cullDistSq) {
+        if (glm::dot(currentPos - cullPos, currentPos - cullPos) > cullDistSq) {
              hasPrev = false; // Break the ribbon continuity
              continue;
         }

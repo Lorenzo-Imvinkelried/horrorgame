@@ -1,15 +1,28 @@
 #include "Monster.h"
+// =================================================================================================
+// ARCHIVO: Monster.cpp
+// DESCRIPCION: Entidad principal del Monstruo.
+// RESPONSABILIDAD:
+// 1. Integrar la IA (HideTronco y ScentSystem).
+// 2. Gestionar la fisica (velocidad, colisiones con arboles y terreno).
+// 3. Renderizar el modelo y los efectos (sangrado, debug).
+// =================================================================================================
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/type_ptr.hpp>
+// #include <glm/gtx/norm.hpp> // Removed
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 #include "Config.h"
 
 Monster::Monster(glm::vec3 startPos) 
-    : m_pos(startPos), m_visualPos(startPos), m_yaw(0.0f), m_visualYaw(0.0f), 
+    : m_pos(startPos), // [POSICION DEL MOB] Se inicializa aqui
+      m_visualPos(startPos), m_yaw(0.0f), m_visualYaw(0.0f), 
       m_state(MonsterState::IDLE), m_health(2.0f), m_visualTickTimer(0.0f),
       m_animTime(0.0f), m_velocity(0.0f), m_targetYaw(0.0f), m_headYaw(0.0f),
-      m_speed(Config::Gameplay::MonsterSpeed), m_isDead(false)
+      m_speed(Config::Gameplay::MonsterSpeed), m_isDead(false),
+      m_cachedStealthDir(1.0f, 0.0f, 0.0f), m_timeSinceLastScent(100.0f)
 {
     // Load Model
     std::string path = "assets/models/monster.txt";
@@ -151,18 +164,11 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
 {
     if (m_isDead) return;
 
-    // THROTTLE LOGIC TIMER
-    static float logicTimer = 0.0f;
-    logicTimer += deltaTime;
-    bool doHeavyLogic = (logicTimer >= 0.1f);
-    if (doHeavyLogic) logicTimer = 0.0f;
-
-    // Minimal Update Loop
-    // Animate based on distance traveled (Speed sync)
+    // Minimal Update Loop (Moved back)
     float speed = glm::length(m_velocity);
     m_animTime += speed * deltaTime; 
     
-    // Bleeding Effect (If injured) - Keep visual updates smooth, don't throttle
+    // Bleeding Effect
     if (m_health < 2.0f) {
         static float bleedTimer = 0.0f;
         bleedTimer += deltaTime;
@@ -173,50 +179,139 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
         }
     }
 
-    // HEAVY LOGIC (10 times per second)
+    // Eliminar throttle para 60FPS logic
+    bool doHeavyLogic = true; // FORCE 60 FPS
+
+    // LOGICA (Se ejecuta cada frame ahora)
     if (doHeavyLogic) {
-        // 4. SCENT TRACKING AI (STEALTH: HideTronco)
-        glm::vec3 trackDir; 
-        bool smellsPlayer = scentSystem.IsPointInScent(m_pos, trackDir);
-    
-        if (smellsPlayer) {
-            glm::vec3 targetHidePos = m_stealthAI.Update(m_pos, trackDir, chunkManager, deltaTime); // logic delta? Use 0.1f? No, use deltaTime for smooth integration if needed, but Update is reduced freq.
-            
-            glm::vec3 moveTarget;
-            if (m_stealthAI.HasTarget()) {
-                 moveTarget = targetHidePos;
-            } else {
-                 moveTarget = m_pos + trackDir * 5.0f;
-            }
-            
-            glm::vec3 diff = moveTarget - m_pos;
-            float distSq = glm::dot(diff, diff);
-            
-            if (distSq > 0.01f) {
-                glm::vec3 desiredDir = glm::normalize(diff);
-                
-                // Set Desired Velocity for Physics Step (which runs every frame effectively via velocity)
-                // Actually, we set Position directly in original code.
-                // To keep it smooth, we should set Velocity, and integrate position every frame?
-                // The original code integrated position inside the logic block. 
-                // Let's calculate the "Target Velocity" here and update Position every frame.
-                
-                // ROTATION TARGET
-                float targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
-                m_targetYaw = targetYaw; // Store for smooth interp
-                
-                // VELOCITY TARGET
-                m_velocity = desiredDir * m_speed;
-            } else {
-                 m_velocity = glm::vec3(0.0f);
-            }
-        } else {
-            // SCENT LOST
-            m_stealthAI.Reset(); 
-            m_velocity = glm::vec3(0.0f);
+        // --- LOGICA DE AGRESION ---
+        float distToPlayer = glm::distance(m_pos, playerPos);
+        
+        // 1. INSTANT KILL (Contacto)
+        if (distToPlayer < 1.0f) {
+            std::cout << "JUMPSCARE! GAME OVER." << std::endl;
+            exit(0);
         }
         
-        // COLLISION CHECK (Optimized: Only if moving)
+        // 2. PERSECUCION DIRECTA (Radio de Deteccion)
+        // Si el jugador esta cerca (<30m), el monstruo lo ve e ignora el sigilo.
+        if (distToPlayer < 30.0f) { 
+             // Sobreescribimos el objetivo: Ir directo al jugador
+             glm::vec3 desiredMoveTarget = playerPos;
+             
+             // Calculamos direccion tactica
+             glm::vec3 diff = desiredMoveTarget - m_pos;
+             if (glm::length(diff) > 0.1f) {
+                 glm::vec3 desiredDir = glm::normalize(diff);
+                 float targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
+                 m_targetYaw = targetYaw; 
+                 
+                 // VELOCIDAD DE PERSECUCION (20% mas rapido)
+                 m_velocity = desiredDir * m_speed * 1.2f; 
+             }
+             
+             // Reseteamos la IA de sigilo para que no interfiera cuando perdamos el aggro
+             m_stealthAI.Reset();
+             
+        } else { 
+        // 3. MODO SIGILO / RASTREO
+        
+            // --- SISTEMA DE OLOR SIMPLIFICADO ---
+            // 1. Obtener la fuente de olor mas fuerte
+            ScentNode* bestNode = scentSystem.GetStrongestScentInRadius(m_pos, Config::Monster::ScentDetectionRadius);
+            
+            // Manage Persistence
+            if (bestNode) {
+                m_timeSinceLastScent = 0.0f;
+            } else {
+                m_timeSinceLastScent += deltaTime;
+            }
+
+            glm::vec3 desiredMoveTarget = m_pos; // Default: Stay
+            bool hasTarget = false;
+            bool isChasing = false;
+
+            // CONDITION: Have Scent OR Have Memory (4 seconds)
+            if (bestNode || m_timeSinceLastScent < 4.0f) {
+                
+                glm::vec3 scentDir; 
+                float distToScent = 1000.0f;
+
+                if (bestNode) {
+                    // NEW SCENT DATA
+                    // 2. Calcular Vector Direccion (UPWIND + CONVERGENCE)
+                    // Volvemos a usar la direccion del viento (invertida) porque el usuario quiere que siga el olor.
+                    // PERO, sumamos un vector hacia el centro de la nube ("pos") para que converja y no vaya paralelo.
+                    
+                    glm::vec3 upwindParams = -bestNode->windDir; 
+                    glm::vec3 toCenter = glm::normalize(bestNode->pos - m_pos);
+                    
+                    // Mezclamos: 70% Viento (Avance), 30% Centro (Centrado)
+                    scentDir = glm::normalize(upwindParams * 0.7f + toCenter * 0.3f);
+                    
+                    distToScent = glm::length(bestNode->pos - m_pos); // Dist to Cloud Center
+
+                    // Ignorar Y para direccion
+                    scentDir.y = 0; 
+                    if (glm::length(scentDir) > 0.01f) scentDir = glm::normalize(scentDir);
+                    else scentDir = glm::vec3(1,0,0);
+
+                    // Hysteresis (Update Cache)
+                    if (glm::dot(scentDir, m_cachedStealthDir) < 0.95f) {
+                        m_cachedStealthDir = glm::mix(m_cachedStealthDir, scentDir, deltaTime * 2.0f);
+                        if(glm::length(m_cachedStealthDir) > 0.1f) m_cachedStealthDir = glm::normalize(m_cachedStealthDir);
+                    }
+                } else {
+                    // MEMORY DATA (Use Cache)
+                    scentDir = m_cachedStealthDir;
+                    distToScent = 1000.0f; // Unknown distance, assume far (Don't auto-chase on memory)
+                }
+
+                // 3. LOGICA HIBRIDA: SIGILO vs PERSECUCION FINAL
+                if (bestNode && distToScent < 15.0f) { // Only chase if we actually smell it (Safest)
+                    // MODO PERSECUCION FINAL
+                    desiredMoveTarget = bestNode->pos;
+                    hasTarget = true;
+                    isChasing = true;
+                } else {
+                    // MODO SIGILO (HideTronco)
+                    // Use Cached Dir if bestNode is null
+                    glm::vec3 stealthTarget = m_stealthAI.Update(m_pos, m_yaw, m_cachedStealthDir, chunkManager, deltaTime);
+                    
+                    if (m_stealthAI.HasTarget()) {
+                        desiredMoveTarget = stealthTarget;
+                        hasTarget = true;
+                    }
+                }
+            } 
+
+            // APLICAR MOVIMIENTO
+            if (hasTarget) {
+                glm::vec3 diff = desiredMoveTarget - m_pos;
+                float distSq = glm::dot(diff, diff);
+                
+                if (distSq > 0.01f) {
+                    glm::vec3 moveDir = glm::normalize(diff);
+                    
+                    // Rotacion
+                    float targetYaw = glm::degrees(atan2(moveDir.x, moveDir.z));
+                    m_targetYaw = targetYaw; 
+                    
+                    // Velocidad
+                    float currentSpeed = m_speed;
+                    if (isChasing) currentSpeed *= 1.5f; // Mas rapido si ataca
+                    
+                    m_velocity = moveDir * currentSpeed;
+                } else {
+                    m_velocity = glm::vec3(0.0f);
+                }
+            } else {
+                m_velocity = glm::vec3(0.0f);
+            }
+        } // End of Stealth/Scent Logic else block
+
+
+        // Verificacion de Colisiones de Arboles (Optimizado: Solo si nos movemos)
         if (glm::length(m_velocity) > 0.1f) {
              m_nearbyTreesCache.clear();
              chunkManager.GetTreesInRange(m_pos + m_velocity * 0.1f, 3.0f, m_nearbyTreesCache); 
@@ -224,14 +319,19 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
     }
 
     // ALWAYS RUN: Physics Integration & Smooth Rotation
+    
+    // Ensure Visual Yaw follows Physics Yaw (with optional smoothing if desired, currently direct)
+    m_visualYaw = m_yaw;
+
     if (glm::length(m_velocity) > 0.01f) {
-        // Smooth Rotation
+        // Smooth Rotation (Physics)
         float rotSpeed = 5.0f * deltaTime;
-        float yawDiff = m_targetYaw - m_yaw;
-        while (yawDiff < -180) yawDiff += 360;
-        while (yawDiff > 180) yawDiff -= 360;
+        float yawDiff = std::fmod(m_targetYaw - m_yaw, 360.0f);
+        if (yawDiff < -180) yawDiff += 360;
+        else if (yawDiff > 180) yawDiff -= 360;
+        
         m_yaw += yawDiff * rotSpeed;
-        m_visualYaw = m_yaw; 
+        m_visualYaw = m_yaw; // Sync again just in case
 
         // Integrate Position
         glm::vec3 nextPos = m_pos + m_velocity * deltaTime;
@@ -254,6 +354,8 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
              m_pos = nextPos;
         }
     }
+    
+
     
     // Terrain Snap
     m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
@@ -286,7 +388,7 @@ void Monster::Render(GLuint shaderProgram, GLuint whiteTexID) {
 
 void Monster::RenderDebug(GLuint shaderProgram) {
     // Render Stealth AI Debug (Violet Radius and Tree)
-    m_stealthAI.RenderDebug(shaderProgram, m_pos);
+    m_stealthAI.RenderDebug(shaderProgram, m_pos, m_cachedStealthDir);
 
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     
@@ -459,3 +561,5 @@ bool Monster::IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& i
 
     return false;
 }
+
+
