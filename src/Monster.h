@@ -6,7 +6,7 @@
 #include <glad/glad.h>
 #include "ChunkManager.h"
 #include "ScentSystem.h"
-#include "HideTronco.h" // NEW
+// #include "HideTronco.h" // REMOVED
 #include "ModelLoader.h"
 
 // Reset state enum
@@ -64,6 +64,13 @@ private:
     // Scent Pathfinding State
     glm::vec3 m_cachedStealthDir;             // For Input Stability (Hysteresis)
     float m_timeSinceLastScent;               // For Logic Persistence (Memory)
+    float m_scentCheckTimer;                  // Control sampling rate (0.1s)
+    int m_lastSmelledId;                      // To prevent duplicate messages
+    glm::vec3 m_debugScentDir;                // Visualization vector
+    std::vector<glm::vec4> m_detectedTrees;   // Cache for debug visualization (vec4 to match ChunkManager)
+    std::vector<glm::vec3> m_treeVectors;     // 2D Directions to trees
+    glm::vec3 m_bestTreeDir;                  // Direction to the CHOSEN tree (Logic)
+    int m_bestTreeIndex;                      // Index of the chosen tree (for visualization)
     
     // Visual Decoupling (15 FPS)
     glm::vec3 m_visualPos;
@@ -72,7 +79,12 @@ private:
     float m_visualFPS = 15.0f;
 
     // AI Components
-    HideTronco m_stealthAI; 
+    // HideTronco m_stealthAI; // REMOVED
+    
+    // Internal Logic
+    // Returns index of best tree in m_detectedTrees, or -1
+    int GetBestTreeIndex();
+
     std::vector<glm::vec4> m_nearbyTreesCache; // Cache for collision loops
     
     // Model Data (Loaded from file)

@@ -6,7 +6,7 @@
 #include "Config.h" // Needed for World Bounds
 
 ScentSystem::ScentSystem() 
-    : m_globalTime(0.0f), m_spawnTimer(0.0f), VAO(0), VBO(0)
+    : m_globalTime(0.0f), m_spawnTimer(0.0f), m_nextPacketId(0), VAO(0), VBO(0)
 {
     glGenVertexArrays(1, &VAO);
     glGenBuffers(1, &VBO);
@@ -41,6 +41,7 @@ void ScentSystem::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 windDir
         ScentPacket packet;
         packet.spawnPos = playerPos;
         packet.spawnPos.y += 1.0f; 
+        packet.id = m_nextPacketId++; // Assign Unique ID 
         
         // SAFE NORMALIZE
         glm::vec3 flatWind(windDir.x, 0.0f, windDir.z);
@@ -82,15 +83,22 @@ void ScentSystem::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 windDir
 
 // Check if a point is inside any scent cone
 bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
+    ScentNode node;
+    if (GetScentAtPosition(pos, node)) {
+        outTrackDir = -node.windDir; // Legacy support
+        return true;
+    }
+    return false;
+}
+
+bool ScentSystem::GetScentAtPosition(glm::vec3 pos, ScentNode& outNode) const {
     if (m_packets.empty()) return false;
 
     // We assume packets are ordered.
-    
     glm::vec3 prevPos(0);
     float prevWidth = 0;
     bool hasPrev = false;
     
-
     for (const auto& p : m_packets) {
         float age = m_globalTime - p.spawnTime;
         if (age < 0) continue;
@@ -100,7 +108,13 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
         
         // OPTIMIZATION: Early Out if too far
         float distToPoint = glm::dot(pos - currentPos, pos - currentPos);
-        if (distToPoint > 10000.0f) continue; // > 100m check (100*100)
+        if (distToPoint > 10000.0f) {
+            // Update Prev for next iteration
+            prevPos = currentPos;
+            prevWidth = Config::Scent::BaseWidth + (distTravelled * Config::Scent::ExpansionRate);
+            hasPrev = true;
+            continue; 
+        }
         
         float currentWidth = Config::Scent::BaseWidth + (distTravelled * Config::Scent::ExpansionRate);
 
@@ -109,13 +123,14 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
         float distSqXZ = glm::dot(glm::vec2(pos.x - currentPos.x, pos.z - currentPos.z), 
                                   glm::vec2(pos.x - currentPos.x, pos.z - currentPos.z));
         
+        bool collision = false;
+
         if (distSqXZ <= (currentWidth * currentWidth)) {
-             outTrackDir = -p.windDir;
-             return true;
+             collision = true;
         }
 
         // 2. Check Ribbon Segment (Connection to previous)
-        if (hasPrev) {
+        if (!collision && hasPrev) {
              // Basic strict continuity check (same wind source approx)
              // OPTIMIZATION: Squared check for 20.0f (400.0f)
              float segLenSq = glm::dot(currentPos - prevPos, currentPos - prevPos);
@@ -138,13 +153,21 @@ bool ScentSystem::IsPointInScent(glm::vec3 pos, glm::vec3& outTrackDir) const {
                      float checkWidth = glm::mix(prevWidth, currentWidth, t);
                      
                      if (distSq <= (checkWidth * checkWidth)) {
-                         outTrackDir = -p.windDir; // Use current packet wind
-                         return true;
+                         collision = true;
                      }
                  }
              }
         }
         
+        if (collision) {
+             outNode.pos = currentPos;
+             outNode.windDir = p.windDir;
+             outNode.sourcePos = p.spawnPos; // CRITICAL: Where the player was
+             outNode.strength = 1.0f - (age / Config::Scent::MaxLifeTime);
+             outNode.nodeId = p.id; // Return ID
+             return true;
+        }
+
         prevPos = currentPos;
         prevWidth = currentWidth;
         hasPrev = true;

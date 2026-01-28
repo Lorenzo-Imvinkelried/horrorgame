@@ -35,7 +35,12 @@ FetchContent_Declare(
     glm
     URL ${CMAKE_SOURCE_DIR}/libs/glm.zip
 )
-FetchContent_MakeAvailable(glm)
+FetchContent_GetProperties(glm)
+if(NOT glm_POPULATED)
+    FetchContent_Populate(glm)
+    add_library(glm INTERFACE)
+    target_include_directories(glm INTERFACE ${glm_SOURCE_DIR})
+endif()
 
 # 3. GLAD
 FetchContent_Declare(

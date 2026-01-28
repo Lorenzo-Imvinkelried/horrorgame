@@ -1,0 +1,168 @@
+// --- TOAD LISO EXPORT ---
+void CreatureSystem::BuildDetailedToad() {
+    m_meshVertices.clear();
+
+    // PALETA DE COLORES
+    glm::vec3 colSkinBelly(0.850f, 0.800f, 0.600f);
+    glm::vec3 colSkinMain(0.450f, 0.380f, 0.220f);
+    glm::vec3 colEyeGold(0.800f, 0.500f, 0.100f);
+    glm::vec3 colBlack(0.020f, 0.020f, 0.020f);
+    glm::vec3 colWart(0.350f, 0.250f, 0.150f);
+
+    auto addBox = [&](glm::vec3 p, glm::vec3 s, glm::vec3 r, glm::vec3 c) {
+        this->GenerateBox(p, s, r, c);
+    };
+
+    // Abdomen
+    addBox(
+        glm::vec3(0.000f, 0.300f, 0.000f),
+        glm::vec3(0.650f, 0.350f, 0.800f),
+        glm::vec3(-0.100f, 0.000f, 0.000f),
+        colSkinBelly
+    );
+
+    // Espalda
+    addBox(
+        glm::vec3(0.000f, 0.500f, -0.050f),
+        glm::vec3(0.600f, 0.400f, 0.750f),
+        glm::vec3(0.050f, 0.000f, 0.000f),
+        colSkinMain
+    );
+
+    // Cráneo
+    addBox(
+        glm::vec3(0.000f, 0.550f, 0.450f),
+        glm::vec3(0.500f, 0.250f, 0.400f),
+        glm::vec3(0.150f, 0.000f, 0.000f),
+        colSkinMain
+    );
+
+    // Ojo_Base_L
+    addBox(
+        glm::vec3(-0.250f, 0.700f, 0.500f),
+        glm::vec3(0.180f, 0.180f, 0.180f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        colSkinMain
+    );
+
+    // Iris_L
+    addBox(
+        glm::vec3(-0.250f, 0.720f, 0.550f),
+        glm::vec3(0.120f, 0.120f, 0.050f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        colEyeGold
+    );
+
+    // Pupila_L
+    addBox(
+        glm::vec3(-0.250f, 0.720f, 0.580f),
+        glm::vec3(0.060f, 0.030f, 0.020f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        colBlack
+    );
+
+    // Ojo_Base_R
+    addBox(
+        glm::vec3(0.250f, 0.700f, 0.500f),
+        glm::vec3(0.180f, 0.180f, 0.180f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        colSkinMain
+    );
+
+    // Iris_R
+    addBox(
+        glm::vec3(0.250f, 0.720f, 0.550f),
+        glm::vec3(0.120f, 0.120f, 0.050f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        colEyeGold
+    );
+
+    // Pupila_R
+    addBox(
+        glm::vec3(0.250f, 0.720f, 0.580f),
+        glm::vec3(0.060f, 0.030f, 0.020f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        colBlack
+    );
+
+    // Glandula_L
+    addBox(
+        glm::vec3(-0.300f, 0.650f, 0.300f),
+        glm::vec3(0.150f, 0.100f, 0.250f),
+        glm::vec3(0.200f, -0.200f, 0.000f),
+        colWart
+    );
+
+    // Glandula_R
+    addBox(
+        glm::vec3(0.300f, 0.650f, 0.300f),
+        glm::vec3(0.150f, 0.100f, 0.250f),
+        glm::vec3(0.200f, 0.200f, -0.000f),
+        colWart
+    );
+
+    // Brazo_L
+    addBox(
+        glm::vec3(-0.350f, 0.350f, 0.400f),
+        glm::vec3(0.120f, 0.400f, 0.120f),
+        glm::vec3(0.400f, 0.200f, 0.500f),
+        colSkinMain
+    );
+
+    // Mano_L
+    addBox(
+        glm::vec3(-0.400f, 0.050f, 0.550f),
+        glm::vec3(0.250f, 0.020f, 0.250f),
+        glm::vec3(0.000f, 0.400f, 0.000f),
+        colSkinMain
+    );
+
+    // Brazo_R
+    addBox(
+        glm::vec3(0.350f, 0.350f, 0.400f),
+        glm::vec3(0.120f, 0.400f, 0.120f),
+        glm::vec3(0.400f, -0.200f, -0.500f),
+        colSkinMain
+    );
+
+    // Mano_R
+    addBox(
+        glm::vec3(0.400f, 0.050f, 0.550f),
+        glm::vec3(0.250f, 0.020f, 0.250f),
+        glm::vec3(0.000f, -0.400f, 0.000f),
+        colSkinMain
+    );
+
+    // Muslo_Tras_L
+    addBox(
+        glm::vec3(-0.500f, 0.300f, -0.300f),
+        glm::vec3(0.200f, 0.350f, 0.450f),
+        glm::vec3(0.200f, 0.500f, 0.000f),
+        colSkinMain
+    );
+
+    // Pie_Tras_L
+    addBox(
+        glm::vec3(-0.550f, 0.050f, -0.400f),
+        glm::vec3(0.300f, 0.030f, 0.500f),
+        glm::vec3(0.000f, 0.600f, 0.000f),
+        colSkinMain
+    );
+
+    // Muslo_Tras_R
+    addBox(
+        glm::vec3(0.500f, 0.300f, -0.300f),
+        glm::vec3(0.200f, 0.350f, 0.450f),
+        glm::vec3(0.200f, -0.500f, 0.000f),
+        colSkinMain
+    );
+
+    // Pie_Tras_R
+    addBox(
+        glm::vec3(0.550f, 0.050f, -0.400f),
+        glm::vec3(0.300f, 0.030f, 0.500f),
+        glm::vec3(0.000f, -0.600f, 0.000f),
+        colSkinMain
+    );
+
+}

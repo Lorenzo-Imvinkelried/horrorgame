@@ -64,7 +64,7 @@ namespace Config {
     }
 
     namespace Monster {
-         constexpr float ScentDetectionRadius = 30.0f; // Radius to sniff for new scent
+         constexpr float TreeScanRadius = 35.0f;   // Radius of the scan
     }
 
     namespace Bird {

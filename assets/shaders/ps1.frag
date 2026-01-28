@@ -19,6 +19,10 @@ void main()
         FragColor = vec4(0.0, 0.5, 1.0, 1.0); // Bright Blue
         return;
     }
+    if (u_IsDebug == 3) {
+        FragColor = vec4(vColor, 1.0); // Vertex Color Passthrough
+        return;
+    }
     vec4 texColor = texture(u_Texture, vTexCoord);
     
     // OPTIMIZATION: Early Discard
