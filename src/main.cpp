@@ -672,8 +672,8 @@ int main() {
         weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles, monster);
         particles.Update(deltaTime);
 
-        // Monster Update (Now takes ScentSystem)
-        monster.Update(deltaTime, player.Position, windDir, 
+        // Monster Update (Now takes ScentSystem and playerFront)
+        monster.Update(deltaTime, player.Position, player.Front, windDir, 
                       chunkManager, scentSystem, particles);
         
         // Update Birds
@@ -715,7 +715,7 @@ int main() {
             }
 
             if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-                weapon.TryFire(player.Position, player.Front, particles);
+                weapon.TryFire(player.Position, player.Front, particles, monster);
             }
         }
 

@@ -73,8 +73,8 @@ private:
         float padding[3]; 
     };
     std::vector<BirdInstance> m_instances; 
-    GLuint VAO, VBO;        // Static Mesh Buffer
-    GLuint instanceVBO;     // Dynamic Data Buffer
+    GLuint VAO = 0, VBO = 0;        // Static Mesh Buffer
+    GLuint instanceVBO = 0;     // Dynamic Data Buffer
     GLuint m_defaultTex = 0; // 1x1 White Texture
     
     // Debug Resources

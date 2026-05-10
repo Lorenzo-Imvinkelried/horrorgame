@@ -9,9 +9,13 @@
 // #include "HideTronco.h" // REMOVED
 #include "ModelLoader.h"
 
-// Reset state enum
-enum class MonsterState {
-    IDLE
+enum class MonsterAction {
+    WANDER,
+    INVESTIGATE,
+    STALK,
+    RETREAT,
+    CLIMB_TREE,
+    CHASE
 };
 
 class Monster {
@@ -19,9 +23,12 @@ public:
     Monster(glm::vec3 startPos);
     ~Monster();
 
-    void Update(float deltaTime, glm::vec3 playerPos, glm::vec2 windDir,
+    void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront, glm::vec2 windDir,
                 ChunkManager& chunkManager, ScentSystem& scentSystem, class ParticleSystem& particles);
     
+    // Senses
+    void HearSound(glm::vec3 sourcePos, float volume);
+
     // Updated Render to accept texture for eyes
     void Render(GLuint shaderProgram, GLuint whiteTexID); 
     void RenderDebug(GLuint shaderProgram);
@@ -33,7 +40,7 @@ public:
     bool IsDead() const { return m_isDead; }
     
     glm::vec3 GetPosition() const { return m_pos; }
-    MonsterState GetState() const { return m_state; }
+    MonsterAction GetAction() const { return m_action; }
     void SetPosition(glm::vec3 pos) { m_pos = pos; m_visualPos = pos; }
     void LookAt(glm::vec3 target);
 
@@ -56,7 +63,7 @@ private:
     float m_yaw;
     float m_targetYaw;
     float m_headYaw;
-    MonsterState m_state;
+    MonsterAction m_action;
     float m_health;
     bool m_isDead;
     float m_speed;
@@ -72,6 +79,24 @@ private:
     glm::vec3 m_bestTreeDir;                  // Direction to the CHOSEN tree (Logic)
     int m_bestTreeIndex;                      // Index of the chosen tree (for visualization)
     
+    // Memory & Knowledge (Utility AI)
+    glm::vec3 m_memPlayerPos;
+    float m_memTimeSinceSeen;
+    float m_memTimeSinceHeard;
+    float m_memTimeSinceSmelled;
+    float m_memTimeSinceAimedAt;
+    
+    // AI State Machine Variables
+    glm::vec3 m_targetPos;
+    glm::vec3 m_assignedTreePos;
+    glm::vec3 m_trackingTargetPos;
+    glm::vec3 m_trackingDir;
+    float m_stateTimer;
+    bool m_hasVisualContact;
+    float m_treeClimbHeight;
+    bool m_isClimbing;
+    glm::vec3 m_patrolCenter;
+    
     // Visual Decoupling (15 FPS)
     glm::vec3 m_visualPos;
     float m_visualYaw;
@@ -84,6 +109,7 @@ private:
     // Internal Logic
     // Returns index of best tree in m_detectedTrees, or -1
     int GetBestTreeIndex();
+    bool CheckLineOfSight(glm::vec3 playerPos, class ChunkManager& chunkManager);
 
     std::vector<glm::vec4> m_nearbyTreesCache; // Cache for collision loops
     

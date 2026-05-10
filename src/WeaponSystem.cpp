@@ -325,7 +325,7 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
     projectiles.erase(std::remove_if(projectiles.begin(), projectiles.end(), [](const Projectile& p){ return !p.Active; }), projectiles.end());
 }
 
-void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& particles) {
+void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& particles, Monster& monster) {
     if (cooldownTimer > 0.0f) return;
     
     cooldownTimer = 1.7f; 
@@ -375,6 +375,9 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
     
     p.Velocity = fireDir * Config::Gameplay::ProjectileSpeed; 
     projectiles.push_back(p);
+
+    // Notify Monster of Sound (150m range)
+    monster.HearSound(muzzlePos, 150.0f);
 }
 
 void WeaponSystem::Render(GLuint shaderProgram) {
