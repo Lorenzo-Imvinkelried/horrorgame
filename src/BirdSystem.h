@@ -42,7 +42,7 @@ public:
     void TrySpawnBirds(const std::vector<glm::vec4>& treeData); 
     
     // Main update loop
-    void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 monsterPos);
+    void Update(float deltaTime, glm::vec3 playerPos, const std::vector<glm::vec3>& monsterPositions);
     
     void Render(GLuint shaderProgram);
     

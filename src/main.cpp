@@ -296,9 +296,11 @@ void DrawLine(glm::vec3 start, glm::vec3 end, glm::vec3 color, GLuint vao, GLuin
     
     glDrawArrays(GL_LINES, 0, 2);
 }
+#include <memory>
 struct GameConfig {
     bool isNight = false;
     float darkness = 0.08f;
+    int monsterCount = 1;
 };
 
 #include <fstream>
@@ -330,7 +332,8 @@ GameConfig LoadConfig(const std::string& filename) {
         if (outFile.is_open()) {
             outFile << "{\n";
             outFile << "  \"isNight\": false,\n";
-            outFile << "  \"darkness\": 0.08\n";
+            outFile << "  \"darkness\": 0.08,\n";
+            outFile << "  \"monsterCount\": 1\n";
             outFile << "}\n";
             outFile.close();
         }
@@ -357,11 +360,22 @@ GameConfig LoadConfig(const std::string& filename) {
                     ss >> config.darkness;
                 }
             }
+            if (line.find("monsterCount") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> config.monsterCount;
+                }
+            }
         }
         file.close();
         std::cout << "[Config] Loaded configuration from: " << foundPath 
                   << " (isNight: " << (config.isNight ? "true" : "false") 
-                  << ", darkness: " << config.darkness << ")" << std::endl;
+                  << ", darkness: " << config.darkness 
+                  << ", monsterCount: " << config.monsterCount << ")" << std::endl;
     }
     return config;
 }
@@ -603,7 +617,7 @@ int main() {
     float gameOverTimer = 0.0f;
     ParticleSystem particles;
     ScentSystem scentSystem;
-    Monster monster(glm::vec3(0)); 
+    std::vector<std::unique_ptr<Monster>> monsters; 
     
     // Bird System (Sparrows)
     BirdSystem birds;
@@ -664,26 +678,29 @@ int main() {
         } while(!IsPositionCurrentSafe(pPos.x, pPos.z) && attempts < 100);
         player.Position = pPos;
 
-        // 2. Spawn Monster (Donut Distribution)
-        attempts = 0;
-        glm::vec3 mPos;
-        do {
-             // Random Angle
-             float angleDeg = angleDist(gen);
-             float angleRad = glm::radians(angleDeg);
-             
-             // Random Radius (200 - 300)
-             float dist = radiusDist(gen);
-             
-             float mx = pPos.x + cos(angleRad) * dist;
-             float mz = pPos.z + sin(angleRad) * dist;
-             
-             mPos = glm::vec3(mx, WorldGenerator::GetHeight(mx, mz), mz);
-             attempts++;
-        } while(!IsPositionCurrentSafe(mPos.x, mPos.z) && attempts < 100);
-        
-        monster.SetPosition(mPos);
-        monster.LookAt(player.Position);
+        // 2. Spawn Monsters (Donut Distribution)
+        for (int mIndex = 0; mIndex < gameCfg.monsterCount; ++mIndex) {
+            attempts = 0;
+            glm::vec3 mPos;
+            do {
+                 // Random Angle
+                 float angleDeg = angleDist(gen);
+                 float angleRad = glm::radians(angleDeg);
+                 
+                 // Random Radius (200 - 300)
+                 float dist = radiusDist(gen);
+                 
+                 float mx = pPos.x + cos(angleRad) * dist;
+                 float mz = pPos.z + sin(angleRad) * dist;
+                 
+                 mPos = glm::vec3(mx, WorldGenerator::GetHeight(mx, mz), mz);
+                 attempts++;
+            } while(!IsPositionCurrentSafe(mPos.x, mPos.z) && attempts < 100);
+            
+            auto monster = std::make_unique<Monster>(mPos);
+            monster->LookAt(player.Position);
+            monsters.push_back(std::move(monster));
+        }
     }
 
     sf::Clock clock;
@@ -777,13 +794,15 @@ int main() {
         // ScentSystem expects vec3 windDir + float speed
         scentSystem.Update(deltaTime, player.Position, glm::vec3(windDir.x, 0, windDir.y), windStrength);
 
-        weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles, monster);
+        weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles, monsters);
         particles.Update(deltaTime);
 
         // Monster Update (Now takes ScentSystem, playerFront, Velocity, Weapon Ammo & Reloading State)
-        monster.Update(deltaTime, player.Position, player.Front, windDir, 
-                      chunkManager, scentSystem, particles,
-                      player.Velocity, weapon.GetAmmo(), weapon.IsReloading());
+        for (auto& mPtr : monsters) {
+            mPtr->Update(deltaTime, player.Position, player.Front, windDir, 
+                        chunkManager, scentSystem, particles,
+                        player.Velocity, weapon.GetAmmo(), weapon.IsReloading());
+        }
 
         // GAME OVER CHECK & TIMING
         if (isGameOver) {
@@ -792,24 +811,32 @@ int main() {
                 exit(0);
             }
         } else {
-            // Check 2D distance on XZ plane to account for player camera height (1.6f)
-            glm::vec2 diff2D = glm::vec2(player.Position.x - monster.GetPosition().x, player.Position.z - monster.GetPosition().z);
-            float dist2D = glm::length(diff2D);
-            float heightDiff = abs((player.Position.y - 1.6f) - monster.GetPosition().y);
-            
-            if (dist2D < 1.5f && heightDiff < 3.0f) {
-                isGameOver = true;
-                gameOverTimer = 1.5f;
-                std::cout << "GAME OVER! Spawning blood explosion..." << std::endl;
-                for (int i = 0; i < 40; ++i) {
-                    glm::vec3 velocity((rand()%100/50.0f - 1.0f)*5.0f, (rand()%100/50.0f - 0.3f)*6.0f, (rand()%100/50.0f - 1.0f)*5.0f);
-                    particles.SpawnParticle(player.Position + glm::vec3(0, -0.6f, 0), velocity, glm::vec4(0.8f, 0.0f, 0.0f, 1.0f), 0.15f, 1.5f, -9.8f);
+            for (const auto& mPtr : monsters) {
+                if (mPtr->IsDead()) continue;
+                glm::vec3 mPos = mPtr->GetPosition();
+                glm::vec2 diff2D = glm::vec2(player.Position.x - mPos.x, player.Position.z - mPos.z);
+                float dist2D = glm::length(diff2D);
+                float heightDiff = abs((player.Position.y - 1.6f) - mPos.y);
+                
+                if (dist2D < 1.5f && heightDiff < 3.0f) {
+                    isGameOver = true;
+                    gameOverTimer = 1.5f;
+                    std::cout << "GAME OVER! Spawning blood explosion..." << std::endl;
+                    for (int i = 0; i < 40; ++i) {
+                        glm::vec3 velocity((rand()%100/50.0f - 1.0f)*5.0f, (rand()%100/50.0f - 0.3f)*6.0f, (rand()%100/50.0f - 1.0f)*5.0f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, -0.6f, 0), velocity, glm::vec4(0.8f, 0.0f, 0.0f, 1.0f), 0.15f, 1.5f, -9.8f);
+                    }
+                    break;
                 }
             }
         }
         
         // Update Birds
-        birds.Update(deltaTime, player.Position, monster.GetPosition());
+        std::vector<glm::vec3> monsterPositions;
+        for (const auto& mPtr : monsters) {
+            monsterPositions.push_back(mPtr->GetPosition());
+        }
+        birds.Update(deltaTime, player.Position, monsterPositions);
         birds.CleanupDistantBirds(player.Position, 80.0f); // Optimization
         
         if (!debugCam) {
@@ -849,7 +876,7 @@ int main() {
             }
 
             if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-                weapon.TryFire(player.Position, player.Front, particles, monster);
+                weapon.TryFire(player.Position, player.Front, particles, monsters);
             }
         }
 
@@ -948,8 +975,10 @@ int main() {
         
         // 4. Monster Render (Normal)
         // Explicitly bind noise texture to match terrain style (Render will switch to white for eyes)
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        monster.Render(shaderProgram, whiteTexID);
+        for (auto& mPtr : monsters) {
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            mPtr->Render(shaderProgram, whiteTexID);
+        }
         
         // Render Birds (Using noise texture)
         glBindTexture(GL_TEXTURE_2D, textureID);
@@ -996,12 +1025,14 @@ int main() {
             
             glDisable(GL_DEPTH_TEST); // Draw on top of everything
             
-            glm::vec3 mPos = monster.GetPosition();
-            // Draw a high-visibility vertical red beacon line
-            DrawLine(mPos, mPos + glm::vec3(0.0f, 200.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
-            // Draw a red horizontal cross on the ground to pinpoint exact position
-            DrawLine(mPos - glm::vec3(2.5f, 0.0f, 0.0f), mPos + glm::vec3(2.5f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
-            DrawLine(mPos - glm::vec3(0.0f, 0.0f, 2.5f), mPos + glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+            for (const auto& mPtr : monsters) {
+                glm::vec3 mPos = mPtr->GetPosition();
+                // Draw a high-visibility vertical red beacon line
+                DrawLine(mPos, mPos + glm::vec3(0.0f, 200.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+                // Draw a red horizontal cross on the ground to pinpoint exact position
+                DrawLine(mPos - glm::vec3(2.5f, 0.0f, 0.0f), mPos + glm::vec3(2.5f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+                DrawLine(mPos - glm::vec3(0.0f, 0.0f, 2.5f), mPos + glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+            }
             
             glEnable(GL_DEPTH_TEST); // Restore depth test
         }
@@ -1033,7 +1064,9 @@ int main() {
                       1.0f, wAngle, glm::vec3(0,0,1), debugVAO, debugVBO); 
             
             player.RenderDebug(shaderProgram);
-            monster.RenderDebug(shaderProgram);
+            for (auto& mPtr : monsters) {
+                mPtr->RenderDebug(shaderProgram);
+            }
 
             
             if (showSpawnArea) {

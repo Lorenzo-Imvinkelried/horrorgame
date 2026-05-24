@@ -150,7 +150,7 @@ bool RayAABB(glm::vec3 origin, glm::vec3 dir, glm::vec3 minB, glm::vec3 maxB, fl
      return false;
 }
 
-void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength, ChunkManager& chunkManager, FootprintSystem& craters, ParticleSystem& particles, Monster& monster) {
+void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength, ChunkManager& chunkManager, FootprintSystem& craters, ParticleSystem& particles, const std::vector<std::unique_ptr<Monster>>& monsters) {
     if (recoilTimer > 0.0f) recoilTimer -= deltaTime * 5.0f; // Recovery speed
     if (recoilTimer < 0.0f) recoilTimer = 0.0f;
     
@@ -206,35 +206,38 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
         bool hitTree = false;
 
         // 0. MONSTER COLLISION (Highest Priority)
-        // Only check if alive
-        if (!monster.IsDead()) {
-             float mDist = 0.0f;
-             bool isHeadshot = false;
-             // Check against ray segment [oldPos, p.Position]
-             // IntersectRay returns distance from oldPos
-             if (monster.IntersectRay(oldPos, dir, mDist, isHeadshot)) {
-                 if (mDist <= dist) {
-                     hit = true;
-                     hitPoint = oldPos + dir * mDist;
-                     
-                     // Apply Damage
-                     float dmg = isHeadshot ? 2.0f : 1.0f;
-                     monster.TakeDamage(dmg, isHeadshot);
-                     
-                     // Visuals: BLOOD
-                     // Red Burst
-                     int bloodCount = isHeadshot ? 25 : 12; // More blood for headshot
-                     for(int i=0; i<bloodCount; i++) {
-                         glm::vec3 rndVel = glm::vec3((rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f);
-                         rndVel = glm::normalize(rndVel) * (2.0f + (rand()%100)/50.0f); // High speed burst
-                         particles.SpawnParticle(hitPoint, rndVel, glm::vec4(0.7f, 0.0f, 0.0f, 1.0f), 0.1f, 0.4f, -9.8f);
-                     }
-                     
-                     p.Active = false;
-                     continue; // Skip other checks
+        for (const auto& monsterPtr : monsters) {
+            Monster& monster = *monsterPtr;
+            if (!monster.IsDead()) {
+                 float mDist = 0.0f;
+                 bool isHeadshot = false;
+                 // Check against ray segment [oldPos, p.Position]
+                 // IntersectRay returns distance from oldPos
+                 if (monster.IntersectRay(oldPos, dir, mDist, isHeadshot)) {
+                      if (mDist <= dist) {
+                          hit = true;
+                          hitPoint = oldPos + dir * mDist;
+                          
+                          // Apply Damage
+                          float dmg = isHeadshot ? 2.0f : 1.0f;
+                          monster.TakeDamage(dmg, isHeadshot);
+                          
+                          // Visuals: BLOOD
+                          // Red Burst
+                          int bloodCount = isHeadshot ? 25 : 12; // More blood for headshot
+                          for(int i=0; i<bloodCount; i++) {
+                              glm::vec3 rndVel = glm::vec3((rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f, (rand()%100)/100.0f - 0.5f);
+                              rndVel = glm::normalize(rndVel) * (2.0f + (rand()%100)/50.0f); // High speed burst
+                              particles.SpawnParticle(hitPoint, rndVel, glm::vec4(0.7f, 0.0f, 0.0f, 1.0f), 0.1f, 0.4f, -9.8f);
+                          }
+                          
+                          p.Active = false;
+                          break; // Stop checking other monsters
+                      }
                  }
-             }
+            }
         }
+        if (!p.Active) continue; // Skip other checks
 
         // A. Trees
         std::vector<glm::vec4> nearbyTrees;
@@ -334,7 +337,7 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
     projectiles.erase(std::remove_if(projectiles.begin(), projectiles.end(), [](const Projectile& p){ return !p.Active; }), projectiles.end());
 }
 
-void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& particles, Monster& monster) {
+void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& particles, const std::vector<std::unique_ptr<Monster>>& monsters) {
     if (currentAmmo <= 0) {
         return;
     }
@@ -389,8 +392,10 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
     p.Velocity = fireDir * Config::Gameplay::ProjectileSpeed; 
     projectiles.push_back(p);
 
-    // Notify Monster of Sound (150m range)
-    monster.HearSound(muzzlePos, 150.0f);
+    // Notify Monsters of Sound (150m range)
+    for (const auto& monsterPtr : monsters) {
+        monsterPtr->HearSound(muzzlePos, 150.0f);
+    }
 }
 
 void WeaponSystem::Reload() {

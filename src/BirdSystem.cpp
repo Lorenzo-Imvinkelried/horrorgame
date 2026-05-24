@@ -199,59 +199,61 @@ void BirdSystem::SpawnFlock(glm::vec3 startPos) {
     }
 }
 
-void BirdSystem::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 monsterPos) {
+void BirdSystem::Update(float deltaTime, glm::vec3 playerPos, const std::vector<glm::vec3>& monsterPositions) {
     // 1. Límite de pájaros activos para performance (REDUCIDO a 200)
     if (m_activeBirds.size() > 200) {
         m_activeBirds.erase(m_activeBirds.begin(), m_activeBirds.begin() + 50);
     }
     
-    // 2. Optimizar chequeo de perchas (sin std::set)
+    // 2. Optimizar chequeo de perchas
     ChunkKey pKey = GetChunkKey(playerPos);
-    ChunkKey mKey = GetChunkKey(monsterPos);
     
-    ChunkKey keysToCheck[8];
-    int keyCount = 0;
+    std::vector<ChunkKey> keysToCheck;
     
     auto addNeighbors = [&](ChunkKey cx) {
         for(int x=0; x<=1; x++) {
             for(int z=0; z<=1; z++) {
                 ChunkKey k = {cx.x + x, cx.z + z};
                 
-                // Manual Duplicate Check
+                // Duplicate Check
                 bool exists = false;
-                for(int i=0; i<keyCount; i++) {
-                    if(keysToCheck[i].x == k.x && keysToCheck[i].z == k.z) {
+                for(const auto& existingKey : keysToCheck) {
+                    if(existingKey.x == k.x && existingKey.z == k.z) {
                         exists = true; break;
                     }
                 }
                 
-                if(!exists && keyCount < 8) {
-                    keysToCheck[keyCount++] = k;
+                if(!exists) {
+                    keysToCheck.push_back(k);
                 }
             }
         }
     };
     
     addNeighbors(pKey);
-    if (pKey.x != mKey.x || pKey.z != mKey.z) {
+    for (const auto& mPos : monsterPositions) {
+        ChunkKey mKey = GetChunkKey(mPos);
         addNeighbors(mKey);
     }
     
     float triggerDist2 = Config::Bird::TriggerDistance * Config::Bird::TriggerDistance;
     
-    for (int i=0; i<keyCount; i++) {
-        const auto& key = keysToCheck[i];
-        
+    for (const auto& key : keysToCheck) {
         auto it = m_perchGrid.find(key);
         if (it != m_perchGrid.end()) {
             for (auto& p : it->second) {
                  if (p.hasBirds) {
                      float dP2 = glm::distance2(p.pos, playerPos);
-                     float dM2 = glm::distance2(p.pos, monsterPos);
+                     
+                     float dM2 = triggerDist2 + 10.0f; // Default above limit
+                     for (const auto& mPos : monsterPositions) {
+                         float dist2 = glm::distance2(p.pos, mPos);
+                         if (dist2 < dM2) dM2 = dist2;
+                     }
                      
                      if (dP2 < triggerDist2 || dM2 < triggerDist2) {
-                         p.hasBirds = false;
-                         SpawnFlock(p.pos);
+                          p.hasBirds = false;
+                          SpawnFlock(p.pos);
                      }
                  }
             }
