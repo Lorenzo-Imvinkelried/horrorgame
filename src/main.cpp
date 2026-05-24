@@ -46,21 +46,43 @@ GLuint LoadShader(const char* vertPath, const char* fragPath) {
 
     std::string vStr = loadFile(vertPath);
     std::string fStr = loadFile(fragPath);
+
+    if (vStr.empty()) std::cerr << "[Shader] Failed to read vertex shader: " << vertPath << std::endl;
+    if (fStr.empty()) std::cerr << "[Shader] Failed to read fragment shader: " << fragPath << std::endl;
+
     const char* vSrc = vStr.c_str();
     const char* fSrc = fStr.c_str();
+
+    GLint success;
+    GLchar infoLog[512];
 
     GLuint vs = glCreateShader(GL_VERTEX_SHADER);
     glShaderSource(vs, 1, &vSrc, NULL);
     glCompileShader(vs);
+    glGetShaderiv(vs, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(vs, 512, NULL, infoLog);
+        std::cerr << "[Shader] Vertex compile error (" << vertPath << "):\n" << infoLog << std::endl;
+    }
 
     GLuint fs = glCreateShader(GL_FRAGMENT_SHADER);
     glShaderSource(fs, 1, &fSrc, NULL);
     glCompileShader(fs);
+    glGetShaderiv(fs, GL_COMPILE_STATUS, &success);
+    if (!success) {
+        glGetShaderInfoLog(fs, 512, NULL, infoLog);
+        std::cerr << "[Shader] Fragment compile error (" << fragPath << "):\n" << infoLog << std::endl;
+    }
 
     GLuint prog = glCreateProgram();
     glAttachShader(prog, vs);
     glAttachShader(prog, fs);
     glLinkProgram(prog);
+    glGetProgramiv(prog, GL_LINK_STATUS, &success);
+    if (!success) {
+        glGetProgramInfoLog(prog, 512, NULL, infoLog);
+        std::cerr << "[Shader] Link error (" << vertPath << " & " << fragPath << "):\n" << infoLog << std::endl;
+    }
 
     glDeleteShader(vs);
     glDeleteShader(fs);
@@ -274,8 +296,80 @@ void DrawLine(glm::vec3 start, glm::vec3 end, glm::vec3 color, GLuint vao, GLuin
     
     glDrawArrays(GL_LINES, 0, 2);
 }
+struct GameConfig {
+    bool isNight = false;
+    float darkness = 0.08f;
+};
+
+#include <fstream>
+#include <sstream>
+#include <algorithm>
+
+GameConfig LoadConfig(const std::string& filename) {
+    GameConfig config;
+    std::vector<std::string> paths = {
+        filename,                  // config.json (CWD)
+        "../" + filename,          // ../config.json
+        "../../" + filename,       // ../../config.json
+        "bin/" + filename          // bin/config.json
+    };
+    
+    std::string foundPath = "";
+    for (const auto& p : paths) {
+        std::ifstream file(p);
+        if (file.is_open()) {
+            foundPath = p;
+            file.close();
+            break;
+        }
+    }
+    
+    if (foundPath.empty()) {
+        foundPath = filename;
+        std::ofstream outFile(foundPath);
+        if (outFile.is_open()) {
+            outFile << "{\n";
+            outFile << "  \"isNight\": false,\n";
+            outFile << "  \"darkness\": 0.08\n";
+            outFile << "}\n";
+            outFile.close();
+        }
+    }
+    
+    std::ifstream file(foundPath);
+    if (file.is_open()) {
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.find("isNight") != std::string::npos) {
+                if (line.find("true") != std::string::npos) {
+                    config.isNight = true;
+                } else if (line.find("false") != std::string::npos) {
+                    config.isNight = false;
+                }
+            }
+            if (line.find("darkness") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> config.darkness;
+                }
+            }
+        }
+        file.close();
+        std::cout << "[Config] Loaded configuration from: " << foundPath 
+                  << " (isNight: " << (config.isNight ? "true" : "false") 
+                  << ", darkness: " << config.darkness << ")" << std::endl;
+    }
+    return config;
+}
 
 int main() {
+    GameConfig gameCfg = LoadConfig("config.json");
+    glm::vec4 skyColor = gameCfg.isNight ? glm::vec4(0.005f, 0.005f, 0.015f, 1.0f) : glm::vec4(0.4f, 0.6f, 1.0f, 1.0f);
+
     sf::ContextSettings settings;
     settings.depthBits = 24;
     settings.stencilBits = 8;
@@ -362,7 +456,7 @@ int main() {
     ChunkManager chunkManager(Config::World::RenderDistance); 
 
     // SKY COLOR (Clear Color)
-    glClearColor(0.4f, 0.6f, 1.0f, 1.0f); // Sky Blue
+    glClearColor(skyColor.r, skyColor.g, skyColor.b, skyColor.a);
     
     float globalTime = 0.0f;
     bool debugCam = false;
@@ -376,7 +470,7 @@ int main() {
 
 
     // SKY COLOR (Clear Color)
-    glClearColor(0.4f, 0.6f, 1.0f, 1.0f); // Sky Blue
+    glClearColor(skyColor.r, skyColor.g, skyColor.b, skyColor.a);
 
     // Shadow Setup
     auto shadowMesh = WorldGenerator::GetShadowMesh();
@@ -504,6 +598,9 @@ int main() {
     Player player(glm::vec3(0.0f, 10.0f, 0.0f));
     FootprintSystem footprints;
     WeaponSystem weapon;           // NEW
+    bool showMonsterMarker = false;
+    bool isGameOver = false;
+    float gameOverTimer = 0.0f;
     ParticleSystem particles;
     ScentSystem scentSystem;
     Monster monster(glm::vec3(0)); 
@@ -638,6 +735,11 @@ int main() {
                     windSystem.SetDirection(nx, ny);
                 }
                 
+                // Weapon Reload (R Key)
+                if (event.key.code == sf::Keyboard::R) {
+                    weapon.Reload();
+                }
+
                 // Debug Camera Toggle
                 if (event.key.code == sf::Keyboard::F3) debugCam = !debugCam;
                 
@@ -654,6 +756,12 @@ int main() {
                 if (event.key.code == sf::Keyboard::J) {
                     birds.ToggleDebug();
                     std::cout << "J Key Pressed! Toggled Bird Debug" << std::endl;
+                }
+                
+                // Toggle Monster Marker (O key)
+                if (event.key.code == sf::Keyboard::O) {
+                    showMonsterMarker = !showMonsterMarker;
+                    std::cout << "O Key Pressed! Monster Marker: " << (showMonsterMarker ? "ON" : "OFF") << std::endl;
                 }
             }
         }
@@ -672,16 +780,42 @@ int main() {
         weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles, monster);
         particles.Update(deltaTime);
 
-        // Monster Update (Now takes ScentSystem and playerFront)
+        // Monster Update (Now takes ScentSystem, playerFront, Velocity, Weapon Ammo & Reloading State)
         monster.Update(deltaTime, player.Position, player.Front, windDir, 
-                      chunkManager, scentSystem, particles);
+                      chunkManager, scentSystem, particles,
+                      player.Velocity, weapon.GetAmmo(), weapon.IsReloading());
+
+        // GAME OVER CHECK & TIMING
+        if (isGameOver) {
+            gameOverTimer -= deltaTime;
+            if (gameOverTimer <= 0.0f) {
+                exit(0);
+            }
+        } else {
+            // Check 2D distance on XZ plane to account for player camera height (1.6f)
+            glm::vec2 diff2D = glm::vec2(player.Position.x - monster.GetPosition().x, player.Position.z - monster.GetPosition().z);
+            float dist2D = glm::length(diff2D);
+            float heightDiff = abs((player.Position.y - 1.6f) - monster.GetPosition().y);
+            
+            if (dist2D < 1.5f && heightDiff < 3.0f) {
+                isGameOver = true;
+                gameOverTimer = 1.5f;
+                std::cout << "GAME OVER! Spawning blood explosion..." << std::endl;
+                for (int i = 0; i < 40; ++i) {
+                    glm::vec3 velocity((rand()%100/50.0f - 1.0f)*5.0f, (rand()%100/50.0f - 0.3f)*6.0f, (rand()%100/50.0f - 1.0f)*5.0f);
+                    particles.SpawnParticle(player.Position + glm::vec3(0, -0.6f, 0), velocity, glm::vec4(0.8f, 0.0f, 0.0f, 1.0f), 0.15f, 1.5f, -9.8f);
+                }
+            }
+        }
         
         // Update Birds
         birds.Update(deltaTime, player.Position, monster.GetPosition());
         birds.CleanupDistantBirds(player.Position, 80.0f); // Optimization
         
         if (!debugCam) {
-            player.ProcessKeyboard(0, deltaTime, chunkManager, footprints);
+            if (!isGameOver) {
+                player.ProcessKeyboard(0, deltaTime, chunkManager, footprints);
+            }
             player.Update(deltaTime);
         } else {
             // Free Cam Movement
@@ -735,6 +869,14 @@ int main() {
         // FOG CONFIGURATION
         glUniform1f(glGetUniformLocation(shaderProgram, "u_FogStart"), Config::World::FogDistStart);
         glUniform1f(glGetUniformLocation(shaderProgram, "u_FogEnd"), Config::World::FogDistEnd);
+        
+        // DAY/NIGHT & FLASHLIGHT CONFIGURATION
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_IsNight"), gameCfg.isNight ? 1 : 0);
+        glUniform1f(glGetUniformLocation(shaderProgram, "u_Darkness"), gameCfg.darkness);
+        glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerPos"), player.Position.x, player.Position.y, player.Position.z);
+        glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerFront"), player.Front.x, player.Front.y, player.Front.z);
+        glm::vec3 fogCol = gameCfg.isNight ? glm::vec3(0.005f, 0.005f, 0.015f) : glm::vec3(0.4f, 0.6f, 1.0f);
+        glUniform3f(glGetUniformLocation(shaderProgram, "u_FogColor"), fogCol.r, fogCol.g, fogCol.b);
 
         glm::mat4 view = debugCam ? glm::lookAt(freeCamPos, freeCamPos + freeCamFront, glm::vec3(0,1,0)) : player.GetViewMatrix();
         glm::mat4 projection = glm::perspective(glm::radians(70.0f), (float)INTERNAL_ASPECT, 0.1f, 1000.0f);
@@ -844,6 +986,25 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, whiteTexID);
         
         weapon.RenderProjectiles(shaderProgram, projVAO, projVBO);
+
+        // Monster Marker (O Key)
+        if (showMonsterMarker) {
+            glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+            glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+            glUniform1i(glGetUniformLocation(shaderProgram, "u_Texture"), 0);
+            glBindTexture(GL_TEXTURE_2D, whiteTexID);
+            
+            glDisable(GL_DEPTH_TEST); // Draw on top of everything
+            
+            glm::vec3 mPos = monster.GetPosition();
+            // Draw a high-visibility vertical red beacon line
+            DrawLine(mPos, mPos + glm::vec3(0.0f, 200.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+            // Draw a red horizontal cross on the ground to pinpoint exact position
+            DrawLine(mPos - glm::vec3(2.5f, 0.0f, 0.0f), mPos + glm::vec3(2.5f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+            DrawLine(mPos - glm::vec3(0.0f, 0.0f, 2.5f), mPos + glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+            
+            glEnable(GL_DEPTH_TEST); // Restore depth test
+        }
 
         // 6. DEBUG HITBOXES
         if (showHitboxes) {
@@ -976,6 +1137,19 @@ int main() {
             charX += charSize * 1.3f; 
         }
 
+        // Ammo Counter (Bottom Right)
+        int ammo = weapon.GetAmmo();
+        bool showAmmo = true;
+        if (weapon.IsReloading()) {
+            showAmmo = (((int)(globalTime * 4.0f)) % 2 == 0); // Blink at 4Hz
+        }
+        if (showAmmo) {
+            glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), 0.8f, 0.1f, 0.1f); // Red digit
+            DrawDigitSolid(ammo, 0.82f, -0.85f, 0.08f, uiVAO, uiVBO);
+        }
+        // Restore white color
+        glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), 1.0f, 1.0f, 1.0f);
+
         // Wind Arrow
         float windAngle = atan2(windDir.y, windDir.x);
         float playerYawRad = glm::radians(player.Yaw);
@@ -1003,11 +1177,14 @@ int main() {
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texColorBuffer); 
         glUniform1i(glGetUniformLocation(screenShader, "u_ScreenTexture"), 0);
+        glUniform1i(glGetUniformLocation(screenShader, "u_IsGameOver"), isGameOver ? 1 : 0);
+        glUniform1f(glGetUniformLocation(screenShader, "u_GameOverTime"), gameOverTimer);
+        glUniform1f(glGetUniformLocation(screenShader, "u_Time"), globalTime);
         
         glDrawArrays(GL_TRIANGLES, 0, 6);
 
         // Restore State for next frame's Pass 1
-        glClearColor(0.4f, 0.6f, 1.0f, 1.0f); // Sky Blue for World
+        glClearColor(skyColor.r, skyColor.g, skyColor.b, skyColor.a);
         glEnable(GL_DEPTH_TEST);
 
         window.display();

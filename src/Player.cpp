@@ -103,11 +103,17 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
         Position.x = nextPos.x;
         Position.z = nextPos.z;
 
+        // Set horizontal velocity components for AI detection
+        Velocity.x = moveDir.x * WalkSpeed;
+        Velocity.z = moveDir.z * WalkSpeed;
+
         if(IsGrounded) {
             HeadBobTimer += deltaTime * HeadBobSpeed;
         }
     } else {
         HeadBobTimer = 0.0f;
+        Velocity.x = 0.0f;
+        Velocity.z = 0.0f;
     }
 }
 

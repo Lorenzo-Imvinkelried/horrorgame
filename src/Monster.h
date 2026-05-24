@@ -15,7 +15,8 @@ enum class MonsterAction {
     STALK,
     RETREAT,
     CLIMB_TREE,
-    CHASE
+    CHASE,
+    TRACK_SCENT
 };
 
 class Monster {
@@ -24,7 +25,8 @@ public:
     ~Monster();
 
     void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront, glm::vec2 windDir,
-                ChunkManager& chunkManager, ScentSystem& scentSystem, class ParticleSystem& particles);
+                ChunkManager& chunkManager, ScentSystem& scentSystem, class ParticleSystem& particles,
+                glm::vec3 playerVelocity, int playerAmmo, bool isPlayerReloading);
     
     // Senses
     void HearSound(glm::vec3 sourcePos, float volume);
@@ -96,6 +98,36 @@ private:
     float m_treeClimbHeight;
     bool m_isClimbing;
     glm::vec3 m_patrolCenter;
+    
+    // Upgraded AI parameters
+    float m_headPitch;
+    float m_startleTimer;
+    float m_startleCooldownTimer;
+    float m_peekTimer;
+    float m_peekAngle;
+    float m_sniffParticleTimer;
+    bool m_hasStartled;
+    std::vector<glm::vec3> m_scentPath;
+    int m_scentPathIndex;
+    float m_assignedTreeScale;
+    
+    // Stuck detector and feint state variables
+    float m_stuckTimer;
+    glm::vec3 m_prevPos;
+    float m_feintTimer;
+    float m_feintAngle;
+    
+    // Decision commitment and organic uncertainty variables
+    float m_decisionLockTimer;
+    int m_estimatedPlayerAmmo;
+    bool m_wasPlayerReloading;
+    glm::vec3 m_estimatedPlayerPos;
+    float m_estimatedPlayerPosTimer;
+    float m_canopyWaitTime;
+    float m_confidence;
+    float m_stress;
+    
+    glm::vec3 ApplyObstacleAvoidance(glm::vec3 desiredVel, ChunkManager& chunkManager);
     
     // Visual Decoupling (15 FPS)
     glm::vec3 m_visualPos;

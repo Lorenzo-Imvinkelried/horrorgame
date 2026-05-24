@@ -179,7 +179,7 @@ std::vector<glm::vec3> ScentSystem::GetPathToStrongestScent(glm::vec3 startPos, 
     std::vector<glm::vec3> path;
     if (m_packets.empty()) return path;
 
-    // 1. Find the closest packet to startPos within radius
+    // 1. Find the closest packet to startPos within radius (using XZ 2D check)
     int closestIdx = -1;
     float minDistSq = radius * radius;
     
@@ -189,8 +189,8 @@ std::vector<glm::vec3> ScentSystem::GetPathToStrongestScent(glm::vec3 startPos, 
         float distTravelled = Config::Scent::WindSpeed * age;
         glm::vec3 packetPos = m_packets[i].spawnPos + m_packets[i].windDir * distTravelled;
         
-        glm::vec3 diff = startPos - packetPos;
-        float distSq = glm::dot(diff, diff); // Manual distance squared
+        glm::vec2 diff2D(startPos.x - packetPos.x, startPos.z - packetPos.z);
+        float distSq = glm::dot(diff2D, diff2D); // 2D distance squared
         if (distSq < minDistSq) {
             minDistSq = distSq;
             closestIdx = i;
@@ -211,6 +211,42 @@ std::vector<glm::vec3> ScentSystem::GetPathToStrongestScent(glm::vec3 startPos, 
     return path;
 }
 
+glm::vec3 ScentSystem::GetLocalScentGradient(glm::vec3 pos, float radius) {
+    glm::vec3 grad(0.0f);
+    float totalWeight = 0.0f;
+    float radSq = radius * radius;
+
+    for (const auto& p : m_packets) {
+        float age = m_globalTime - p.spawnTime;
+        float distTravelled = Config::Scent::WindSpeed * age;
+        glm::vec3 packetPos = p.spawnPos + p.windDir * distTravelled;
+
+        glm::vec2 diff2D(pos.x - packetPos.x, pos.z - packetPos.z);
+        float distSq = glm::dot(diff2D, diff2D);
+
+        if (distSq < radSq) {
+            float dist = std::sqrt(distSq);
+            // Scent is stronger if fresher (small age) and closer (small dist)
+            // Weight decay curves:
+            float ageFactor = std::exp(-age * 0.08f); // Decays over age (max 1.0)
+            float distFactor = 1.0f - (dist / radius); // Decays over distance (max 1.0)
+            float weight = ageFactor * distFactor;
+
+            glm::vec3 dir = packetPos - pos;
+            dir.y = 0.0f; // Keep it on the XZ plane
+            if (glm::length(dir) > 0.01f) {
+                grad += glm::normalize(dir) * weight;
+                totalWeight += weight;
+            }
+        }
+    }
+
+    if (totalWeight > 0.01f) {
+        return glm::normalize(grad);
+    }
+    return glm::vec3(0.0f);
+}
+
 // Static storage for returning pointer (simple hack to avoid managing memory for single node)
 static ScentNode g_tempNode;
 
@@ -221,7 +257,7 @@ ScentNode* ScentSystem::GetStrongestScentInRadius(glm::vec3 startPos, float radi
     float minAge = 10000.0f;
     float radSq = radius * radius;
 
-    // Find NEWEST packet in radius (accounting for puff size)
+    // Find NEWEST packet in radius (accounting for puff size using XZ 2D check)
     for (int i = 0; i < m_packets.size(); ++i) {
         float age = m_globalTime - m_packets[i].spawnTime;
         float distTravelled = Config::Scent::WindSpeed * age;
@@ -231,8 +267,8 @@ ScentNode* ScentSystem::GetStrongestScentInRadius(glm::vec3 startPos, float radi
         float currentWidth = Config::Scent::BaseWidth + (distTravelled * Config::Scent::ExpansionRate);
         float combinedRadius = radius + currentWidth;
 
-        glm::vec3 diff = startPos - packetPos;
-        if (glm::dot(diff, diff) < (combinedRadius * combinedRadius)) {
+        glm::vec2 diff2D(startPos.x - packetPos.x, startPos.z - packetPos.z);
+        if (glm::dot(diff2D, diff2D) < (combinedRadius * combinedRadius)) {
             if (age < minAge) {
                 minAge = age;
                 bestIdx = i;

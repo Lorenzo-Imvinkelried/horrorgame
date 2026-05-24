@@ -32,8 +32,8 @@ namespace Config {
         constexpr int MapRadius = 24; // Reduce to 24 (Width 49) to prevent VSync drops. 32 was hitting GPU limits.
         constexpr int RenderDistance = 16; // Reduced from 24 to 16 for FPS Stability
         constexpr int RenderBatchSize = 2; // NxN chunks per batch (2x2 = 4 chunks). 4x4 was too heavy on CPU gen.
-        constexpr float FogDistStart = 450.0f; // Adjusted for new distance
-        constexpr float FogDistEnd = 550.0f; // Max visibility
+        constexpr float FogDistStart = 35.0f; // Adjusted for new distance (Dense horror fog)
+        constexpr float FogDistEnd = 65.0f; // Max visibility
     }
 
     namespace Trees {
@@ -50,7 +50,7 @@ namespace Config {
     namespace Gameplay {
         constexpr float PlayerSpeed = 6.0f;
         constexpr float DebugCamSpeed = 60.0f;
-        constexpr float MonsterSpeed = 5.5f; // Initial value
+        constexpr float MonsterSpeed = 6.8f; // Initial value (Slightly faster than player)
         
         // Monster Spawn - Donut Distribution //550, 600
         constexpr float MonsterSpawnMinRadius = 150.0f;
@@ -65,6 +65,11 @@ namespace Config {
 
     namespace Monster {
          constexpr float TreeScanRadius = 35.0f;   // Radius of the scan
+         constexpr float SteerAvoidanceForce = 6.0f; // Strength of steering away from trees
+         constexpr float FlankStalkDistance = 10.0f; // Distance behind player to flank to
+         constexpr float StartleDuration = 0.5f;    // Time spent frozen / screaming
+         constexpr float ScentTrackSpeed = 3.3f;    // Walk speed while tracking scent
+         constexpr float OrbitDistance = 1.6f;      // Ideal distance behind cover tree trunk
     }
 
     namespace Bird {

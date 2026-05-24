@@ -43,6 +43,9 @@ public:
     // Fallback: Just get single best node
     ScentNode* GetStrongestScentInRadius(glm::vec3 startPos, float radius);
 
+    // Returns a direction vector towards the local scent gradient (weighted by freshness and distance)
+    glm::vec3 GetLocalScentGradient(glm::vec3 pos, float radius);
+
 private:
     std::vector<ScentPacket> m_packets;
     float m_globalTime;

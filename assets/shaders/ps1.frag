@@ -9,6 +9,8 @@ uniform sampler2D u_Texture;
 uniform float u_Alpha; // Particle transparency override
 uniform int u_IsDebug; // 0 = Normal, 1 = Red, 2 = Blue
 
+uniform vec3 u_FogColor;
+
 void main()
 {
     if (u_IsDebug == 1) {
@@ -31,16 +33,12 @@ void main()
     vec3 outColor = vColor * texColor.rgb;
 
     // -- DISTANCE FOG --
-    // Linear or Exponential    // Fog (Sky Blue PS1 style)
-    // HARDCODED FIX: Uniforms causing issues, using fixed values for now.
-    float fogStart = 450.0;
-    float fogEnd = 550.0;
+    // Exponential-squared fog (smoothly gets denser, avoiding sharp linear cuts)
+    float density = 0.016; // Adjusted for a smooth 120m blend (further away)
+    float fogFactor = 1.0 - exp(-pow(density * vDist, 2.0));
+    fogFactor = clamp(fogFactor, 0.0, 1.0);
     
-    // DEBUG: Force Fog OFF to see if geometry exists
-    // float fogFactor = 0.0; 
-    float fogFactor = clamp((vDist - fogStart) / (fogEnd - fogStart), 0.0, 1.0);
-    
-    vec3 fogColor = vec3(0.4, 0.6, 1.0);
+    vec3 fogColor = u_FogColor;
     
     // Apply u_Alpha if not 1.0
     float finalAlpha = texColor.a;

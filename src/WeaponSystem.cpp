@@ -71,7 +71,7 @@ bool GetRayPyramidMeshIntersection(glm::vec3 origin, glm::vec3 dir, glm::vec3 ba
     return false;
 }
 
-WeaponSystem::WeaponSystem() : currentAmmo(2), maxAmmo(2), recoilTimer(0.0f), cooldownTimer(0.0f) {
+WeaponSystem::WeaponSystem() : currentAmmo(2), maxAmmo(2), recoilTimer(0.0f), cooldownTimer(0.0f), reloadTimer(0.0f) {
     BuildShotgunMesh();
 
     glGenVertexArrays(1, &VAO);
@@ -155,6 +155,15 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
     if (recoilTimer < 0.0f) recoilTimer = 0.0f;
     
     if (cooldownTimer > 0.0f) cooldownTimer -= deltaTime;
+    
+    if (reloadTimer > 0.0f) {
+        reloadTimer -= deltaTime;
+        if (reloadTimer <= 0.0f) {
+            reloadTimer = 0.0f;
+            currentAmmo = maxAmmo;
+            std::cout << "[Weapon] Reload complete! Ammo refilled to " << currentAmmo << std::endl;
+        }
+    }
 
     // PROJECTILE PHYSICS
     for (auto& p : projectiles) {
@@ -326,8 +335,12 @@ void WeaponSystem::Update(float deltaTime, glm::vec2 windDir, float windStrength
 }
 
 void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& particles, Monster& monster) {
-    if (cooldownTimer > 0.0f) return;
+    if (currentAmmo <= 0) {
+        return;
+    }
+    if (cooldownTimer > 0.0f || reloadTimer > 0.0f) return;
     
+    currentAmmo--;
     cooldownTimer = 1.7f; 
     recoilTimer = 1.0f;
 
@@ -380,6 +393,14 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
     monster.HearSound(muzzlePos, 150.0f);
 }
 
+void WeaponSystem::Reload() {
+    if (currentAmmo < maxAmmo && reloadTimer <= 0.0f && cooldownTimer <= 0.0f) {
+        reloadTimer = 2.8f;
+        cooldownTimer = 2.8f; // Prevent firing during reload
+        std::cout << "[Weapon] Reloading shotgun... (2.8s)" << std::endl;
+    }
+}
+
 void WeaponSystem::Render(GLuint shaderProgram) {
     // Draw Gun Model in Screen Space (or overlay)
     // We attach it to the camera.
@@ -392,11 +413,20 @@ void WeaponSystem::Render(GLuint shaderProgram) {
     
     float recoilOffset = sin(recoilTimer * 3.14f) * 0.2f; // Back and up
     
+    // Reload tilt animation
+    float reloadOffset = 0.0f;
+    float reloadRotate = 0.0f;
+    if (reloadTimer > 0.0f) {
+        float progress = reloadTimer / 2.8f; // 1 to 0
+        reloadOffset = -0.3f * sin(progress * 3.14159f);
+        reloadRotate = -35.0f * sin(progress * 3.14159f);
+    }
+    
     glm::mat4 model = glm::mat4(1.0f);
     // Position on screen (Right hand side, slightly down)
-    model = glm::translate(model, glm::vec3(0.2f, -0.2f, -0.9f + recoilOffset)); 
+    model = glm::translate(model, glm::vec3(0.2f, -0.2f + reloadOffset, -0.9f + recoilOffset)); 
     // Aim slightly up
-    model = glm::rotate(model, glm::radians(5.0f - recoilTimer * 10.0f), glm::vec3(1,0,0));
+    model = glm::rotate(model, glm::radians(5.0f - recoilTimer * 10.0f + reloadRotate), glm::vec3(1,0,0));
     model = glm::scale(model, glm::vec3(0.5f)); 
 
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));

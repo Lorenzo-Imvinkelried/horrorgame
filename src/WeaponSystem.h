@@ -23,6 +23,8 @@ public:
     void TryFire(glm::vec3 camPos, glm::vec3 camDir, class ParticleSystem& particles, class Monster& monster);
     
     int GetAmmo() const { return currentAmmo; }
+    bool IsReloading() const { return reloadTimer > 0.0f; }
+    void Reload();
 
 private:
     GLuint VAO, VBO;
@@ -30,6 +32,7 @@ private:
     int maxAmmo;
     float recoilTimer;
     float cooldownTimer;
+    float reloadTimer;
     
     std::vector<Projectile> projectiles;
     

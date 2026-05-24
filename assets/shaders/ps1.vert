@@ -33,6 +33,11 @@ uniform vec2 u_WindDirection;
 uniform float u_LodDistNear; // Config::Trees::WindLodNear
 uniform float u_LodDistFar;  // Config::Trees::WindLodFar
 
+uniform bool u_IsNight;
+uniform float u_Darkness;
+uniform vec3 u_PlayerPos;
+uniform vec3 u_PlayerFront;
+
 // Terrain Math REMOVED (CPU Only)
 
 void main()
@@ -114,9 +119,40 @@ void main()
         litColor = aColor; // Use raw color
     } else {
         float ambientStrength = 0.6;
+        float diffFactor = 0.4;
         vec3 lightDir = normalize(vec3(0.8, 0.6, 0.3)); // 10 AM Sun Angle
+        
+        if (u_IsNight) {
+            ambientStrength = u_Darkness;
+            diffFactor = 0.0; // Disable daylight directional light
+        }
+        
         float diff = max(dot(aNormal, lightDir), 0.0);
-        vec3 light = vec3(ambientStrength + diff * 0.4);
+        vec3 light = vec3(ambientStrength + diff * diffFactor);
+        
+        // Add Flashlight spotlight effect at night
+        if (u_IsNight) {
+            vec3 flashPos = u_PlayerPos + vec3(0.0, 1.2, 0.0); // flash source below eye line
+            vec3 toVertex = worldPos - flashPos;
+            float dist = length(toVertex);
+            
+            if (dist < 40.0) {
+                vec3 lightVec = normalize(toVertex);
+                float spotDot = dot(lightVec, u_PlayerFront);
+                
+                // Spotlight cone: active if spotDot > 0.84 (approx 30 deg half-angle)
+                if (spotDot > 0.84) {
+                    float attenuation = clamp(1.0 - (dist / 40.0), 0.0, 1.0);
+                    float spotIntensity = smoothstep(0.84, 0.90, spotDot);
+                    float flashlightPower = spotIntensity * attenuation * 0.95;
+                    
+                    // Diffuse lighting for flashlight
+                    float flashDiff = max(dot(aNormal, -lightVec), 0.0);
+                    light += vec3(flashlightPower * (0.3 + flashDiff * 0.7));
+                }
+            }
+        }
+        
         litColor = aColor * light;
     }
 
