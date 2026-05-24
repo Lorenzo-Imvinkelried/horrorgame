@@ -31,7 +31,8 @@ Monster::Monster(glm::vec3 startPos)
       m_hasStartled(false), m_scentPathIndex(0), m_assignedTreeScale(1.0f),
       m_stuckTimer(0.0f), m_prevPos(startPos), m_feintTimer(0.0f), m_feintAngle(0.0f),
       m_decisionLockTimer(0.0f), m_estimatedPlayerAmmo(2), m_wasPlayerReloading(false), m_estimatedPlayerPos(startPos), m_estimatedPlayerPosTimer(0.0f),
-      m_canopyWaitTime(8.0f), m_confidence(0.5f), m_stress(0.0f)
+      m_canopyWaitTime(8.0f), m_confidence(0.5f), m_stress(0.0f),
+      m_antiCampCenter(startPos), m_antiCampTimer(0.0f), m_stalkDashTimer(0.0f), m_stalkDashDir(0.0f)
 {
     // Load Model
     std::string path = "assets/models/monster.txt";
@@ -328,6 +329,24 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
 {
     if (m_isDead) return;
     m_prevPos = m_pos;
+
+    // --- SISTEMA ANTI-CAMPERO ---
+    if (glm::distance(playerPos, m_antiCampCenter) > 6.0f) {
+        // El jugador se mueve bien, reseteamos
+        m_antiCampCenter = playerPos;
+        m_antiCampTimer = 0.0f;
+    } else {
+        m_antiCampTimer += deltaTime;
+        if (m_antiCampTimer > 8.0f) {
+            // El jugador está campeando o dando vueltas en el mismo lugar
+            m_confidence = 1.0f; // Furia máxima
+            m_stress = 0.0f;
+            if (m_antiCampTimer - deltaTime <= 8.0f) {
+                std::cout << "[AI] DETECTADO CAMPEO. Entrando en modo Berserk." << std::endl;
+            }
+        }
+    }
+
     glm::vec3 initialVel = m_velocity;
     glm::vec3 targetVelocity = glm::vec3(0.0f);
 
@@ -809,13 +828,53 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
         }
 
         case MonsterAction::CHASE: {
-            glm::vec3 desiredDir = glm::normalize(playerPos - m_pos);
-            m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
+            m_stateTimer += deltaTime;
+            
+            // 1. Intercepción predictiva (calcula dónde va a estar el jugador)
             float chaseSpeedMult = 2.2f;
-            if (playerAmmo == 0) chaseSpeedMult = 2.8f;
+            if (m_estimatedPlayerAmmo == 0) chaseSpeedMult = 2.8f;
             else if (isPlayerReloading && distToPlayer < 12.0f) chaseSpeedMult = 2.5f;
-            targetVelocity = desiredDir * m_speed * chaseSpeedMult; // High speed sprint
-            m_headYaw = 0.0f; m_headPitch = 0.0f; // Focused forward
+
+            // 2. Efecto Slender: Si no lo estás mirando, corre MUCHO más rápido
+            if (!isVisibleToPlayer) {
+                chaseSpeedMult *= 1.35f; // Castigo por darle la espalda
+            }
+
+            float currentSpeed = m_speed * chaseSpeedMult;
+            float lookAheadTime = distToPlayer / currentSpeed;
+            glm::vec3 predictedPos = playerPos + (playerVelocity * lookAheadTime * 0.7f); 
+            
+            glm::vec3 desiredDir(0.0f);
+            float predDist = glm::distance(predictedPos, m_pos);
+            if (predDist > 0.01f) {
+                desiredDir = glm::normalize(predictedPos - m_pos);
+            } else {
+                glm::vec3 dirToPlayerVec = playerPos - m_pos;
+                if (glm::length(dirToPlayerVec) > 0.01f) {
+                    desiredDir = glm::normalize(dirToPlayerVec);
+                } else {
+                    desiredDir = glm::vec3(0.0f, 0.0f, 1.0f);
+                }
+            }
+
+            // 3. Zigzag defensivo: Si me estás apuntando, serpenteo para que falles
+            if (isAimedAt && distToPlayer > 4.0f) {
+                glm::vec3 rightDir(1.0f, 0.0f, 0.0f);
+                glm::vec3 crossDir = glm::cross(desiredDir, glm::vec3(0.0f, 1.0f, 0.0f));
+                if (glm::length(crossDir) > 0.01f) {
+                    rightDir = glm::normalize(crossDir);
+                }
+                // Alta frecuencia de zigzag impulsada por el estrés del monstruo
+                float zigZag = sin(m_stateTimer * (10.0f + m_stress * 5.0f)) * 0.55f; 
+                desiredDir = glm::normalize(desiredDir + rightDir * zigZag);
+            }
+
+            m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
+            targetVelocity = desiredDir * currentSpeed; 
+            
+            // Animación enfocada
+            m_headYaw = 0.0f; 
+            m_headPitch = (distToPlayer < 3.0f) ? 20.0f : 0.0f; // Baja la cabeza para morder si está cerca
             break;
         }
 
@@ -878,48 +937,83 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
         }
 
         case MonsterAction::STALK: {
-            // Wide circular flanking around the player's FOV
-            glm::vec3 toMonster = m_pos - playerPos;
-            toMonster.y = 0.0f;
-            float distToPlayer = glm::length(toMonster);
-            if (distToPlayer < 0.1f) toMonster = glm::vec3(1.0f, 0.0f, 0.0f);
+            float prevTime = m_stateTimer;
+            m_stateTimer += deltaTime;
             
-            glm::vec3 target(0.0f);
-            bool isBehindPlayer = !isVisibleToPlayer && hasLOS;
-            
-            if (isBehindPlayer) {
-                // Player's back is turned! Creep up directly towards the player's position to ambush them.
-                target = playerPos;
-            } else {
-                // Player is looking in our direction, or we don't have LOS. Maintain wide flanking.
-                if (distToPlayer > 28.0f) {
-                    // Too far: close in to flanking range laterally
-                    glm::vec3 flankDir = glm::normalize(glm::cross(playerFront, glm::vec3(0, 1, 0)));
-                    float side = (glm::dot(flankDir, toMonster) > 0.0f) ? 1.0f : -1.0f;
-                    target = playerPos + flankDir * (24.0f * side) - playerFront * 10.0f;
-                } else if (distToPlayer < 15.0f) {
-                    // Too close: back away laterally to maintain flanking distance
-                    glm::vec3 flankDir = glm::normalize(glm::cross(playerFront, glm::vec3(0, 1, 0)));
-                    float side = (glm::dot(flankDir, toMonster) > 0.0f) ? 1.0f : -1.0f;
-                    target = playerPos + flankDir * (26.0f * side) - playerFront * 15.0f;
+            // Check for twig-snap trigger
+            if (prevTime < 3.0f && m_stateTimer >= 3.0f) {
+                m_stalkDashTimer = 0.6f;
+                // Dash perpendicular to the vector pointing towards the player
+                glm::vec3 toPlayerVec = playerPos - m_pos;
+                toPlayerVec.y = 0.0f;
+                if (glm::length(toPlayerVec) > 0.1f) {
+                    glm::vec3 toPlayerDir = glm::normalize(toPlayerVec);
+                    glm::vec3 rightDir = glm::normalize(glm::cross(toPlayerDir, glm::vec3(0.0f, 1.0f, 0.0f)));
+                    float side = (rand() % 2 == 0) ? 1.0f : -1.0f;
+                    m_stalkDashDir = rightDir * side;
                 } else {
-                    // In flanking sweet spot: orbit towards player's rear quadrant
-                    glm::vec3 pRight = glm::normalize(glm::cross(playerFront, glm::vec3(0, 1, 0)));
-                    float side = (glm::dot(pRight, toMonster) > 0.0f) ? 1.0f : -1.0f;
-                    target = playerPos + pRight * (22.0f * side) - playerFront * 18.0f;
+                    m_stalkDashDir = glm::vec3(1.0f, 0.0f, 0.0f);
+                }
+                std::cout << "[AI] Twig-Snap! Spawning fake audio event to distract player." << std::endl;
+                
+                // Spawn a burst of brown particles simulating snapped branches/leaves
+                for (int i = 0; i < 12; i++) {
+                    glm::vec3 pVel((rand()%100/50.0f - 1.0f)*1.5f, (rand()%100/100.0f)*1.0f, (rand()%100/50.0f - 1.0f)*1.5f);
+                    particles.SpawnParticle(m_pos + glm::vec3(0.0f, 0.1f, 0.0f), pVel, glm::vec4(0.4f, 0.3f, 0.2f, 0.8f), 0.12f, 0.8f, -9.8f);
                 }
             }
 
-            glm::vec3 flatPos(m_pos.x, 0.0f, m_pos.z);
-            glm::vec3 flatTarget(target.x, 0.0f, target.z);
-            
-            if (glm::distance(flatPos, flatTarget) < 1.5f) {
-                targetVelocity = glm::vec3(0.0f);
-            } else {
-                glm::vec3 desiredDir = glm::normalize(flatTarget - flatPos);
+            if (m_stalkDashTimer > 0.0f) {
+                m_stalkDashTimer -= deltaTime;
+                targetVelocity = m_stalkDashDir * m_speed * 2.5f; // Fast dash
+                
+                // Face the player while dashing
+                glm::vec3 desiredDir = glm::normalize(playerPos - m_pos);
                 m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
-                float sneakSpeedMult = isBehindPlayer ? 0.98f : 0.85f;
-                targetVelocity = desiredDir * m_speed * sneakSpeedMult; // Quiet sneak speed
+            } else {
+                // Wide circular flanking around the player's FOV
+                glm::vec3 toMonster = m_pos - playerPos;
+                toMonster.y = 0.0f;
+                float distToPlayer = glm::length(toMonster);
+                if (distToPlayer < 0.1f) toMonster = glm::vec3(1.0f, 0.0f, 0.0f);
+                
+                glm::vec3 target(0.0f);
+                bool isBehindPlayer = !isVisibleToPlayer && hasLOS;
+                
+                if (isBehindPlayer) {
+                    // Player's back is turned! Creep up directly towards the player's position to ambush them.
+                    target = playerPos;
+                } else {
+                    // Player is looking in our direction, or we don't have LOS. Maintain wide flanking.
+                    if (distToPlayer > 28.0f) {
+                        // Too far: close in to flanking range laterally
+                        glm::vec3 flankDir = glm::normalize(glm::cross(playerFront, glm::vec3(0, 1, 0)));
+                        float side = (glm::dot(flankDir, toMonster) > 0.0f) ? 1.0f : -1.0f;
+                        target = playerPos + flankDir * (24.0f * side) - playerFront * 10.0f;
+                    } else if (distToPlayer < 15.0f) {
+                        // Too close: back away laterally to maintain flanking distance
+                        glm::vec3 flankDir = glm::normalize(glm::cross(playerFront, glm::vec3(0, 1, 0)));
+                        float side = (glm::dot(flankDir, toMonster) > 0.0f) ? 1.0f : -1.0f;
+                        target = playerPos + flankDir * (26.0f * side) - playerFront * 15.0f;
+                    } else {
+                        // In flanking sweet spot: orbit towards player's rear quadrant
+                        glm::vec3 pRight = glm::normalize(glm::cross(playerFront, glm::vec3(0, 1, 0)));
+                        float side = (glm::dot(pRight, toMonster) > 0.0f) ? 1.0f : -1.0f;
+                        target = playerPos + pRight * (22.0f * side) - playerFront * 18.0f;
+                    }
+                }
+
+                glm::vec3 flatPos(m_pos.x, 0.0f, m_pos.z);
+                glm::vec3 flatTarget(target.x, 0.0f, target.z);
+                
+                if (glm::distance(flatPos, flatTarget) < 1.5f) {
+                    targetVelocity = glm::vec3(0.0f);
+                } else {
+                    glm::vec3 desiredDir = glm::normalize(flatTarget - flatPos);
+                    m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
+                    float sneakSpeedMult = isBehindPlayer ? 0.98f : 0.85f;
+                    targetVelocity = desiredDir * m_speed * sneakSpeedMult; // Quiet sneak speed
+                }
             }
 
             // Head looks directly at player
@@ -1850,13 +1944,27 @@ bool Monster::IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& i
     glm::vec3 localDir = rotateY(dir);
 
     // Use Pre-Calculated Dynamic AABBs
+    glm::vec3 headMin = m_headMin;
+    glm::vec3 headMax = m_headMax;
+    glm::vec3 bodyMin = m_bodyMin;
+    glm::vec3 bodyMax = m_bodyMax;
+
+    // Lean Hitbox Compensation: during chase, body tilts forward (bodyLean = 0.4)
+    // Offset bounding box boundaries forward on the Z axis (local forward) to stay aligned.
+    if (m_action == MonsterAction::CHASE) {
+        headMin.z += 0.3f;
+        headMax.z += 0.5f;
+        bodyMin.z += 0.1f;
+        bodyMax.z += 0.4f;
+    }
+
     // HEAD (Local)
     float tHead = 10000.0f;
-    bool hitHead = RayAABBLocal(localOrigin, localDir, m_headMin, m_headMax, tHead);
+    bool hitHead = RayAABBLocal(localOrigin, localDir, headMin, headMax, tHead);
 
     // BODY (Local)
     float tBody = 10000.0f;
-    bool hitBody = RayAABBLocal(localOrigin, localDir, m_bodyMin, m_bodyMax, tBody);
+    bool hitBody = RayAABBLocal(localOrigin, localDir, bodyMin, bodyMax, tBody);
 
     if (hitHead && hitBody) {
         // Prioritize Head if depths are similar or if head is reasonably close

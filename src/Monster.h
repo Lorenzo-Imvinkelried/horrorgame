@@ -127,6 +127,14 @@ private:
     float m_confidence;
     float m_stress;
     
+    // Anti-Camp System
+    glm::vec3 m_antiCampCenter;
+    float m_antiCampTimer;
+
+    // Twig-Snap Stalking Dash
+    float m_stalkDashTimer;
+    glm::vec3 m_stalkDashDir;
+    
     glm::vec3 ApplyObstacleAvoidance(glm::vec3 desiredVel, ChunkManager& chunkManager);
     
     // Visual Decoupling (15 FPS)
