@@ -3,14 +3,14 @@
 namespace Config {
     namespace Terrain {
         // Base Hills (The main shape of the world)
-        constexpr float BaseFreqX = 0.02f;   // Lower = Wider hills (Reduced from 0.50)
-        constexpr float BaseFreqZ = 0.02f;   // Reduced from 0.65
-        constexpr float BaseAmplitude = 22.0f; // Higher = Taller hills
+        inline float BaseFreqX = 0.02f;   // Lower = Wider hills (Reduced from 0.50)
+        inline float BaseFreqZ = 0.02f;   // Reduced from 0.65
+        inline float BaseAmplitude = 22.0f; // Higher = Taller hills
 
         // Detail Noise (Roughness)
-        constexpr float DetailFreqX = 0.2f;
-        constexpr float DetailFreqZ = 0.1f;
-        constexpr float DetailAmplitude = 1.5f;
+        inline float DetailFreqX = 0.2f;
+        inline float DetailFreqZ = 0.1f;
+        inline float DetailAmplitude = 1.5f;
     }
 
     namespace Graphics {
@@ -53,8 +53,8 @@ namespace Config {
         constexpr float MonsterSpeed = 6.8f; // Initial value (Slightly faster than player)
         
         // Monster Spawn - Donut Distribution //550, 600
-        constexpr float MonsterSpawnMinRadius = 150.0f;
-        constexpr float MonsterSpawnMaxRadius = 260.0f;
+        inline float MonsterSpawnMinRadius = 150.0f;
+        inline float MonsterSpawnMaxRadius = 260.0f;
         
         // Projectile Physics (Exaggerated for gameplay feel)
         constexpr float ProjectileSpeed = 600.0f;       // Fast/Heavy (was 300)

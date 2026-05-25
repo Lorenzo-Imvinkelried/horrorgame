@@ -27,7 +27,8 @@ public:
     void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront, glm::vec2 windDir,
                 ChunkManager& chunkManager, ScentSystem& scentSystem, class ParticleSystem& particles,
                 glm::vec3 playerVelocity, int playerAmmo, bool isPlayerReloading,
-                bool isPlayerClimbing, glm::vec3 playerClimbingTreePos);
+                bool isPlayerClimbing, glm::vec3 playerClimbingTreePos,
+                bool isFlashlightOn);
     
     // Senses
     void HearSound(glm::vec3 sourcePos, float volume);
@@ -44,6 +45,14 @@ public:
     
     glm::vec3 GetPosition() const { return m_pos; }
     MonsterAction GetAction() const { return m_action; }
+    float GetConfidence() const { return m_confidence; }
+    float GetStress() const { return m_stress; }
+    int GetEstimatedAmmo() const { return m_estimatedPlayerAmmo; }
+    bool HasVisualContact() const { return m_hasVisualContact; }
+    glm::vec3 GetKnownPlayerTreePos() const { return m_knownPlayerTreePos; }
+    bool IsClimbing() const { return m_isClimbing; }
+    float GetTreeClimbHeight() const { return m_treeClimbHeight; }
+    bool IsEnraged() const { return m_isEnraged; }
     void SetPosition(glm::vec3 pos) { m_pos = pos; m_visualPos = pos; }
     void LookAt(glm::vec3 target);
 
@@ -127,6 +136,7 @@ private:
     float m_canopyWaitTime;
     float m_confidence;
     float m_stress;
+    float m_leafDropTimer;
     
     // Anti-Camp System
     glm::vec3 m_antiCampCenter;

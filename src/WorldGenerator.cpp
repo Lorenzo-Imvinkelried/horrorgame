@@ -178,7 +178,33 @@ bool WorldGenerator::IsLagoon(float x, float z, float h) {
 }
 
 float WorldGenerator::GetExactHeight(float x, float z) {
-    return GetExactHeight_Impl(x, z);
+    float scale = Config::World::ChunkScale; 
+    
+    int gridX = (int)floor(x / scale);
+    int gridZ = (int)floor(z / scale);
+    
+    float localX = (x - gridX * scale) / scale;
+    float localZ = (z - gridZ * scale) / scale; // 0..1 inside the quad
+
+    // Get heights of the 4 corners at correct world coordinates
+    float y00 = GetVisualHeight((float)gridX * scale, (float)gridZ * scale);
+    float y10 = GetVisualHeight((float)(gridX+1) * scale, (float)gridZ * scale);
+    float y01 = GetVisualHeight((float)gridX * scale, (float)(gridZ+1) * scale);
+    float y11 = GetVisualHeight((float)(gridX+1) * scale, (float)(gridZ+1) * scale);
+
+    float height = 0.0f;
+    
+    if (localX + localZ <= 1.0f) {
+        // Triangle 1: (0,0), (0,1), (1,0)
+        // Barycentric interpolation on right-angled triangle
+        height = y00 + (y10 - y00) * localX + (y01 - y00) * localZ;
+    } else {
+         // Triangle 2: (1,1), (0,1), (1,0)
+         // Plane passing through (1,1,y11), (0,1,y01), (1,0,y10)
+         height = y11 + (y01 - y11) * (1.0f - localX) + (y10 - y11) * (1.0f - localZ);
+    }
+    
+    return height;
 }
 
 WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunkSize, float scale) {

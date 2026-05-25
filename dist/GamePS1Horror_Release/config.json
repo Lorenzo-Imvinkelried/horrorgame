@@ -1,6 +1,14 @@
 {
   "isNight": true,
-  "darkness": 0.18,
+  "darkness": 0.16,
+  "flashlightEnabled": true,
   "monsterCount": 1,
-  "flashlightEnabled": false
+  "baseFreqX": 0.02,
+  "baseFreqZ": 0.02,
+  "baseAmplitude": 22.0,
+  "detailFreqX": 0.2,
+  "detailFreqZ": 0.1,
+  "detailAmplitude": 1.5,
+  "monsterSpawnMinRadius": 30.0,
+  "monsterSpawnMaxRadius": 30.0
 }

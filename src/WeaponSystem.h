@@ -20,7 +20,7 @@ public:
     };
 
     void Update(float deltaTime, glm::vec2 windDir, float windStrength, class ChunkManager& chunkManager, class FootprintSystem& craters, class ParticleSystem& particles, const std::vector<std::unique_ptr<class Monster>>& monsters);
-    void Render(GLuint shaderProgram); // Draw Gun Model
+    void Render(GLuint shaderProgram, bool isGameOver = false, float gameOverTimer = 0.0f); // Draw Gun Model
     void RenderProjectiles(GLuint shaderProgram, GLuint vao, GLuint vbo); // Draw Tracers (Needs World View)
     void TryFire(glm::vec3 camPos, glm::vec3 camDir, class ParticleSystem& particles, const std::vector<std::unique_ptr<class Monster>>& monsters);
     

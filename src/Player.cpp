@@ -238,7 +238,7 @@ void Player::Update(float deltaTime) {
     
     if (Position.y < terrainHeight + PlayerHeight) {
         float targetY = terrainHeight + PlayerHeight;
-        Position.y = glm::mix(Position.y, targetY, deltaTime * 15.0f); // Smooth LERP up
+        Position.y = glm::mix(Position.y, targetY, glm::clamp(deltaTime * 15.0f, 0.0f, 1.0f)); // Smooth LERP up
         Velocity.y = 0.0f;
         IsGrounded = true;
     } else {
@@ -247,7 +247,7 @@ void Player::Update(float deltaTime) {
         float distToGround = Position.y - (terrainHeight + PlayerHeight);
         if (IsGrounded && distToGround < 0.5f && Velocity.y <= 0.0f) {
              float targetY = terrainHeight + PlayerHeight;
-             Position.y = glm::mix(Position.y, targetY, deltaTime * 20.0f); // Faster snap down
+             Position.y = glm::mix(Position.y, targetY, glm::clamp(deltaTime * 20.0f, 0.0f, 1.0f)); // Faster snap down
              Velocity.y = 0.0f;
              IsGrounded = true; // Maintain grounded state
         } else {
@@ -255,7 +255,7 @@ void Player::Update(float deltaTime) {
         }
     }
 
-    WeaponSwayPos = glm::mix(WeaponSwayPos, glm::vec3(0.0f), deltaTime * SwaySmoothing);
+    WeaponSwayPos = glm::mix(WeaponSwayPos, glm::vec3(0.0f), glm::clamp(deltaTime * SwaySmoothing, 0.0f, 1.0f));
 }
 
 glm::mat4 Player::GetViewMatrix() {

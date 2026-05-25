@@ -1,18 +1,24 @@
-# Tree Trunk Model
-# Simple Rectangular Trunk
-# Height ~6.0, Width ~1.2 (0.6 radius)
+# Tree Trunk Model - Detailed Organic Branching Trunk
+# Total H = 11.0. Spans Y = -5.0 to Y = 6.0 relative to origin.
 # Center at Base (0,0,0) so it scales up correctly from ground.
-# But original code had Base at y-5.0 and Top at y+6.0 relative to origin?
-# Wait, procedural code: tY_Base = y - 5.0f; tY_Top = y + trunkH;
-# Origin was (x,y,z). So the trunk goes from -5.0 to +6.0.
-# Total H = 11.0. Center = 0.5.
-# Let's define a box that spans this range.
-# Box Center Y = (-5 + 6) / 2 = 0.5
-# Box Scale Y = 11.0
-# Width = 1.2 (0.6 * 2)
+# Color: 0.35 0.25 0.15 (Base) -> 0.40 0.25 0.15
 
 # Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
-# Color: 0.35 0.25 0.15 (Original) -> 0.4 0.2 0.1 (Internal_AddTreeGeometry)
-# Let's use 0.40 0.25 0.15
 
-BOX 0.0 0.5 0.0  1.2 11.0 1.2  0 0 0  0.40 0.25 0.15  TRUNK_MAIN
+# 1. Base trunk segment (Y = -5.0 to 1.0)
+BOX 0.0 -2.0 0.0  1.15 6.0 1.15  0.0 0.0 0.0  0.36 0.22 0.12  TRUNK_BASE
+
+# 2. Mid trunk segment (Y = 1.0 to 6.0, tapered, slightly curved)
+BOX 0.0 3.5 0.0  1.0 5.0 1.0  0.0349 0.0 0.0175  0.38 0.24 0.14  TRUNK_MID
+
+# 3. Branch 1 (points diagonally out to positive X, starting around Y=3.0)
+BOX 0.9 4.75 0.0  0.4 4.0 0.4  0.0 0.0 -0.6109  0.34 0.20 0.10  BRANCH_R
+
+# 4. Branch 2 (points diagonally out to negative X, starting around Y=4.0)
+BOX -0.9 5.25 0.0  0.4 3.5 0.4  0.0 0.0 0.6981  0.34 0.20 0.10  BRANCH_L
+
+# 5. Branch 3 (points diagonally out to positive Z, starting around Y=3.5)
+BOX 0.0 5.0 0.9  0.4 3.8 0.4  0.6632 0.0 0.0  0.34 0.20 0.10  BRANCH_F
+
+# 6. Branch 4 (points diagonally out to negative Z, starting around Y=4.5)
+BOX 0.0 5.5 -0.8  0.4 3.0 0.4  -0.6109 0.0 0.0  0.34 0.20 0.10  BRANCH_B

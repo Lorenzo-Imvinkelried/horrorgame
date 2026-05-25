@@ -102,9 +102,12 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     stb
 )
 
-# Copy assets to bin folder (Post-build)
+# Copy assets and config.json to bin folder (Post-build)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/assets
     ${CMAKE_BINARY_DIR}/bin/assets
+    COMMAND ${CMAKE_COMMAND} -E copy
+    ${CMAKE_SOURCE_DIR}/config.json
+    ${CMAKE_BINARY_DIR}/bin/config.json
 )

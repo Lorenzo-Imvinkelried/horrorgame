@@ -406,7 +406,7 @@ void WeaponSystem::Reload() {
     }
 }
 
-void WeaponSystem::Render(GLuint shaderProgram) {
+void WeaponSystem::Render(GLuint shaderProgram, bool isGameOver, float gameOverTimer) {
     // Draw Gun Model in Screen Space (or overlay)
     // We attach it to the camera.
     // In main loop, View Matrix is already set. We just need to Model Matrix it relative to camera.
@@ -428,10 +428,25 @@ void WeaponSystem::Render(GLuint shaderProgram) {
     }
     
     glm::mat4 model = glm::mat4(1.0f);
-    // Position on screen (Right hand side, slightly down)
-    model = glm::translate(model, glm::vec3(0.2f, -0.2f + reloadOffset, -0.9f + recoilOffset)); 
-    // Aim slightly up
-    model = glm::rotate(model, glm::radians(5.0f - recoilTimer * 10.0f + reloadRotate), glm::vec3(1,0,0));
+    if (isGameOver) {
+        // Weapon falls down and rotates forwards/sideways, slipping out of hands
+        // It drops quickly over the first 1.5s of the 3.5s total death sequence
+        float fallProgress = glm::clamp((3.5f - gameOverTimer) / 1.5f, 0.0f, 1.0f);
+        float dropY = -1.2f * fallProgress; 
+        float dropX = 0.1f * fallProgress;
+        float dropZ = -0.2f * fallProgress;
+        float dropRotX = -45.0f * fallProgress;
+        float dropRotZ = 30.0f * fallProgress;
+        
+        model = glm::translate(model, glm::vec3(0.2f + dropX, -0.2f + reloadOffset + dropY, -0.9f + recoilOffset + dropZ)); 
+        model = glm::rotate(model, glm::radians(5.0f - recoilTimer * 10.0f + reloadRotate + dropRotX), glm::vec3(1,0,0));
+        model = glm::rotate(model, glm::radians(dropRotZ), glm::vec3(0,0,1));
+    } else {
+        // Position on screen (Right hand side, slightly down)
+        model = glm::translate(model, glm::vec3(0.2f, -0.2f + reloadOffset, -0.9f + recoilOffset)); 
+        // Aim slightly up
+        model = glm::rotate(model, glm::radians(5.0f - recoilTimer * 10.0f + reloadRotate), glm::vec3(1,0,0));
+    }
     model = glm::scale(model, glm::vec3(0.5f)); 
 
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));

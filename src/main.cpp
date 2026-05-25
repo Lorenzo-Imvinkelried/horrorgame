@@ -335,7 +335,15 @@ GameConfig LoadConfig(const std::string& filename) {
             outFile << "  \"isNight\": false,\n";
             outFile << "  \"darkness\": 0.08,\n";
             outFile << "  \"monsterCount\": 1,\n";
-            outFile << "  \"flashlightEnabled\": true\n";
+            outFile << "  \"flashlightEnabled\": true,\n";
+            outFile << "  \"baseFreqX\": 0.02,\n";
+            outFile << "  \"baseFreqZ\": 0.02,\n";
+            outFile << "  \"baseAmplitude\": 22.0,\n";
+            outFile << "  \"detailFreqX\": 0.2,\n";
+            outFile << "  \"detailFreqZ\": 0.1,\n";
+            outFile << "  \"detailAmplitude\": 1.5,\n";
+            outFile << "  \"monsterSpawnMinRadius\": 150.0,\n";
+            outFile << "  \"monsterSpawnMaxRadius\": 260.0\n";
             outFile << "}\n";
             outFile.close();
         }
@@ -379,18 +387,114 @@ GameConfig LoadConfig(const std::string& filename) {
                     config.flashlightEnabled = false;
                 }
             }
+            if (line.find("baseFreqX") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Terrain::BaseFreqX;
+                }
+            }
+            if (line.find("baseFreqZ") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Terrain::BaseFreqZ;
+                }
+            }
+            if (line.find("baseAmplitude") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Terrain::BaseAmplitude;
+                }
+            }
+            if (line.find("detailFreqX") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Terrain::DetailFreqX;
+                }
+            }
+            if (line.find("detailFreqZ") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Terrain::DetailFreqZ;
+                }
+            }
+            if (line.find("detailAmplitude") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Terrain::DetailAmplitude;
+                }
+            }
+            if (line.find("monsterSpawnMinRadius") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Gameplay::MonsterSpawnMinRadius;
+                }
+            }
+            if (line.find("monsterSpawnMaxRadius") != std::string::npos) {
+                size_t colon = line.find(":");
+                if (colon != std::string::npos) {
+                    std::string valStr = line.substr(colon + 1);
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                    valStr.erase(std::remove(valStr.begin(), valStr.end(), '}'), valStr.end());
+                    std::stringstream ss(valStr);
+                    ss >> Config::Gameplay::MonsterSpawnMaxRadius;
+                }
+            }
         }
         file.close();
         std::cout << "[Config] Loaded configuration from: " << foundPath 
                   << " (isNight: " << (config.isNight ? "true" : "false") 
                   << ", darkness: " << config.darkness 
                   << ", monsterCount: " << config.monsterCount 
-                  << ", flashlightEnabled: " << (config.flashlightEnabled ? "true" : "false") << ")" << std::endl;
+                  << ", flashlightEnabled: " << (config.flashlightEnabled ? "true" : "false")
+                  << ", spawnMin: " << Config::Gameplay::MonsterSpawnMinRadius
+                  << ", spawnMax: " << Config::Gameplay::MonsterSpawnMaxRadius << ")" << std::endl;
     }
     return config;
 }
 
+struct CoutRedirector {
+    std::streambuf* oldBuf;
+    std::ofstream file;
+    CoutRedirector(const std::string& filename) : file(filename) {
+        oldBuf = std::cout.rdbuf();
+        std::cout.rdbuf(file.rdbuf());
+        std::cout << std::unitbuf; // Enable automatic flushing
+    }
+    ~CoutRedirector() {
+        std::cout.rdbuf(oldBuf);
+    }
+};
+
 int main() {
+    CoutRedirector redirect("log.txt");
     GameConfig gameCfg = LoadConfig("config.json");
     glm::vec4 skyColor = gameCfg.isNight ? glm::vec4(0.005f, 0.005f, 0.015f, 1.0f) : glm::vec4(0.4f, 0.6f, 1.0f, 1.0f);
 
@@ -767,6 +871,12 @@ int main() {
                     weapon.Reload();
                 }
 
+                // Flashlight Toggle (F Key)
+                if (event.key.code == sf::Keyboard::F) {
+                    gameCfg.flashlightEnabled = !gameCfg.flashlightEnabled;
+                    std::cout << "F Key Pressed! Flashlight: " << (gameCfg.flashlightEnabled ? "ON" : "OFF") << std::endl;
+                }
+
                 // Debug Camera Toggle
                 if (event.key.code == sf::Keyboard::F3) debugCam = !debugCam;
                 
@@ -807,19 +917,64 @@ int main() {
         weapon.Update(deltaTime, windDir, windStrength, chunkManager, footprints, particles, monsters);
         particles.Update(deltaTime);
 
-        // Monster Update (Now takes ScentSystem, playerFront, Velocity, Weapon Ammo & Reloading State)
+        // Monster Update (Now takes ScentSystem, playerFront, Velocity, Weapon Ammo, Reloading State & Flashlight)
         for (auto& mPtr : monsters) {
             mPtr->Update(deltaTime, player.Position, player.Front, windDir, 
                         chunkManager, scentSystem, particles,
                         player.Velocity, weapon.GetAmmo(), weapon.IsReloading(),
-                        player.IsClimbing, player.ClimbingTreePos);
+                        player.IsClimbing, player.ClimbingTreePos,
+                        gameCfg.flashlightEnabled);
+        }
+
+        // Debug state printing to terminal (every 1.0 seconds)
+        static float debugPrintTimer = 0.0f;
+        debugPrintTimer += deltaTime;
+        if (debugPrintTimer >= 1.0f) {
+            debugPrintTimer = 0.0f;
+            std::cout << "\n=== GAME STATE DEBUG ===" << std::endl;
+            std::cout << "Player Position: (" << player.Position.x << ", " << player.Position.y << ", " << player.Position.z << ")" << std::endl;
+            std::cout << "Player Velocity: (" << player.Velocity.x << ", " << player.Velocity.y << ", " << player.Velocity.z << ")" << std::endl;
+            std::cout << "Player IsGrounded: " << (player.IsGrounded ? "Yes" : "No") << " | IsClimbing: " << (player.IsClimbing ? "Yes" : "No") << std::endl;
+            for (size_t i = 0; i < monsters.size(); ++i) {
+                const auto& m = monsters[i];
+                if (m->IsDead()) {
+                    std::cout << "Monster #" << i << ": DEAD" << std::endl;
+                    continue;
+                }
+                std::cout << "Monster #" << i << ":" << std::endl;
+                std::cout << "  Position: (" << m->GetPosition().x << ", " << m->GetPosition().y << ", " << m->GetPosition().z << ")" << std::endl;
+                std::cout << "  Action: ";
+                switch (m->GetAction()) {
+                    case MonsterAction::WANDER: std::cout << "WANDER"; break;
+                    case MonsterAction::INVESTIGATE: std::cout << "INVESTIGATE"; break;
+                    case MonsterAction::STALK: std::cout << "STALK"; break;
+                    case MonsterAction::RETREAT: std::cout << "RETREAT"; break;
+                    case MonsterAction::CLIMB_TREE: std::cout << "CLIMB_TREE"; break;
+                    case MonsterAction::CHASE: std::cout << "CHASE"; break;
+                    case MonsterAction::TRACK_SCENT: std::cout << "TRACK_SCENT"; break;
+                }
+                std::cout << std::endl;
+                std::cout << "  Is Climbing: " << (m->IsClimbing() ? "Yes" : "No");
+                if (m->IsClimbing() || m->GetTreeClimbHeight() > 0.0f) {
+                    std::cout << " (Height: " << m->GetTreeClimbHeight() << ")";
+                }
+                std::cout << std::endl;
+                std::cout << "  Enraged: " << (m->IsEnraged() ? "YES" : "NO") << std::endl;
+                std::cout << "  LOS to Player: " << (m->HasVisualContact() ? "Yes" : "No") << std::endl;
+                std::cout << "  Confidence: " << m->GetConfidence() << " | Stress: " << m->GetStress() << std::endl;
+                std::cout << "  Estimated Player Ammo: " << m->GetEstimatedAmmo() << std::endl;
+                
+                float dist = glm::distance(m->GetPosition(), player.Position);
+                std::cout << "  Distance to Player: " << dist << "m" << std::endl;
+            }
+            std::cout << "============================\n" << std::endl;
         }
 
         // GAME OVER CHECK & TIMING
         if (isGameOver) {
             gameOverTimer -= deltaTime;
             if (gameOverTimer <= 0.0f) {
-                exit(0);
+                window.close();
             }
         } else {
             for (const auto& mPtr : monsters) {
@@ -831,7 +986,7 @@ int main() {
                 
                 if (dist2D < 1.5f && heightDiff < 3.0f) {
                     isGameOver = true;
-                    gameOverTimer = 1.5f;
+                    gameOverTimer = 3.5f;
                     std::cout << "GAME OVER! Spawning blood explosion..." << std::endl;
                     for (int i = 0; i < 40; ++i) {
                         glm::vec3 velocity((rand()%100/50.0f - 1.0f)*5.0f, (rand()%100/50.0f - 0.3f)*6.0f, (rand()%100/50.0f - 1.0f)*5.0f);
@@ -946,7 +1101,44 @@ int main() {
         glm::vec3 fogCol = gameCfg.isNight ? glm::vec3(0.005f, 0.005f, 0.015f) : glm::vec3(0.4f, 0.6f, 1.0f);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_FogColor"), fogCol.r, fogCol.g, fogCol.b);
 
-        glm::mat4 view = debugCam ? glm::lookAt(freeCamPos, freeCamPos + freeCamFront, glm::vec3(0,1,0)) : player.GetViewMatrix();
+        glm::mat4 view;
+        if (debugCam) {
+            view = glm::lookAt(freeCamPos, freeCamPos + freeCamFront, glm::vec3(0,1,0));
+        } else if (isGameOver) {
+            // Death Camera Animation!
+            // Time elapsed since death started (gameOverTimer starts at 3.5f and counts down to 0.0f)
+            float fallProgress = glm::clamp((3.5f - gameOverTimer) / 1.5f, 0.0f, 1.0f); // Fall over 1.5 seconds
+            
+            // Get original player eye position
+            glm::vec3 pos = player.Position;
+            if (player.IsGrounded) {
+                if (player.HeadBobTimer > 0.001f) {
+                    pos.y += sin(player.HeadBobTimer) * player.HeadBobAmount;
+                } else {
+                    pos.y += sin(player.BreathTimer) * player.BreathAmount;
+                }
+            }
+            
+            // Camera falls to the ground
+            float terrainHeight = WorldGenerator::GetHeight(player.Position.x, player.Position.z);
+            float targetY = terrainHeight + 0.15f; // eye level when lying on the ground
+            
+            // Smoothly interpolate camera Y position to targetY
+            pos.y = glm::mix(pos.y, targetY, fallProgress);
+            
+            // Create base lookAt
+            view = glm::lookAt(pos, pos + player.Front, player.Up);
+            
+            // Apply a camera roll (tilt sideways) and pitch dip as we fall
+            float rollAngle = fallProgress * 75.0f; // Roll 75 degrees
+            float pitchAngle = sin(fallProgress * 3.14159f) * -15.0f; // Dip head down then up slightly
+            
+            glm::mat4 rot = glm::rotate(glm::mat4(1.0f), glm::radians(rollAngle), glm::vec3(0.0f, 0.0f, 1.0f));
+            rot = glm::rotate(rot, glm::radians(pitchAngle), glm::vec3(1.0f, 0.0f, 0.0f));
+            view = rot * view;
+        } else {
+            view = player.GetViewMatrix();
+        }
         glm::mat4 projection = glm::perspective(glm::radians(70.0f), (float)INTERNAL_ASPECT, 0.1f, 1000.0f);
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(view));
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_Projection"), 1, GL_FALSE, glm::value_ptr(projection));
@@ -1068,11 +1260,12 @@ int main() {
             
             for (const auto& mPtr : monsters) {
                 glm::vec3 mPos = mPtr->GetPosition();
-                // Draw a high-visibility vertical red beacon line
-                DrawLine(mPos, mPos + glm::vec3(0.0f, 200.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
-                // Draw a red horizontal cross on the ground to pinpoint exact position
-                DrawLine(mPos - glm::vec3(2.5f, 0.0f, 0.0f), mPos + glm::vec3(2.5f, 0.0f, 0.0f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
-                DrawLine(mPos - glm::vec3(0.0f, 0.0f, 2.5f), mPos + glm::vec3(0.0f, 0.0f, 2.5f), glm::vec3(1.0f, 0.0f, 0.0f), debugVAO, debugVBO);
+                glm::vec3 markerColor = mPtr->HasVisualContact() ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+                // Draw a high-visibility vertical beacon line
+                DrawLine(mPos, mPos + glm::vec3(0.0f, 200.0f, 0.0f), markerColor, debugVAO, debugVBO);
+                // Draw a horizontal cross on the ground to pinpoint exact position
+                DrawLine(mPos - glm::vec3(2.5f, 0.0f, 0.0f), mPos + glm::vec3(2.5f, 0.0f, 0.0f), markerColor, debugVAO, debugVBO);
+                DrawLine(mPos - glm::vec3(0.0f, 0.0f, 2.5f), mPos + glm::vec3(0.0f, 0.0f, 2.5f), markerColor, debugVAO, debugVBO);
             }
             
             glEnable(GL_DEPTH_TEST); // Restore depth test
@@ -1170,7 +1363,7 @@ int main() {
         
         // Use NOISE texture for weapon
         glBindTexture(GL_TEXTURE_2D, textureID);
-        weapon.Render(shaderProgram);
+        weapon.Render(shaderProgram, isGameOver, gameOverTimer);
 
         // 4. UI Pass (SEPARATE SHADER PASS - IN FBO FOR RETRO LOOK)
         glDisable(GL_DEPTH_TEST);
@@ -1192,12 +1385,12 @@ int main() {
         glUniform1i(glGetUniformLocation(uiProgram, "u_Texture"), 0);
         glBindTexture(GL_TEXTURE_2D, whiteTexID);
 
-        // Crosshair
+        // Crosshair (Thinner, finer lines but visible at 640x480)
         std::vector<float> chData;
-        float chS = 0.03f; float chT = 0.004f;
-        // Fix aspect for UI in 320x240
+        float chS = 0.03f; float chT = 0.0022f;
+        // Fix aspect for UI in 320x240 / 640x480
         PushQuad(chData, -chS, -chT, chS*2, chT*2); 
-        PushQuad(chData, -chT, -chS*INTERNAL_ASPECT, chT*2, chS*INTERNAL_ASPECT*2); 
+        PushQuad(chData, -chT, -chS*INTERNAL_ASPECT, chT*2, chS*INTERNAL_ASPECT*2);  
         glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
         glBufferData(GL_ARRAY_BUFFER, chData.size() * sizeof(float), chData.data(), GL_DYNAMIC_DRAW);
         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(chData.size()/3));

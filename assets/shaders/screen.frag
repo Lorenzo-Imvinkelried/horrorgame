@@ -18,51 +18,41 @@ void main()
     if (u_IsGameOver == 1) {
         vec2 uv = vTexCoord;
         
-        // 1. Horizontal screen tearing glitch
-        float glitchTime = floor(u_Time * 20.0); // Step time for chunky glitch
-        float noiseVal = rand(vec2(glitchTime, 0.0));
+        // Calculate progress of the death animation (from 0.0 to 1.0)
+        // u_GameOverTime starts at 3.5 and goes down to 0.0
+        float progress = clamp((3.5 - u_GameOverTime) / 3.5, 0.0, 1.0);
         
-        // Random horizontal offsets at specific vertical bands
-        float band = step(0.9, rand(vec2(floor(uv.y * 12.0), glitchTime)));
-        uv.x += band * (noiseVal - 0.5) * 0.15;
-        
-        // Additional high-frequency fine lines jitter
-        if (rand(vec2(uv.y, u_Time)) > 0.96) {
-            uv.x += (rand(vec2(u_Time)) - 0.5) * 0.05;
-        }
-
-        // 2. Fetch texture color with glitched coordinates
+        // Fetch original texture color
         vec4 col = texture(u_ScreenTexture, uv);
         
-        // 3. Chromatic aberration (Split channels for glitch feel)
-        float splitAmount = 0.03 * sin(u_Time * 40.0) * (1.5 - u_GameOverTime);
-        col.r = texture(u_ScreenTexture, uv + vec2(splitAmount, 0.0)).r;
-        col.b = texture(u_ScreenTexture, uv - vec2(splitAmount, 0.0)).b;
-
-        // 4. Glitched blood overlay (Vignette + static noise + red tint)
+        // Realistic blood vignette overlay
         vec2 centerDist = uv - vec2(0.5);
-        float vignette = dot(centerDist, centerDist) * 2.0; // Vignette strength
+        float dist = length(centerDist);
         
-        // High-frequency screen static
-        float staticNoise = rand(uv * sin(u_Time)) * 0.25;
+        // Blood vignette gets stronger and spreads towards the center as progress increases
+        // At progress=0: vignette covers only the outer edges
+        // At progress=1: vignette covers almost the entire screen
+        float bloodStrength = clamp(progress * 1.5, 0.0, 1.0);
+        float vignette = smoothstep(0.2, 0.7 - bloodStrength * 0.4, dist);
         
-        // Glitch flash: rapidly invert or flash screen
-        float flash = step(0.85, rand(vec2(floor(u_Time * 30.0))));
+        // Deep realistic blood color (dark crimson/maroon)
+        vec3 bloodColor = vec3(0.35, 0.01, 0.01);
         
-        // Dark crimson red blood color
-        vec3 bloodColor = vec3(0.7, 0.0, 0.0);
+        // Mix game color with the blood vignette
+        vec3 finalColor = mix(col.rgb, bloodColor, vignette * 0.9 * bloodStrength);
         
-        // Mix original game color with blood and static
-        vec3 finalColor = mix(col.rgb, bloodColor, clamp(vignette + 0.3 + staticNoise, 0.0, 1.0));
+        // Also apply a general red desaturation/tint as player loses consciousness
+        // We darken the image and shift it slightly redder overall
+        vec3 redLethargy = vec3(finalColor.r * 1.1, finalColor.g * 0.6, finalColor.b * 0.6);
+        finalColor = mix(finalColor, redLethargy, progress * 0.7);
         
-        // Intensify red channel
-        finalColor.r += 0.3 + sin(u_Time * 50.0) * 0.1;
+        // Darken the entire screen as vision fades
+        finalColor = mix(finalColor, vec3(0.0), progress * 0.5);
         
-        // Glitch color inversion flashes
-        if (flash > 0.5) {
-            finalColor = vec3(1.0) - finalColor;
-            finalColor.r += 0.5; // keep it red
-        }
+        // Smooth fade out to complete black at the end
+        // Start fading to black rapidly after 40% progress, reaching 100% black at 95% progress
+        float fadeToBlack = smoothstep(0.4, 0.95, progress);
+        finalColor = mix(finalColor, vec3(0.0), fadeToBlack);
         
         FragColor = vec4(finalColor, 1.0);
     } else {
