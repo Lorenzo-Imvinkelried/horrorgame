@@ -1,0 +1,50 @@
+// --- GENERATED PROCEDURAL MODEL ---
+// Noise Config: [Enabled: YES] [Resolution: 64x64]
+
+void ModelSystem::BuildCustomModel() {
+    auto addComponent = [&](glm::vec3 pos, glm::vec3 scale, glm::vec3 rot, glm::vec3 col) {
+        // Use WorldGenerator::GenerateNoiseTexture(64, 64)
+        this->CreateBox(pos, scale, rot, col);
+    };
+
+    // Base_Laton
+    addComponent(
+        glm::vec3(0.000f, -0.500f, 0.000f),
+        glm::vec3(0.500f, 0.250f, 0.500f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        glm::vec3(0.600f, 0.500f, 0.200f)
+    );
+
+    // Cuerpo_Rojo
+    addComponent(
+        glm::vec3(0.000f, 0.100f, 0.000f),
+        glm::vec3(0.460f, 1.000f, 0.460f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        glm::vec3(0.700f, 0.050f, 0.050f)
+    );
+
+    // Fulminante_Usado
+    addComponent(
+        glm::vec3(0.000f, -0.630f, 0.000f),
+        glm::vec3(0.120f, 0.020f, 0.120f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        glm::vec3(0.200f, 0.200f, 0.200f)
+    );
+
+    // Hollin_Superior
+    addComponent(
+        glm::vec3(0.000f, 0.600f, 0.000f),
+        glm::vec3(0.480f, 0.050f, 0.480f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        glm::vec3(0.050f, 0.050f, 0.050f)
+    );
+
+    // Interior_Oscuro
+    addComponent(
+        glm::vec3(0.000f, 0.550f, 0.000f),
+        glm::vec3(0.400f, 0.100f, 0.400f),
+        glm::vec3(0.000f, 0.000f, 0.000f),
+        glm::vec3(0.500f, 0.500f, 0.500f)
+    );
+
+}

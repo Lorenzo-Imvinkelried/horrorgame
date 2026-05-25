@@ -7,6 +7,7 @@
 #include <cmath>
 #include <iostream>
 #include <set>
+#include "Monster.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -199,7 +200,7 @@ void BirdSystem::SpawnFlock(glm::vec3 startPos) {
     }
 }
 
-void BirdSystem::Update(float deltaTime, glm::vec3 playerPos, const std::vector<glm::vec3>& monsterPositions) {
+void BirdSystem::Update(float deltaTime, glm::vec3 playerPos, const std::vector<std::unique_ptr<class Monster>>& monsters) {
     // 1. Límite de pájaros activos para performance (REDUCIDO a 200)
     if (m_activeBirds.size() > 200) {
         m_activeBirds.erase(m_activeBirds.begin(), m_activeBirds.begin() + 50);
@@ -211,8 +212,8 @@ void BirdSystem::Update(float deltaTime, glm::vec3 playerPos, const std::vector<
     std::vector<ChunkKey> keysToCheck;
     
     auto addNeighbors = [&](ChunkKey cx) {
-        for(int x=0; x<=1; x++) {
-            for(int z=0; z<=1; z++) {
+        for(int x=-1; x<=1; x++) {
+            for(int z=-1; z<=1; z++) {
                 ChunkKey k = {cx.x + x, cx.z + z};
                 
                 // Duplicate Check
@@ -231,8 +232,9 @@ void BirdSystem::Update(float deltaTime, glm::vec3 playerPos, const std::vector<
     };
     
     addNeighbors(pKey);
-    for (const auto& mPos : monsterPositions) {
-        ChunkKey mKey = GetChunkKey(mPos);
+    for (const auto& mPtr : monsters) {
+        if (mPtr->IsDead()) continue;
+        ChunkKey mKey = GetChunkKey(mPtr->GetPosition());
         addNeighbors(mKey);
     }
     
@@ -243,18 +245,28 @@ void BirdSystem::Update(float deltaTime, glm::vec3 playerPos, const std::vector<
         if (it != m_perchGrid.end()) {
             for (auto& p : it->second) {
                  if (p.hasBirds) {
-                     float dP2 = glm::distance2(p.pos, playerPos);
-                     
-                     float dM2 = triggerDist2 + 10.0f; // Default above limit
-                     for (const auto& mPos : monsterPositions) {
-                         float dist2 = glm::distance2(p.pos, mPos);
-                         if (dist2 < dM2) dM2 = dist2;
-                     }
-                     
-                     if (dP2 < triggerDist2 || dM2 < triggerDist2) {
-                          p.hasBirds = false;
-                          SpawnFlock(p.pos);
-                     }
+                      float dP2 = glm::distance2(p.pos, playerPos);
+                      
+                      float dM2 = triggerDist2 + 10.0f; // Default above limit
+                      for (const auto& mPtr : monsters) {
+                          if (mPtr->IsDead()) continue;
+                          float dist2 = glm::distance2(p.pos, mPtr->GetPosition());
+                          if (dist2 < dM2) dM2 = dist2;
+                      }
+                      
+                      if (dP2 < triggerDist2 || dM2 < triggerDist2) {
+                           p.hasBirds = false;
+                           SpawnFlock(p.pos);
+                           
+                           // Emit sound: Notify active monsters if triggered by the player
+                           if (dP2 < triggerDist2) {
+                               for (auto& mPtr : monsters) {
+                                   if (!mPtr->IsDead()) {
+                                       mPtr->HearSound(p.pos, Config::Bird::SoundRange);
+                                   }
+                               }
+                           }
+                      }
                  }
             }
         }

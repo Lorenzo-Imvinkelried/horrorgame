@@ -334,13 +334,34 @@ void ChunkManager::RenderWater(GLuint shaderProgram) {
     glBindVertexArray(0);
 }
 
-void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint leavesVAO, int trunkVertexCount, int leavesVertexCount) {
+void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint leavesVAO, int trunkVertexCount, int leavesVertexCount, glm::vec3 playerPos) {
+    // 1. Identify if the player is inside any tree foliage
+    glm::vec4 playerTree(0.0f);
+    bool hasPlayerTree = false;
+    
+    std::vector<glm::vec4> nearbyTrees;
+    GetTreesInRange(playerPos, 15.0f, nearbyTrees);
+    for (const auto& t : nearbyTrees) {
+        float dist2D = glm::distance(glm::vec2(playerPos.x, playerPos.z), glm::vec2(t.x, t.z));
+        float leavesBase = t.y + 3.0f * t.w;
+        float leavesTop = t.y + 25.0f * t.w;
+        float leavesRadius = 3.8f * t.w;
+        if (dist2D < leavesRadius && playerPos.y >= leavesBase && playerPos.y <= leavesTop) {
+            playerTree = t;
+            hasPlayerTree = true;
+            break;
+        }
+    }
+
     // Cache Uniforms
     GLint instancedLoc   = glGetUniformLocation(shaderProgram, "u_IsInstanced");
     GLint conformLoc     = glGetUniformLocation(shaderProgram, "u_ConformToTerrain");
     GLint birdAttribsLoc = glGetUniformLocation(shaderProgram, "u_UseBirdAttribs");
     GLint windStrLoc     = glGetUniformLocation(shaderProgram, "u_WindStrength");
     
+    GLint isPlayerTreePassLoc = glGetUniformLocation(shaderProgram, "u_IsPlayerTreePass");
+    GLint playerTreeDataLoc   = glGetUniformLocation(shaderProgram, "u_PlayerTreeData");
+
     // NEW: Wind LOD Uniforms
     glUniform1f(glGetUniformLocation(shaderProgram, "u_LodDistNear"), Config::Trees::WindLodNear);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_LodDistFar"), Config::Trees::WindLodFar);
@@ -349,9 +370,21 @@ void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint lea
     glUniform1i(conformLoc, 0);
     glUniform1i(birdAttribsLoc, 0); // Ensure Tree Mode
     
+    // Upload Player Tree Data (if any) to the shader for normal pass clipping
+    if (hasPlayerTree) {
+        glUniform4f(playerTreeDataLoc, playerTree.x, playerTree.y, playerTree.z, playerTree.w);
+    } else {
+        glUniform4f(playerTreeDataLoc, 0.0f, 0.0f, 0.0f, 0.0f);
+    }
+    glUniform1i(isPlayerTreePassLoc, 0); // Normal Pass initially
+
+    GLuint lastInstanceVBO = 0;
+
     for (RenderBatch* bPtr : m_visibleBatches) {
         RenderBatch& b = *bPtr;
         if (b.treeCount == 0) continue;
+        
+        lastInstanceVBO = b.treeInstanceVBO;
 
         // --- PASS A: TRUNKS ---
         glUniform1f(windStrLoc, 0.0f);
@@ -375,7 +408,7 @@ void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint lea
         
         glDrawArraysInstanced(GL_TRIANGLES, 0, trunkVertexCount, b.treeCount);
 
-        // --- PASS B: LEAVES ---
+        // --- PASS B: LEAVES (OPAQUE PASS, normal depth writing, no blending) ---
         glUniform1f(windStrLoc, 1.0f);
         
         glBindVertexArray(leavesVAO);
@@ -395,10 +428,38 @@ void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint lea
         // Cleanup
         glDisableVertexAttribArray(4);
     }
+
+    // --- PASS C: PLAYER TREE LEAVES (TRANSLUCENT PASS, depth writing disabled, blending enabled) ---
+    if (hasPlayerTree && lastInstanceVBO != 0) {
+        glUniform1i(isPlayerTreePassLoc, 1);
+        glUniform1f(windStrLoc, 1.0f);
+
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glDepthMask(GL_FALSE); // Disable depth write for transparent foliage
+
+        glBindVertexArray(leavesVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, lastInstanceVBO);
+        glEnableVertexAttribArray(4);
+        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+        glVertexAttribDivisor(4, 1);
+
+        glDisableVertexAttribArray(5);
+        glDisableVertexAttribArray(6);
+        glDisableVertexAttribArray(7);
+
+        glDrawArraysInstanced(GL_TRIANGLES, 0, leavesVertexCount, 1);
+
+        glDepthMask(GL_TRUE); // Re-enable depth write
+        glDisable(GL_BLEND);
+        glDisableVertexAttribArray(4);
+    }
     
     // Reset States
     glUniform1i(instancedLoc, 0);
     glUniform1f(windStrLoc, 0.0f);
+    glUniform1i(isPlayerTreePassLoc, 0);
+    glUniform4f(playerTreeDataLoc, 0.0f, 0.0f, 0.0f, 0.0f);
     glBindVertexArray(0);
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }

@@ -33,11 +33,19 @@ public:
     // Physics
     glm::vec3 Velocity;
     bool IsGrounded;
+    bool IsClimbing = false;
+    glm::vec3 ClimbingTreePos = glm::vec3(0.0f);
+    float ClimbingTreeScale = 1.0f;
     float Gravity = 20.0f;
     float JumpForce = 8.0f;
     float WalkSpeed = 6.0f;
     float PlayerHeight = 1.6f;
     float PlayerRadius = 0.3f;
+
+    // Noise/Sound Emission System
+    float SoundVolumeEmitted = 0.0f;
+    float m_climbNoiseTimer = 0.35f;
+    float m_cameraNoiseAccumulator = 0.0f;
 
     // Game Feel
     float HeadBobTimer;

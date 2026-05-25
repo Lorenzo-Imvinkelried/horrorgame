@@ -26,7 +26,8 @@ public:
 
     void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront, glm::vec2 windDir,
                 ChunkManager& chunkManager, ScentSystem& scentSystem, class ParticleSystem& particles,
-                glm::vec3 playerVelocity, int playerAmmo, bool isPlayerReloading);
+                glm::vec3 playerVelocity, int playerAmmo, bool isPlayerReloading,
+                bool isPlayerClimbing, glm::vec3 playerClimbingTreePos);
     
     // Senses
     void HearSound(glm::vec3 sourcePos, float volume);
@@ -135,6 +136,9 @@ private:
     float m_stalkDashTimer;
     glm::vec3 m_stalkDashDir;
     
+    // Player climbing awareness
+    glm::vec3 m_knownPlayerTreePos;
+    
     glm::vec3 ApplyObstacleAvoidance(glm::vec3 desiredVel, ChunkManager& chunkManager);
     
     // Visual Decoupling (15 FPS)
@@ -150,6 +154,35 @@ private:
     // Returns index of best tree in m_detectedTrees, or -1
     int GetBestTreeIndex();
     bool CheckLineOfSight(glm::vec3 playerPos, class ChunkManager& chunkManager);
+    bool GetBlockingTree(glm::vec3 targetPos, class ChunkManager& chunkManager, glm::vec4& outTree);
+
+    // Flanking & Tactical Navigation
+    bool m_chooseLeftFlank;
+    float m_flankDecisionTimer;
+    glm::vec3 m_tacticalTargetOffset;
+
+    // Legendary Hunter AI
+    float m_exposure;
+    bool m_isCrouching;
+    float m_crouchFactor;
+    float m_distractionTimer;
+    float m_spiralSearchTimer;
+    float m_spiralSearchRadius;
+    bool m_isEnraged;
+    float m_rageTimer;
+    bool m_isPanicked;
+    float m_panicTimer;
+    glm::vec3 m_eyeColor;
+    float m_eyeBrightness;
+    float m_bleedTimer;
+    float m_fakeChargeTimer;
+    float m_climbCooldownTimer;
+    bool m_shouldScream;
+    float m_spiralSearchAngle;
+    glm::vec3 m_lastScentWorldPos;
+    bool m_hasLastScent;
+
+    float MultiRaycastExposure(glm::vec3 playerPos, class ChunkManager& chunkManager);
 
     std::vector<glm::vec4> m_nearbyTreesCache; // Cache for collision loops
     

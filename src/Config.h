@@ -61,6 +61,7 @@ namespace Config {
         constexpr float ProjectileGravity = -45.0f;     // Heavy drop
         constexpr float ProjectileWindInfluence = 0.5f; // Negligible wind (Lead is heavy)
         constexpr float ProjectileDrag = 0.1f;          // Low drag (Aerodynamic)
+        constexpr float GunshotSoundRange = 999999.0f; // Infinite sound range
     }
 
     namespace Monster {
@@ -79,6 +80,7 @@ namespace Config {
         constexpr float HideDistance = 40.0f; // Aumentado de 30.0f
         constexpr float MaxFlightDistance = 80.0f; // NUEVO: limite distancia
         constexpr float MaxFlightTime = 8.0f; // NUEVO: tiempo maximo vuelo
+        constexpr float SoundRange = 45.0f; // Range of the sound emitted when birds startle/fly away
     }
     
     namespace Scent {

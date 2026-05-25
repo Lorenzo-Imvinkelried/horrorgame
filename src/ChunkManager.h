@@ -97,7 +97,7 @@ public:
     }
 
     // New Render Method for Trees
-    void RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint leavesVAO, int trunkVertexCount, int leavesVertexCount);
+    void RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint leavesVAO, int trunkVertexCount, int leavesVertexCount, glm::vec3 playerPos);
 
 private:
     void LoadWorld();

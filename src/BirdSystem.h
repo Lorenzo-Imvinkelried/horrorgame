@@ -34,6 +34,9 @@ struct ChunkKey {
     }
 };
 
+#include <memory>
+class Monster;
+
 class BirdSystem {
 public:
     BirdSystem();
@@ -42,7 +45,7 @@ public:
     void TrySpawnBirds(const std::vector<glm::vec4>& treeData); 
     
     // Main update loop
-    void Update(float deltaTime, glm::vec3 playerPos, const std::vector<glm::vec3>& monsterPositions);
+    void Update(float deltaTime, glm::vec3 playerPos, const std::vector<std::unique_ptr<class Monster>>& monsters);
     
     void Render(GLuint shaderProgram);
     

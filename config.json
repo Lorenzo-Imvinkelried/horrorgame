@@ -1,4 +1,5 @@
 {
   "isNight": true,
-  "darkness": 0.08
+  "darkness": 0.08,
+  "flashlightEnabled": true
 }

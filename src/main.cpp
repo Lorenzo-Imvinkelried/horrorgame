@@ -301,6 +301,7 @@ struct GameConfig {
     bool isNight = false;
     float darkness = 0.08f;
     int monsterCount = 1;
+    bool flashlightEnabled = true;
 };
 
 #include <fstream>
@@ -333,7 +334,8 @@ GameConfig LoadConfig(const std::string& filename) {
             outFile << "{\n";
             outFile << "  \"isNight\": false,\n";
             outFile << "  \"darkness\": 0.08,\n";
-            outFile << "  \"monsterCount\": 1\n";
+            outFile << "  \"monsterCount\": 1,\n";
+            outFile << "  \"flashlightEnabled\": true\n";
             outFile << "}\n";
             outFile.close();
         }
@@ -370,12 +372,20 @@ GameConfig LoadConfig(const std::string& filename) {
                     ss >> config.monsterCount;
                 }
             }
+            if (line.find("flashlightEnabled") != std::string::npos) {
+                if (line.find("true") != std::string::npos) {
+                    config.flashlightEnabled = true;
+                } else if (line.find("false") != std::string::npos) {
+                    config.flashlightEnabled = false;
+                }
+            }
         }
         file.close();
         std::cout << "[Config] Loaded configuration from: " << foundPath 
                   << " (isNight: " << (config.isNight ? "true" : "false") 
                   << ", darkness: " << config.darkness 
-                  << ", monsterCount: " << config.monsterCount << ")" << std::endl;
+                  << ", monsterCount: " << config.monsterCount 
+                  << ", flashlightEnabled: " << (config.flashlightEnabled ? "true" : "false") << ")" << std::endl;
     }
     return config;
 }
@@ -801,7 +811,8 @@ int main() {
         for (auto& mPtr : monsters) {
             mPtr->Update(deltaTime, player.Position, player.Front, windDir, 
                         chunkManager, scentSystem, particles,
-                        player.Velocity, weapon.GetAmmo(), weapon.IsReloading());
+                        player.Velocity, weapon.GetAmmo(), weapon.IsReloading(),
+                        player.IsClimbing, player.ClimbingTreePos);
         }
 
         // GAME OVER CHECK & TIMING
@@ -832,11 +843,7 @@ int main() {
         }
         
         // Update Birds
-        std::vector<glm::vec3> monsterPositions;
-        for (const auto& mPtr : monsters) {
-            monsterPositions.push_back(mPtr->GetPosition());
-        }
-        birds.Update(deltaTime, player.Position, monsterPositions);
+        birds.Update(deltaTime, player.Position, monsters);
         birds.CleanupDistantBirds(player.Position, 80.0f); // Optimization
         
         if (!debugCam) {
@@ -880,6 +887,39 @@ int main() {
             }
         }
 
+        // Handle climbing noises (camera/movement noise)
+        if (player.SoundVolumeEmitted > 0.0f) {
+            // Alert all monsters
+            for (auto& mPtr : monsters) {
+                mPtr->HearSound(player.Position, player.SoundVolumeEmitted);
+            }
+            // Spawn leaf particles (green) rustling/falling from the player
+            int leafCount = (player.SoundVolumeEmitted > 18.0f) ? 12 : 5;
+            for (int i = 0; i < leafCount; ++i) {
+                // Random offset around player position in tree foliage
+                float rx = (rand() % 100 / 100.0f - 0.5f) * 4.0f;
+                float ry = (rand() % 100 / 100.0f - 0.5f) * 2.0f;
+                float rz = (rand() % 100 / 100.0f - 0.5f) * 4.0f;
+                glm::vec3 spawnPos = player.Position + glm::vec3(rx, ry - 0.5f, rz);
+                
+                // Slowly falling leaves
+                glm::vec3 vel(
+                    (rand() % 100 / 100.0f - 0.5f) * 1.5f,
+                    -1.5f - (rand() % 100 / 100.0f) * 1.5f,
+                    (rand() % 100 / 100.0f - 0.5f) * 1.5f
+                );
+                // Green leaf color variations
+                float g = 0.5f + (rand() % 100 / 200.0f);
+                float r = 0.1f + (rand() % 100 / 1000.0f);
+                float b = 0.1f + (rand() % 100 / 1000.0f);
+                glm::vec4 color(r, g, b, 0.8f);
+                
+                particles.SpawnParticle(spawnPos, vel, color, 0.12f, 2.0f, -1.0f);
+            }
+            // Reset sound volume
+            player.SoundVolumeEmitted = 0.0f;
+        }
+
         footprints.Update(deltaTime);
         globalTime += deltaTime;
 
@@ -900,6 +940,7 @@ int main() {
         // DAY/NIGHT & FLASHLIGHT CONFIGURATION
         glUniform1i(glGetUniformLocation(shaderProgram, "u_IsNight"), gameCfg.isNight ? 1 : 0);
         glUniform1f(glGetUniformLocation(shaderProgram, "u_Darkness"), gameCfg.darkness);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_FlashlightEnabled"), gameCfg.flashlightEnabled ? 1 : 0);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerPos"), player.Position.x, player.Position.y, player.Position.z);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerFront"), player.Front.x, player.Front.y, player.Front.z);
         glm::vec3 fogCol = gameCfg.isNight ? glm::vec3(0.005f, 0.005f, 0.015f) : glm::vec3(0.4f, 0.6f, 1.0f);
@@ -952,7 +993,7 @@ int main() {
         // However, I need to make sure I pass the correct counts.
         // trunkMesh.size() and leavesMesh.size().
         
-        chunkManager.RenderTrees(shaderProgram, trunkVAO, leavesVAO, (int)trunkMesh.size(), (int)leavesMesh.size());
+        chunkManager.RenderTrees(shaderProgram, trunkVAO, leavesVAO, (int)trunkMesh.size(), (int)leavesMesh.size(), player.Position);
 
         // 3. Footprints
         glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0); // DISABLED: Using CPU Exact Height

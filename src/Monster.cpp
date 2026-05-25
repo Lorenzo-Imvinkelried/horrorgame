@@ -32,7 +32,12 @@ Monster::Monster(glm::vec3 startPos)
       m_stuckTimer(0.0f), m_prevPos(startPos), m_feintTimer(0.0f), m_feintAngle(0.0f),
       m_decisionLockTimer(0.0f), m_estimatedPlayerAmmo(2), m_wasPlayerReloading(false), m_estimatedPlayerPos(startPos), m_estimatedPlayerPosTimer(0.0f),
       m_canopyWaitTime(8.0f), m_confidence(0.5f), m_stress(0.0f),
-      m_antiCampCenter(startPos), m_antiCampTimer(0.0f), m_stalkDashTimer(0.0f), m_stalkDashDir(0.0f)
+      m_chooseLeftFlank(false), m_flankDecisionTimer(0.0f), m_tacticalTargetOffset(0.0f),
+      m_exposure(0.0f), m_isCrouching(false), m_crouchFactor(0.0f), m_distractionTimer(5.0f), m_spiralSearchTimer(0.0f), m_spiralSearchRadius(3.0f),
+      m_isEnraged(false), m_rageTimer(0.0f), m_isPanicked(false), m_panicTimer(0.0f),
+      m_eyeColor(1.0f, 0.0f, 0.0f), m_eyeBrightness(1.0f), m_antiCampCenter(startPos), m_antiCampTimer(0.0f),
+      m_bleedTimer(0.0f), m_fakeChargeTimer(-1.0f), m_climbCooldownTimer(0.0f), m_shouldScream(false), m_spiralSearchAngle(0.0f), m_knownPlayerTreePos(0.0f),
+      m_lastScentWorldPos(0.0f), m_hasLastScent(false)
 {
     // Load Model
     std::string path = "assets/models/monster.txt";
@@ -183,15 +188,25 @@ void Monster::AnimateMesh() {
         headPitchRad = -0.4f; // Head looking up screaming
     }
     
+    float hipBend = 0.0f;
+    float kneeBend = 0.0f;
+    float heightOffset = 0.0f;
+    if (m_crouchFactor > 0.001f) {
+        bodyLean = glm::mix(bodyLean, 0.6f, m_crouchFactor);
+        hipBend = -0.5f * m_crouchFactor;
+        kneeBend = 0.9f * m_crouchFactor;
+        heightOffset = -0.4f * m_crouchFactor;
+    }
+
     // Pivots
-    glm::vec3 lShoulder(-0.4f, 2.0f, 0.4f);
-    glm::vec3 rShoulder(0.4f, 2.0f, 0.4f);
-    glm::vec3 lHip(-0.18f, 1.15f, 0.0f);
-    glm::vec3 rHip(0.18f, 1.15f, 0.0f);
-    glm::vec3 lKnee(-0.18f, 0.75f, 0.0f);
-    glm::vec3 rKnee(0.18f, 0.75f, 0.0f);
-    glm::vec3 neckPivot(0.0f, 2.16f, 0.5f);
-    glm::vec3 hipsPivot(0.0f, 1.2f, 0.0f);
+    glm::vec3 lShoulder(-0.4f, 2.0f + heightOffset, 0.4f);
+    glm::vec3 rShoulder(0.4f, 2.0f + heightOffset, 0.4f);
+    glm::vec3 lHip(-0.18f, 1.15f + heightOffset, 0.0f);
+    glm::vec3 rHip(0.18f, 1.15f + heightOffset, 0.0f);
+    glm::vec3 lKnee(-0.18f, 0.75f + heightOffset, 0.0f);
+    glm::vec3 rKnee(0.18f, 0.75f + heightOffset, 0.0f);
+    glm::vec3 neckPivot(0.0f, 2.16f + heightOffset, 0.5f);
+    glm::vec3 hipsPivot(0.0f, 1.2f + heightOffset, 0.0f);
     
     // Helper to rotate a point around an arbitrary pivot and axis (X-axis)
     auto rotatePivotX = [](glm::vec3 p, glm::vec3 pivot, float angle) {
@@ -223,32 +238,32 @@ void Monster::AnimateMesh() {
         
         // --- 1. LOCAL TRANSFORMS ---
         if (box.Name.find("L_LEG") != std::string::npos) {
-            box.Pos = rotatePivotX(box.Pos, lHip, limbSwingL);
-            box.Rot.x += limbSwingL;
+            box.Pos = rotatePivotX(box.Pos, lHip, limbSwingL + hipBend);
+            box.Rot.x += limbSwingL + hipBend;
             isUpperBody = false;
         } 
         else if (box.Name.find("L_CALF") != std::string::npos) {
             // Fold knee back during backswing
             float calfSwing = (limbSwingL < 0.0f) ? -limbSwingL * 1.2f : 0.0f;
-            box.Pos = rotatePivotX(box.Pos, lKnee, calfSwing);
-            box.Rot.x += calfSwing;
+            box.Pos = rotatePivotX(box.Pos, lKnee, calfSwing + kneeBend);
+            box.Rot.x += calfSwing + kneeBend;
             // Now rotate around hip
-            box.Pos = rotatePivotX(box.Pos, lHip, limbSwingL);
-            box.Rot.x += limbSwingL;
+            box.Pos = rotatePivotX(box.Pos, lHip, limbSwingL + hipBend);
+            box.Rot.x += limbSwingL + hipBend;
             isUpperBody = false;
         } 
         else if (box.Name.find("R_LEG") != std::string::npos) {
-            box.Pos = rotatePivotX(box.Pos, rHip, limbSwingR);
-            box.Rot.x += limbSwingR;
+            box.Pos = rotatePivotX(box.Pos, rHip, limbSwingR + hipBend);
+            box.Rot.x += limbSwingR + hipBend;
             isUpperBody = false;
         } 
         else if (box.Name.find("R_CALF") != std::string::npos) {
             float calfSwing = (limbSwingR < 0.0f) ? -limbSwingR * 1.2f : 0.0f;
-            box.Pos = rotatePivotX(box.Pos, rKnee, calfSwing);
-            box.Rot.x += calfSwing;
+            box.Pos = rotatePivotX(box.Pos, rKnee, calfSwing + kneeBend);
+            box.Rot.x += calfSwing + kneeBend;
             // Now rotate around hip
-            box.Pos = rotatePivotX(box.Pos, rHip, limbSwingR);
-            box.Rot.x += limbSwingR;
+            box.Pos = rotatePivotX(box.Pos, rHip, limbSwingR + hipBend);
+            box.Rot.x += limbSwingR + hipBend;
             isUpperBody = false;
         }
         else if (box.Name.find("HIPS") != std::string::npos) {
@@ -289,8 +304,9 @@ void Monster::AnimateMesh() {
     std::vector<BoxDef> bodyBoxes;
     std::vector<BoxDef> eyeBoxes;
 
-    for (const auto& box : animatedBoxes) {
+    for (auto& box : animatedBoxes) {
         if (box.Name.find("EYE") != std::string::npos) {
+            box.Color = m_eyeColor * m_eyeBrightness;
             eyeBoxes.push_back(box);
         } else {
             bodyBoxes.push_back(box);
@@ -315,26 +331,109 @@ void Monster::HearSound(glm::vec3 sourcePos, float volume) {
         m_memTimeSinceHeard = 0.0f;
         std::cout << "[AI] Heard noise! Memory updated." << std::endl;
 
-        // If volume is 150.0f, it's a shotgun blast! Incur bullet count estimation
-        if (std::abs(volume - 150.0f) < 0.1f) {
+        // If volume is Config::Gameplay::GunshotSoundRange, it's a shotgun blast! Incur bullet count estimation
+        if (std::abs(volume - Config::Gameplay::GunshotSoundRange) < 0.1f) {
             m_estimatedPlayerAmmo = std::max(0, m_estimatedPlayerAmmo - 1);
             std::cout << "[AI] Heard shotgun blast! Estimated player ammo: " << m_estimatedPlayerAmmo << std::endl;
+        } else if (std::abs(volume - 120.0f) < 0.1f) {
+            m_estimatedPlayerAmmo = std::max(0, m_estimatedPlayerAmmo - 1);
+            std::cout << "[AI] Heard normal gunshot! Estimated ammo: " << m_estimatedPlayerAmmo << std::endl;
         }
     }
 }
 
 void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront, glm::vec2 windDir,
                      ChunkManager& chunkManager, ScentSystem& scentSystem, ParticleSystem& particles,
-                     glm::vec3 playerVelocity, int playerAmmo, bool isPlayerReloading) 
+                     glm::vec3 playerVelocity, int playerAmmo, bool isPlayerReloading,
+                     bool isPlayerClimbing, glm::vec3 playerClimbingTreePos) 
 {
     if (m_isDead) return;
     m_prevPos = m_pos;
 
+    float distToPlayer = glm::distance(m_pos, playerPos);
+    
+    // Aim Detection
+    glm::vec3 dirToMonster = glm::normalize(m_pos - playerPos);
+    float dotProd = glm::dot(playerFront, dirToMonster);
+    bool isAimedAt = (dotProd > 0.96f); // Tightened: Must aim directly at it
+
+    // Vision Scanner (Field of View + Max Distance Check)
+    bool hasLOS = false;
+    if (distToPlayer < 70.0f) { // Max vision range (fog limit)
+        // Calculate monster's look direction (body yaw + head yaw and head pitch)
+        float totalYawRad = glm::radians(m_yaw + m_headYaw);
+        float pitchRad = glm::radians(m_headPitch);
+        glm::vec3 lookDir(
+            sin(totalYawRad) * cos(pitchRad),
+            -sin(pitchRad),
+            cos(totalYawRad) * cos(pitchRad)
+        );
+        
+        glm::vec3 dirToPlayerVec = playerPos - m_pos;
+        if (glm::length(dirToPlayerVec) > 0.01f) {
+            glm::vec3 dirToPlayer = glm::normalize(dirToPlayerVec);
+            
+            // FOV: 180 degrees peripheral when close (< 12m), 100 degrees normal when far
+            float fovLimit = (distToPlayer < 12.0f) ? 90.0f : 50.0f;
+            float cosAngle = glm::dot(lookDir, dirToPlayer);
+            if (cosAngle > cos(glm::radians(fovLimit))) {
+                hasLOS = CheckLineOfSight(playerPos, chunkManager);
+            }
+        }
+    }
+    m_hasVisualContact = hasLOS;
+
+    if (m_shouldScream) {
+        m_shouldScream = false;
+        // Spawn big burst of red scream/rage vapor from the monster's head
+        glm::vec3 headCenterLocal(0.0f, 2.34f, 0.65f);
+        glm::mat4 bodyMat = glm::mat4(1.0f);
+        bodyMat = glm::translate(bodyMat, m_pos);
+        bodyMat = glm::rotate(bodyMat, glm::radians(m_yaw), glm::vec3(0, 1, 0));
+        glm::vec3 headWorld = glm::vec3(bodyMat * glm::vec4(headCenterLocal, 1.0f));
+        for (int i = 0; i < 25; ++i) {
+            glm::vec3 pVel(
+                (rand() % 100 / 50.0f - 1.0f) * 2.5f,
+                (rand() % 100 / 50.0f - 0.2f) * 3.0f,
+                (rand() % 100 / 50.0f - 1.0f) * 2.5f
+            );
+            particles.SpawnParticle(headWorld, pVel, glm::vec4(0.9f, 0.0f, 0.0f, 0.8f), 0.15f, 0.8f, 0.0f);
+        }
+    }
+
+    // Senses: Update known player tree if player is climbing
+    if (m_climbCooldownTimer > 0.0f) {
+        m_climbCooldownTimer -= deltaTime;
+    }
+
+    if (isPlayerClimbing && m_climbCooldownTimer <= 0.0f) {
+        bool playerMoving = (glm::length(playerVelocity) > 0.1f);
+        bool heardClimbing = (distToPlayer < 12.0f && playerMoving) || (m_memTimeSinceHeard < 2.0f); // Heard them rustle/move
+        bool closeProximity = (distToPlayer < 8.0f); // Right under/near the tree
+        
+        if (hasLOS || heardClimbing || closeProximity || m_memTimeSinceSeen < 2.0f || m_memTimeSinceSmelled < 2.0f) {
+            m_knownPlayerTreePos = playerClimbingTreePos;
+        } else {
+            // Gradually forget player's tree position if silent, out of sight, and out of smelling range
+            if (m_memTimeSinceSeen > 8.0f && m_memTimeSinceHeard > 8.0f && m_memTimeSinceSmelled > 8.0f) {
+                m_knownPlayerTreePos = glm::vec3(0.0f);
+            }
+        }
+    } else {
+        m_knownPlayerTreePos = glm::vec3(0.0f);
+    }
+
+    // Cache nearby trees once per frame at the start of Update
+    m_nearbyTreesCache.clear();
+    if (m_action != MonsterAction::CLIMB_TREE) {
+        chunkManager.GetTreesInRange(m_pos, 5.0f, m_nearbyTreesCache);
+    }
+
     // --- SISTEMA ANTI-CAMPERO ---
     if (glm::distance(playerPos, m_antiCampCenter) > 6.0f) {
-        // El jugador se mueve bien, reseteamos
+        // El jugador se mueve bien, enfriamos el timer gradualmente para evitar wiggles
         m_antiCampCenter = playerPos;
-        m_antiCampTimer = 0.0f;
+        m_antiCampTimer = std::max(0.0f, m_antiCampTimer - deltaTime * 3.0f);
     } else {
         m_antiCampTimer += deltaTime;
         if (m_antiCampTimer > 8.0f) {
@@ -356,26 +455,30 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
     
     // Bleeding Effect
     if (m_health < 2.0f) {
-        static float bleedTimer = 0.0f;
-        bleedTimer += deltaTime;
-        if (bleedTimer > 0.3f) { 
-            bleedTimer = 0.0f;
+        m_bleedTimer += deltaTime;
+        if (m_bleedTimer > 0.3f) { 
+            m_bleedTimer = 0.0f;
             glm::vec3 bleedPos = m_pos + glm::vec3((rand()%100/200.0f - 0.25f), 1.5f, (rand()%100/200.0f - 0.25f));
             particles.SpawnParticle(bleedPos, glm::vec3(0, -2.0f, 0), glm::vec4(0.8f, 0.0f, 0.0f, 1.0f), 0.1f, 1.0f, -9.8f);
         }
     }
 
     // --- AGGRESSION SENSES & FLASH DETECT ---
-    float distToPlayer = glm::distance(m_pos, playerPos);
-    
     // 1. INSTANT KILL (Handled in main.cpp for glitched screen)
-
-    // Aim Detection & Line of Sight
-    glm::vec3 dirToMonster = glm::normalize(m_pos - playerPos);
-    float dotProd = glm::dot(playerFront, dirToMonster);
-    bool isAimedAt = (dotProd > 0.96f); // Tightened: Must aim directly at it
-    bool hasLOS = CheckLineOfSight(playerPos, chunkManager);
-    m_hasVisualContact = hasLOS;
+    
+    // Update dynamic exposure meter
+    float instantExposure = MultiRaycastExposure(playerPos, chunkManager);
+    float exposureChangeSpeed = 2.5f; // Speed of visual adaptation
+    m_exposure = glm::mix(m_exposure, instantExposure, glm::clamp(deltaTime * exposureChangeSpeed, 0.0f, 1.0f));
+    
+    // Crouch trigger condition
+    bool targetCrouch = (m_action == MonsterAction::STALK) || 
+                        (m_action == MonsterAction::RETREAT && m_exposure < 0.6f) ||
+                        (m_action == MonsterAction::INVESTIGATE && m_exposure < 0.6f && m_estimatedPlayerAmmo > 0);
+    
+    float crouchTransitionSpeed = 5.0f; // Speed of crouch visual transition
+    m_crouchFactor = glm::mix(m_crouchFactor, targetCrouch ? 1.0f : 0.0f, glm::clamp(deltaTime * crouchTransitionSpeed, 0.0f, 1.0f));
+    m_isCrouching = (m_crouchFactor > 0.5f);
     
     // Update estimated player position (introduces organic human error when not in LOS)
     if (hasLOS) {
@@ -410,14 +513,16 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
     }
 
     // --- 2. STARTLE STATE (Reaction to flashlight / aim) ---
-    if (isAimedAt && hasLOS && playerAmmo > 0 && m_startleCooldownTimer <= 0.0f) {
+    if (isAimedAt && hasLOS && m_estimatedPlayerAmmo > 0 && m_startleCooldownTimer <= 0.0f) {
         if (!m_hasStartled) {
             m_hasStartled = true;
             m_startleCooldownTimer = 10.0f; // 10 seconds of immunity to startling
             m_action = MonsterAction::RETREAT;
             m_stateTimer = 0.0f;
             m_bestTreeIndex = -1;
-            std::cout << "[AI] STARTLED! Playing running scream... Cooldown started (10s)" << std::endl;
+            m_isPanicked = true;
+            m_panicTimer = 3.0f; // Panicked state duration
+            std::cout << "[AI] STARTLED! Entering Panic Flee mode for 3s..." << std::endl;
         }
     } else {
         m_hasStartled = false;
@@ -471,6 +576,67 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
     m_confidence = glm::clamp(m_confidence, 0.0f, 1.0f);
     m_stress = glm::clamp(m_stress, 0.0f, 1.0f);
 
+    // Blood Rage check: Health is critical
+    if (m_health > 0.0f && m_health <= 1.2f) {
+        if (!m_isEnraged) {
+            m_isEnraged = true;
+            m_rageTimer = 0.0f;
+            std::cout << "[AI-Emotion] BLOOD RAGE ACTIVATED! Health critical: " << m_health << std::endl;
+        }
+    } else {
+        m_isEnraged = false;
+    }
+
+    // Decay panic state
+    if (m_panicTimer > 0.0f) {
+        m_panicTimer -= deltaTime;
+        if (m_panicTimer <= 0.0f) {
+            m_isPanicked = false;
+        }
+    }
+
+    // Spawn Blood Rage red vapor trail
+    if (m_isEnraged) {
+        m_rageTimer += deltaTime;
+        static float rageParticleTimer = 0.0f;
+        rageParticleTimer += deltaTime;
+        if (rageParticleTimer >= 0.03f) {
+            rageParticleTimer = 0.0f;
+            glm::vec3 headCenterLocal(0.0f, 1.8f, 0.3f);
+            glm::mat4 bodyMat = glm::mat4(1.0f);
+            bodyMat = glm::translate(bodyMat, m_pos);
+            bodyMat = glm::rotate(bodyMat, glm::radians(m_yaw), glm::vec3(0, 1, 0));
+            glm::vec3 ragePos = glm::vec3(bodyMat * glm::vec4(headCenterLocal, 1.0f));
+            
+            particles.SpawnParticle(ragePos, glm::vec3((rand()%100/50.0f - 1.0f)*0.8f, (rand()%100/100.0f)*1.5f, (rand()%100/50.0f - 1.0f)*0.8f), glm::vec4(1.0f, 0.0f, 0.0f, 0.9f), 0.18f, 0.8f, 0.0f);
+        }
+    }
+
+    // --- EYE GLOW STATE MODULATION ---
+    if (m_action == MonsterAction::CHASE) {
+        if (m_isEnraged) {
+            m_eyeColor = glm::vec3(1.0f, 0.0f, 0.0f);
+            m_eyeBrightness = 2.0f; // Overcharged red
+        } else {
+            m_eyeColor = glm::vec3(1.0f, 0.0f, 0.0f);
+            m_eyeBrightness = 1.2f; // Solid high-intensity red
+        }
+    } else if (m_action == MonsterAction::STALK) {
+        // Pulsing dim red to stay stealthy
+        float pulse = 0.2f + 0.15f * sin(m_stateTimer * 3.0f);
+        m_eyeColor = glm::vec3(pulse, 0.0f, 0.0f);
+        m_eyeBrightness = pulse;
+    } else if (m_action == MonsterAction::RETREAT) {
+        // Rapidly flashing red/dim-red (panic)
+        float flash = (std::fmod(m_stateTimer, 0.25f) < 0.125f) ? 1.0f : 0.1f;
+        m_eyeColor = glm::vec3(flash, 0.0f, 0.0f);
+        m_eyeBrightness = flash;
+    } else {
+        // Other states (Wander, Investigate, Scent, Climb)
+        m_eyeColor = glm::vec3(0.5f, 0.1f, 0.0f); // Dim amber/red
+        m_eyeBrightness = 0.5f;
+    }
+
     // --- 3. UPDATE MEMORY TIMERS ---
     m_memTimeSinceHeard += deltaTime;
     m_memTimeSinceSmelled += deltaTime;
@@ -482,6 +648,15 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
     }
     if (m_startleCooldownTimer > 0.0f) {
         m_startleCooldownTimer -= deltaTime;
+    }
+    if (m_flankDecisionTimer > 0.0f) {
+        m_flankDecisionTimer -= deltaTime;
+    }
+    if (m_distractionTimer > 0.0f) {
+        m_distractionTimer -= deltaTime;
+    }
+    if (m_fakeChargeTimer > 0.0f) {
+        m_fakeChargeTimer -= deltaTime;
     }
 
     // Re-evaluate cover if player is far away and out of sight (threat has passed)
@@ -503,18 +678,29 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
         m_scentCheckTimer = 0.0f;
         ScentNode* bestScent = scentSystem.GetStrongestScentInRadius(m_pos, 35.0f);
         if (bestScent) {
-            m_memPlayerPos = bestScent->sourcePos;
+            m_lastScentWorldPos = bestScent->pos;
+            m_hasLastScent = true;
+            // ONLY update memory to the exact player position if extremely close (within direct smelling distance)
+            if (distToPlayer < 7.0f) {
+                m_memPlayerPos = playerPos;
+            } else {
+                // Otherwise, target the smell packet itself, not the player's exact coordinate!
+                m_memPlayerPos = bestScent->pos;
+            }
             m_memTimeSinceSmelled = 0.0f;
             
             // Get local gradient direction
             m_trackingDir = scentSystem.GetLocalScentGradient(m_pos, 30.0f);
         } else {
+            m_hasLastScent = false;
             m_trackingDir = glm::vec3(0.0f);
         }
     }
 
     // --- 4. UTILITY SCORING ---
     {
+        bool knowsPlayerPos = hasLOS || (m_memTimeSinceSeen < 6.0f) || (m_memTimeSinceHeard < 4.0f) || (m_memTimeSinceSmelled < 2.0f && distToPlayer < 8.0f);
+
         float scoreWander = 10.0f;
         float scoreInvestigate = 0.0f;
         float scoreStalk = 0.0f;
@@ -579,7 +765,8 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                     threatPersists = threatPersists || playerLookingAtTree;
                 }
                 
-                if (m_peekTimer >= 0.6f && m_peekTimer < 900.0f && !threatPersists) {
+                float peekThreshold = 0.6f + m_stress * 0.8f;
+                if (m_peekTimer >= peekThreshold && m_peekTimer < 900.0f && !threatPersists) {
                     scoreRetreat = 0.0f;
                 }
             }
@@ -608,63 +795,101 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
 
         scoreRetreat = std::max(0.0f, scoreRetreat);
 
-        // RELOADING behavior:
-        // During reload, the player is vulnerable (effective ammo is 0). The monster charges!
-        if (isPlayerReloading) {
-            scoreChase = 180.0f + m_confidence * 20.0f - m_stress * 10.0f;
-            scoreRetreat = 0.0f;
-        }
-
-        // CHASE scoring:
-        if (m_estimatedPlayerAmmo == 0) {
-            // Absolute aggression! Charge the player immediately
-            scoreChase = 180.0f + m_confidence * 20.0f - m_stress * 10.0f;
-        } else if (m_estimatedPlayerAmmo == 1) {
-            // Only chase if player is oblivious and very close
-            if (hasLOS && !isAimedAt && distToPlayer < 5.0f) {
-                scoreChase = 80.0f + m_confidence * 15.0f - m_stress * 15.0f;
+        // CHASE and STALK scoring restricted to knowing player position
+        if (knowsPlayerPos) {
+            // RELOADING behavior:
+            // During reload, the player is vulnerable (effective ammo is 0). The monster charges!
+            if (isPlayerReloading) {
+                scoreChase = 180.0f + m_confidence * 20.0f - m_stress * 10.0f;
+                scoreRetreat = 0.0f;
             }
-        } else { // 2 Bullets
-            // Never charge directly!
+
+            // CHASE scoring:
+            if (m_estimatedPlayerAmmo == 0) {
+                // Absolute aggression! Charge the player immediately
+                scoreChase = 180.0f + m_confidence * 20.0f - m_stress * 10.0f;
+            } else if (m_estimatedPlayerAmmo == 1) {
+                // Only chase if player is oblivious and very close
+                if (hasLOS && !isAimedAt && distToPlayer < 5.0f) {
+                    scoreChase = 80.0f + m_confidence * 15.0f - m_stress * 15.0f;
+                }
+            } else { // 2 Bullets
+                // Never charge directly!
+                scoreChase = 0.0f;
+            }
+
+            // FAKE CHARGE: Maintain active fake charge or trigger a new one
+            if (m_fakeChargeTimer > 0.0f) {
+                scoreChase = 160.0f; // Keep the bait active!
+            } else if (m_estimatedPlayerAmmo > 0 && isAimedAt && distToPlayer > 12.0f && distToPlayer < 25.0f) {
+                if (rand() % 200 == 0) { // Trigger check (approx. 0.5% per frame)
+                    m_fakeChargeTimer = 1.2f; // Perform fake charge for 1.2 seconds
+                    scoreChase = 160.0f;
+                }
+            }
+
+            // TRAMPA DE EMBOSCADA: If hiding behind cover tree, player gets close (< 7.5m)
+            bool isCornered = (distToPlayer < 7.5f);
+            bool ambushOpportunity = (m_action == MonsterAction::RETREAT && m_bestTreeIndex != -1 && isCornered);
+            if (ambushOpportunity) {
+                if (m_estimatedPlayerAmmo == 0) {
+                    scoreChase = 200.0f; // JUMP OUT AMBUSH!
+                } else if (m_estimatedPlayerAmmo == 1 && !isAimedAt) {
+                    scoreChase = 150.0f; // Slink out if player is looking away
+                }
+            }
+
+            // Surprise attack from behind (Stalk to Chase transition)
+            if ((m_action == MonsterAction::STALK || m_action == MonsterAction::CHASE) && distToPlayer < 12.0f && hasLOS && !isVisibleToPlayer) {
+                scoreChase = 160.0f; // Surprise leap/charge!
+            }
+
+            // STALK (Flanking) scoring:
+            if (m_estimatedPlayerAmmo > 0) {
+                // Good opportunity to stalk if player is looking away (very stealthy!)
+                if (!isVisibleToPlayer) {
+                    scoreStalk = 95.0f + (m_confidence - m_stress) * 20.0f; // Stalk from behind/flanks
+                } else {
+                    scoreStalk = 0.0f; // Visible, don't stalk
+                }
+            } else { // 0 Bullets
+                // Don't stalk, just chase!
+                scoreStalk = 0.0f;
+            }
+        } else {
             scoreChase = 0.0f;
-        }
-
-        // FAKE CHARGE: 20% de probabilidad de cargar aunque tengas balas, para hacerte entrar en pánico.
-        if (m_estimatedPlayerAmmo > 0 && isAimedAt && distToPlayer > 12.0f && distToPlayer < 25.0f) {
-            if (m_stateTimer < 1.0f && rand() % 100 < 20) {
-                scoreChase = 160.0f; // Amaga a morderte
-            }
-        }
-
-        // TRAMPA DE EMBOSCADA: If hiding behind cover tree, player gets close (< 7.5m)
-        bool isCornered = (distToPlayer < 7.5f);
-        bool ambushOpportunity = (m_action == MonsterAction::RETREAT && m_bestTreeIndex != -1 && isCornered);
-        if (ambushOpportunity) {
-            scoreChase = 200.0f; // JUMP OUT AMBUSH! Jumps out of cover to strike.
-        }
-
-        // Surprise attack from behind (Stalk to Chase transition)
-        if ((m_action == MonsterAction::STALK || m_action == MonsterAction::CHASE) && distToPlayer < 12.0f && hasLOS && !isVisibleToPlayer) {
-            scoreChase = 160.0f; // Surprise leap/charge!
-        }
-
-        // STALK (Flanking) scoring:
-        if (m_estimatedPlayerAmmo > 0) {
-            // Good opportunity to stalk if player is looking away (very stealthy!)
-            if (!isVisibleToPlayer) {
-                scoreStalk = 95.0f + (m_confidence - m_stress) * 20.0f; // Stalk from behind/flanks
-            } else {
-                scoreStalk = 0.0f; // Visible, don't stalk
-            }
-        } else { // 0 Bullets
-            // Don't stalk, just chase!
             scoreStalk = 0.0f;
         }
 
         scoreStalk = std::max(0.0f, scoreStalk);
 
         // CLIMB_TREE scoring:
-        if (m_estimatedPlayerAmmo == 2) {
+        if (m_climbCooldownTimer > 0.0f) {
+            scoreClimbTree = 0.0f; // Prevent re-climbing entirely during cooldown
+        } else if (glm::length(m_knownPlayerTreePos) > 0.1f) {
+            // Cautious check: if player is up in the tree, and monster is NOT enraged, player is NOT reloading, and has ammo
+            bool playerVulnerable = m_isEnraged || isPlayerReloading || m_estimatedPlayerAmmo == 0;
+            if (playerVulnerable) {
+                scoreClimbTree = 190.0f; // High priority: climb the player's tree to attack them!
+            } else {
+                scoreClimbTree = 0.0f; // Cautious: do not climb to avoid being shot
+                
+                // Cautious Tree Tactics: Hide behind a cover tree or stalk/orbit the player's tree
+                float distToPlayerTree = glm::distance(m_pos, m_knownPlayerTreePos);
+                if (distToPlayerTree < 15.0f) {
+                    scoreRetreat = 140.0f; // Retreat to a cover tree (hide)
+                    scoreStalk = 100.0f;
+                } else {
+                    scoreStalk = 130.0f;   // Circle/orbit the player's tree
+                    scoreRetreat = 90.0f;
+                }
+                // Suppress aggressive or unfocused actions when cautious of tree threat
+                scoreChase = 0.0f;
+                scoreWander = 0.0f;
+                scoreInvestigate = 0.0f;
+                scoreTrackScent = 0.0f;
+            }
+        } else if (m_estimatedPlayerAmmo == 2) {
             if (m_action == MonsterAction::RETREAT && m_bestTreeIndex != -1 && distToPlayer < 8.0f && !isAimedAt) {
                 scoreClimbTree = 140.0f;
             } else if (!hasLOS && m_memTimeSinceSeen > 10.0f) {
@@ -832,7 +1057,8 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
             
             // 1. Intercepción predictiva (calcula dónde va a estar el jugador)
             float chaseSpeedMult = 2.2f;
-            if (m_estimatedPlayerAmmo == 0) chaseSpeedMult = 2.8f;
+            if (m_isEnraged) chaseSpeedMult = 3.5f; // Blood rage speed boost
+            else if (m_estimatedPlayerAmmo == 0) chaseSpeedMult = 2.8f;
             else if (isPlayerReloading && distToPlayer < 12.0f) chaseSpeedMult = 2.5f;
 
             // 2. Efecto Slender: Si no lo estás mirando, corre MUCHO más rápido
@@ -842,12 +1068,47 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
 
             float currentSpeed = m_speed * chaseSpeedMult;
             float lookAheadTime = distToPlayer / currentSpeed;
+            lookAheadTime = std::min(lookAheadTime, 2.5f); // Limit prediction window to 2.5s
             glm::vec3 predictedPos = playerPos + (playerVelocity * lookAheadTime * 0.7f); 
             
+            glm::vec3 chaseTarget = predictedPos;
+            glm::vec4 blockingTree;
+            if (GetBlockingTree(predictedPos, chunkManager, blockingTree)) {
+                glm::vec3 treePos(blockingTree.x, m_pos.y, blockingTree.z);
+                glm::vec3 dirToTree = glm::normalize(treePos - m_pos);
+                glm::vec3 rightDir = glm::normalize(glm::cross(dirToTree, glm::vec3(0.0f, 1.0f, 0.0f)));
+                if (glm::length(rightDir) < 0.01f) rightDir = glm::vec3(1.0f, 0.0f, 0.0f);
+                float radius = 0.5f + (0.6f * blockingTree.w);
+                float offsetDist = radius + 1.2f;
+                glm::vec3 leftFlank = treePos - rightDir * offsetDist;
+                glm::vec3 rightFlank = treePos + rightDir * offsetDist;
+
+                if (m_flankDecisionTimer <= 0.0f) {
+                    glm::vec3 pToLeft = glm::normalize(leftFlank - playerPos);
+                    glm::vec3 pToRight = glm::normalize(rightFlank - playerPos);
+                    float dotLeft = glm::dot(playerFront, pToLeft);
+                    float dotRight = glm::dot(playerFront, pToRight);
+
+                    if (dotLeft > dotRight + 0.05f) {
+                        m_chooseLeftFlank = false; // Player looking left, go right
+                    } else if (dotRight > dotLeft + 0.05f) {
+                        m_chooseLeftFlank = true; // Player looking right, go left
+                    } else {
+                        m_chooseLeftFlank = (rand() % 2 == 0);
+                    }
+                    m_flankDecisionTimer = 1.0f + (rand() % 100 / 100.0f) * 1.5f;
+                }
+
+                glm::vec3 flankTarget = m_chooseLeftFlank ? leftFlank : rightFlank;
+                if (glm::distance(m_pos, flankTarget) > 1.0f) {
+                    chaseTarget = flankTarget;
+                }
+            }
+
             glm::vec3 desiredDir(0.0f);
-            float predDist = glm::distance(predictedPos, m_pos);
+            float predDist = glm::distance(chaseTarget, m_pos);
             if (predDist > 0.01f) {
-                desiredDir = glm::normalize(predictedPos - m_pos);
+                desiredDir = glm::normalize(chaseTarget - m_pos);
             } else {
                 glm::vec3 dirToPlayerVec = playerPos - m_pos;
                 if (glm::length(dirToPlayerVec) > 0.01f) {
@@ -857,15 +1118,17 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                 }
             }
 
-            // 3. Zigzag defensivo: Si me estás apuntando, serpenteo para que falles
-            if (isAimedAt && distToPlayer > 4.0f) {
+            // 3. Zigzag defensivo: Si me estás apuntando o en Blood Rage, serpenteo para que falles
+            if ((isAimedAt || m_isEnraged) && distToPlayer > 4.0f) {
                 glm::vec3 rightDir(1.0f, 0.0f, 0.0f);
                 glm::vec3 crossDir = glm::cross(desiredDir, glm::vec3(0.0f, 1.0f, 0.0f));
                 if (glm::length(crossDir) > 0.01f) {
                     rightDir = glm::normalize(crossDir);
                 }
-                // Alta frecuencia de zigzag impulsada por el estrés del monstruo
-                float zigZag = sin(m_stateTimer * (10.0f + m_stress * 5.0f)) * 0.55f; 
+                // Alta frecuencia de zigzag impulsada por el estrés del monstruo, even higher if enraged
+                float zigFreq = m_isEnraged ? 18.0f : glm::clamp(10.0f + m_stress * 5.0f, 6.0f, 14.0f);
+                float zigWidth = m_isEnraged ? 0.75f : 0.55f;
+                float zigZag = sin(m_stateTimer * zigFreq) * zigWidth;
                 desiredDir = glm::normalize(desiredDir + rightDir * zigZag);
             }
 
@@ -879,19 +1142,113 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
         }
 
         case MonsterAction::INVESTIGATE: {
+            glm::vec3 target = m_memPlayerPos;
+            bool nearTree = false;
+            glm::vec3 treePos(0.0f);
+            float treeRadius = 0.0f;
+            
+            // Check if last known player position is near a tree
+            std::vector<glm::vec4> nearbyTrees;
+            chunkManager.GetTreesInRange(m_memPlayerPos, 3.0f, nearbyTrees);
+            if (!nearbyTrees.empty()) {
+                nearTree = true;
+                treePos = glm::vec3(nearbyTrees[0].x, 0.0f, nearbyTrees[0].z);
+                treeRadius = 0.5f + (0.6f * nearbyTrees[0].w);
+                
+                // Target a point behind the tree relative to the monster's starting approach direction
+                glm::vec3 flatPos(m_pos.x, 0.0f, m_pos.z);
+                glm::vec3 toTree = treePos - flatPos;
+                if (glm::length(toTree) > 0.1f) {
+                    glm::vec3 dirToTree = glm::normalize(toTree);
+                    target = treePos + dirToTree * (treeRadius + 1.8f); // 1.8 meters behind tree
+                }
+            }
+
             glm::vec3 flatPos = glm::vec3(m_pos.x, 0.0f, m_pos.z);
-            glm::vec3 flatTarget = glm::vec3(m_memPlayerPos.x, 0.0f, m_memPlayerPos.z);
-            if (glm::distance(flatPos, flatTarget) < 1.5f) {
+            glm::vec3 flatTarget = glm::vec3(target.x, 0.0f, target.z);
+            
+            // Flanking target for tree investigation
+            glm::vec3 investigateTarget = target;
+            if (nearTree) {
+                glm::vec4 blockingTree;
+                if (GetBlockingTree(target, chunkManager, blockingTree)) {
+                    glm::vec3 treePos(blockingTree.x, m_pos.y, blockingTree.z);
+                    glm::vec3 dirToTree = glm::normalize(treePos - m_pos);
+                    glm::vec3 rightDir = glm::normalize(glm::cross(dirToTree, glm::vec3(0.0f, 1.0f, 0.0f)));
+                    if (glm::length(rightDir) < 0.01f) rightDir = glm::vec3(1.0f, 0.0f, 0.0f);
+                    float radius = 0.5f + (0.6f * blockingTree.w);
+                    float offsetDist = radius + 1.2f;
+                    glm::vec3 leftFlank = treePos - rightDir * offsetDist;
+                    glm::vec3 rightFlank = treePos + rightDir * offsetDist;
+
+                    if (m_flankDecisionTimer <= 0.0f) {
+                        glm::vec3 pToLeft = glm::normalize(leftFlank - playerPos);
+                        glm::vec3 pToRight = glm::normalize(rightFlank - playerPos);
+                        float dotLeft = glm::dot(playerFront, pToLeft);
+                        float dotRight = glm::dot(playerFront, pToRight);
+
+                        if (dotLeft > dotRight + 0.05f) {
+                            m_chooseLeftFlank = false; // Player looking left, go right
+                        } else if (dotRight > dotLeft + 0.05f) {
+                            m_chooseLeftFlank = true; // Player looking right, go left
+                        } else {
+                            m_chooseLeftFlank = (rand() % 2 == 0);
+                        }
+                        m_flankDecisionTimer = 1.0f + (rand() % 100 / 100.0f) * 1.5f;
+                    }
+
+                    glm::vec3 flankTarget = m_chooseLeftFlank ? leftFlank : rightFlank;
+                    if (glm::distance(m_pos, flankTarget) > 1.0f) {
+                        investigateTarget = flankTarget;
+                        flatTarget = glm::vec3(investigateTarget.x, 0.0f, investigateTarget.z);
+                    }
+                }
+            }
+
+            if (glm::distance(flatPos, glm::vec3(target.x, 0.0f, target.z)) < 1.5f) {
                 targetVelocity = glm::vec3(0.0f);
                 m_memTimeSinceHeard += 10.0f * deltaTime; // decay state
+                m_headYaw = sin(m_stateTimer * 4.0f) * 40.0f;
+                m_headPitch = 0.0f;
             } else {
                 glm::vec3 desiredDir = glm::normalize(flatTarget - flatPos);
+                float speedMult = 0.7f;
+                
+                m_headYaw = sin(m_stateTimer * 4.0f) * 40.0f;
+                m_headPitch = 0.0f;
+                
+                if (nearTree && m_estimatedPlayerAmmo > 0) {
+                    float distToTree = glm::distance(flatPos, treePos);
+                    if (distToTree < 7.0f && distToTree > (treeRadius + 0.5f)) {
+                        // Slow down to a cautious creep
+                        speedMult = 0.25f;
+                        
+                        // Feint/Bait logic based on periodic timer
+                        float cycleTime = std::fmod(m_stateTimer, 2.5f);
+                        if (cycleTime < 0.8f) {
+                            // Phase 1: Pause and scan (head moves side to side, no velocity)
+                            speedMult = 0.0f;
+                            m_headYaw = sin(m_stateTimer * 6.0f) * 55.0f;
+                        } else if (cycleTime < 1.4f) {
+                            // Phase 2: Quick side-step (feint left/right)
+                            glm::vec3 rightDir = glm::normalize(glm::cross(desiredDir, glm::vec3(0,1,0)));
+                            if (glm::length(rightDir) < 0.01f) rightDir = glm::vec3(1,0,0);
+                            
+                            float sideSign = (std::fmod(m_stateTimer, 5.0f) < 2.5f) ? 1.0f : -1.0f;
+                            desiredDir = glm::normalize(desiredDir * 0.1f + rightDir * 0.9f * sideSign);
+                            speedMult = 1.2f; // Quick dash step
+                            m_headYaw = -25.0f * sideSign; // Tilt head in direction of step
+                        } else {
+                            // Phase 3: Creep forward cautiously
+                            speedMult = 0.35f;
+                            m_headYaw = sin(m_stateTimer * 3.0f) * 20.0f;
+                        }
+                    }
+                }
+                
                 m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
-                targetVelocity = desiredDir * m_speed * 0.7f;
+                targetVelocity = desiredDir * m_speed * speedMult;
             }
-            // Alert rotation of the head (look side to side)
-            m_headYaw = sin(m_stateTimer * 4.0f) * 40.0f;
-            m_headPitch = 0.0f;
             break;
         }
 
@@ -899,7 +1256,22 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
             m_stateTimer += deltaTime;
 
             bool scentPresent = (glm::length(m_trackingDir) > 0.01f);
+            
+            // Check if gradient is zero but cached scent is still valid (fallback targeting)
+            if (!scentPresent && m_hasLastScent) {
+                glm::vec3 fallbackDir = glm::normalize(m_lastScentWorldPos - m_pos);
+                if (glm::length(fallbackDir) > 0.1f) {
+                    m_trackingDir = fallbackDir;
+                    scentPresent = true; // Recover normal tracking
+                }
+            }
+
             if (scentPresent) {
+                // Scent is back! Reset spiral search state
+                m_spiralSearchTimer = 0.0f;
+                m_spiralSearchRadius = 3.0f;
+                m_spiralSearchAngle = 0.0f;
+
                 // Sinusoidal wobble (drift) to make search patterns winding and organic
                 float wobble = sin(m_stateTimer * 3.5f) * 0.35f;
                 glm::vec3 rightDir = glm::normalize(glm::cross(m_trackingDir, glm::vec3(0.0f, 1.0f, 0.0f)));
@@ -913,14 +1285,46 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                 m_headPitch = 25.0f + sin(m_stateTimer * 8.0f) * 10.0f;
                 m_headYaw = sin(m_stateTimer * 4.0f) * 20.0f;
             } else {
-                // Lost scent trail: Slow down, scan, and sniff around
-                targetVelocity = glm::vec3(0.0f);
-                m_headYaw = sin(m_stateTimer * 3.0f) * 45.0f; // Look left/right scanning
-                m_headPitch = 30.0f + sin(m_stateTimer * 6.0f) * 15.0f; // Sniff ground intensely
+                // Lost scent trail: Expanding spiral search around last smelled position (m_memPlayerPos)
+                m_spiralSearchTimer += deltaTime;
+                m_spiralSearchRadius = 3.0f + m_spiralSearchTimer * 0.75f;
+                if (m_spiralSearchRadius > 18.0f) {
+                    m_spiralSearchRadius = 18.0f;
+                }
                 
-                // If we've been searching for more than 4 seconds, force transition by decaying memory
-                if (m_stateTimer > 4.0f) {
-                    m_memTimeSinceSmelled = 999.0f; 
+                // Smooth spiral angular step to build curved pathing waypoints
+                float angleStep = 0.8f; // Rad per second
+                m_spiralSearchAngle += angleStep * deltaTime;
+                
+                glm::vec3 center = m_memPlayerPos;
+                glm::vec3 targetOffset(cos(m_spiralSearchAngle) * m_spiralSearchRadius, 0.0f, sin(m_spiralSearchAngle) * m_spiralSearchRadius);
+                glm::vec3 targetSpiralPos = center + targetOffset;
+                
+                glm::vec3 flatPos(m_pos.x, 0.0f, m_pos.z);
+                glm::vec3 flatTarget(targetSpiralPos.x, 0.0f, targetSpiralPos.z);
+                
+                glm::vec3 desiredDir(0.0f);
+                float distToTarget = glm::distance(flatPos, flatTarget);
+                if (distToTarget > 1.5f) {
+                    desiredDir = glm::normalize(flatTarget - flatPos);
+                } else {
+                    // Maintain current heading gently to avoid spinning in place
+                    desiredDir = (glm::length(m_velocity) > 0.01f) ? glm::normalize(m_velocity) : glm::vec3(sin(glm::radians(m_yaw)), 0.0f, cos(glm::radians(m_yaw)));
+                }
+                
+                m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
+                targetVelocity = desiredDir * Config::Monster::ScentTrackSpeed * 1.1f;
+                
+                // Sniffing animations while searching
+                m_headPitch = 30.0f + sin(m_stateTimer * 6.0f) * 12.0f;
+                m_headYaw = sin(m_stateTimer * 3.0f) * 45.0f;
+                
+                // If we've been searching for more than 15 seconds, give up
+                if (m_spiralSearchTimer > 15.0f) {
+                    m_memTimeSinceSmelled = 999.0f;
+                    m_spiralSearchTimer = 0.0f;
+                    m_spiralSearchRadius = 3.0f;
+                    m_spiralSearchAngle = 0.0f;
                 }
             }
 
@@ -963,8 +1367,52 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                 }
             }
 
+
+
+            // Distant Twig-Snap Distraction Trap
+            if (m_distractionTimer <= 0.0f && isVisibleToPlayer) {
+                std::vector<glm::vec4> nearbyTrees;
+                chunkManager.GetTreesInRange(playerPos, 22.0f, nearbyTrees);
+                
+                glm::vec4 chosenDistractionTree(0.0f);
+                bool foundDistractionTree = false;
+                
+                for (const auto& t : nearbyTrees) {
+                    float dToPlayer = glm::distance(glm::vec3(t.x, 0.0f, t.z), glm::vec3(playerPos.x, 0.0f, playerPos.z));
+                    if (dToPlayer >= 12.0f && dToPlayer <= 22.0f) {
+                        if (m_bestTreeIndex != -1 && glm::distance(glm::vec3(t.x, 0.0f, t.z), m_assignedTreePos) < 2.0f) {
+                            continue;
+                        }
+                        if (glm::distance(glm::vec3(t.x, 0.0f, t.z), m_pos) < 6.0f) {
+                            continue;
+                        }
+                        chosenDistractionTree = t;
+                        foundDistractionTree = true;
+                        break;
+                    }
+                }
+                
+                if (foundDistractionTree) {
+                    glm::vec3 treePos(chosenDistractionTree.x, WorldGenerator::GetHeight(chosenDistractionTree.x, chosenDistractionTree.z), chosenDistractionTree.z);
+                    std::cout << "[AI] Distraction Twig-Snap! Spawning fake audio event at tree ("
+                              << treePos.x << ", " << treePos.z << ") to distract player." << std::endl;
+                    
+                    // Spawn leaf/wood particles at that tree
+                    for (int i = 0; i < 15; i++) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*1.2f, (rand()%100/100.0f)*1.5f + 0.5f, (rand()%100/50.0f - 1.0f)*1.2f);
+                        particles.SpawnParticle(treePos + glm::vec3(0.0f, 0.2f, 0.0f), pVel, glm::vec4(0.35f, 0.25f, 0.15f, 0.9f), 0.15f, 1.2f, -9.8f);
+                    }
+                    // Reset distraction cooldown to 12-18 seconds
+                    m_distractionTimer = 12.0f + (rand() % 100 / 100.0f) * 6.0f;
+                }
+            }
+
             if (m_stalkDashTimer > 0.0f) {
                 m_stalkDashTimer -= deltaTime;
+                if (m_stalkDashTimer <= 0.0f) {
+                    m_stalkDashTimer = 0.0f;
+                    m_stateTimer = 0.0f; // Reset twig-snap cycle immediately when dash ends
+                }
                 targetVelocity = m_stalkDashDir * m_speed * 2.5f; // Fast dash
                 
                 // Face the player while dashing
@@ -978,7 +1426,7 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                 if (distToPlayer < 0.1f) toMonster = glm::vec3(1.0f, 0.0f, 0.0f);
                 
                 glm::vec3 target(0.0f);
-                bool isBehindPlayer = !isVisibleToPlayer && hasLOS;
+                bool isBehindPlayer = !isVisibleToPlayer && hasLOS && (glm::length(m_knownPlayerTreePos) <= 0.1f);
                 
                 if (isBehindPlayer) {
                     // Player's back is turned! Creep up directly towards the player's position to ambush them.
@@ -1003,15 +1451,49 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                     }
                 }
 
+                glm::vec3 stalkTarget = target;
+                glm::vec4 blockingTree;
+                if (GetBlockingTree(target, chunkManager, blockingTree)) {
+                    glm::vec3 treePos(blockingTree.x, m_pos.y, blockingTree.z);
+                    glm::vec3 dirToTree = glm::normalize(treePos - m_pos);
+                    glm::vec3 rightDir = glm::normalize(glm::cross(dirToTree, glm::vec3(0.0f, 1.0f, 0.0f)));
+                    if (glm::length(rightDir) < 0.01f) rightDir = glm::vec3(1.0f, 0.0f, 0.0f);
+                    float radius = 0.5f + (0.6f * blockingTree.w);
+                    float offsetDist = radius + 1.2f;
+                    glm::vec3 leftFlank = treePos - rightDir * offsetDist;
+                    glm::vec3 rightFlank = treePos + rightDir * offsetDist;
+
+                    if (m_flankDecisionTimer <= 0.0f) {
+                        glm::vec3 pToLeft = glm::normalize(leftFlank - playerPos);
+                        glm::vec3 pToRight = glm::normalize(rightFlank - playerPos);
+                        float dotLeft = glm::dot(playerFront, pToLeft);
+                        float dotRight = glm::dot(playerFront, pToRight);
+
+                        if (dotLeft > dotRight + 0.05f) {
+                            m_chooseLeftFlank = false; // Player looking left, go right
+                        } else if (dotRight > dotLeft + 0.05f) {
+                            m_chooseLeftFlank = true; // Player looking right, go left
+                        } else {
+                            m_chooseLeftFlank = (rand() % 2 == 0);
+                        }
+                        m_flankDecisionTimer = 1.0f + (rand() % 100 / 100.0f) * 1.5f;
+                    }
+
+                    glm::vec3 flankTarget = m_chooseLeftFlank ? leftFlank : rightFlank;
+                    if (glm::distance(m_pos, flankTarget) > 1.0f) {
+                        stalkTarget = flankTarget;
+                    }
+                }
+
                 glm::vec3 flatPos(m_pos.x, 0.0f, m_pos.z);
-                glm::vec3 flatTarget(target.x, 0.0f, target.z);
+                glm::vec3 flatTarget(stalkTarget.x, 0.0f, stalkTarget.z);
                 
                 if (glm::distance(flatPos, flatTarget) < 1.5f) {
                     targetVelocity = glm::vec3(0.0f);
                 } else {
                     glm::vec3 desiredDir = glm::normalize(flatTarget - flatPos);
                     m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
-                    float sneakSpeedMult = isBehindPlayer ? 0.98f : 0.85f;
+                    float sneakSpeedMult = isBehindPlayer ? 0.98f : (0.75f + m_confidence * 0.25f);
                     targetVelocity = desiredDir * m_speed * sneakSpeedMult; // Quiet sneak speed
                 }
             }
@@ -1150,7 +1632,8 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
 
                     m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
                     float retreatSpeedMult = 2.2f;
-                    if (m_estimatedPlayerAmmo == 2) retreatSpeedMult = 2.8f;
+                    if (m_isPanicked) retreatSpeedMult = 3.6f; // Panic speed boost
+                    else if (m_estimatedPlayerAmmo == 2) retreatSpeedMult = 2.8f;
                     else if (m_estimatedPlayerAmmo == 1) retreatSpeedMult = 2.4f;
                     targetVelocity = desiredDir * m_speed * retreatSpeedMult;
                     m_headYaw = 0.0f; m_headPitch = 0.0f;
@@ -1165,18 +1648,19 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                         // Steer orbit to match moving player
                         glm::vec3 orbitDelta = hideSpot - m_pos;
                         if (glm::length(orbitDelta) > 0.08f) {
-                            targetVelocity = glm::normalize(orbitDelta) * m_speed * 1.6f; // Orbit faster
+                            targetVelocity = glm::normalize(orbitDelta) * m_speed * 0.9f; // Orbit slower
                         }
                     } else {
                         m_peekTimer += deltaTime;
-                        if (m_peekTimer < 0.6f) {
+                        float peekThreshold = 0.6f + m_stress * 0.8f;
+                        if (m_peekTimer < peekThreshold) {
                             // Stop and turn the body to look directly at the player
                             targetVelocity = glm::vec3(0.0f);
                             LookAt(playerPos);
                             m_headYaw = 0.0f;
                             m_headPitch = 0.0f;
                         } else {
-                            // After 0.6 seconds of looking back, evaluate threat
+                            // After peekThreshold seconds of looking back, evaluate threat
                             bool threatPersists = (isAimedAt && hasLOS) || isVisibleToPlayer || isPlayerApproaching;
                             glm::vec3 toTree = m_assignedTreePos - playerPos;
                             toTree.y = 0.0f;
@@ -1212,7 +1696,7 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                                 // Steer orbit to match moving player
                                 glm::vec3 orbitDelta = hideSpot - m_pos;
                                 if (glm::length(orbitDelta) > 0.08f) {
-                                    targetVelocity = glm::normalize(orbitDelta) * m_speed * 1.6f; // Orbit faster
+                                    targetVelocity = glm::normalize(orbitDelta) * m_speed * 0.9f; // Orbit slower
                                 }
                             }
                         }
@@ -1265,7 +1749,8 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                 
                 m_targetYaw = glm::degrees(atan2(runDir.x, runDir.z));
                 float retreatSpeedMult = 1.8f;
-                if (m_estimatedPlayerAmmo == 2) retreatSpeedMult = 2.4f;
+                if (m_isPanicked) retreatSpeedMult = 3.2f; // Panic speed boost
+                else if (m_estimatedPlayerAmmo == 2) retreatSpeedMult = 2.4f;
                 else if (m_estimatedPlayerAmmo == 1) retreatSpeedMult = 2.0f;
                 targetVelocity = runDir * m_speed * retreatSpeedMult;
                 
@@ -1283,19 +1768,40 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
             m_headYaw = 0.0f;
             
             if (m_bestTreeIndex == -1) {
-                m_detectedTrees.clear();
-                chunkManager.GetTreesInRange(m_pos, 25.0f, m_detectedTrees);
-                if (!m_detectedTrees.empty()) {
-                    m_bestTreeIndex = rand() % m_detectedTrees.size();
-                    m_assignedTreePos = glm::vec3(m_detectedTrees[m_bestTreeIndex].x, 0.0f, m_detectedTrees[m_bestTreeIndex].z);
-                    m_assignedTreeScale = m_detectedTrees[m_bestTreeIndex].w;
-                    m_isClimbing = false; // Walk there first
+                if (glm::length(m_knownPlayerTreePos) > 0.1f) {
+                    m_assignedTreePos = m_knownPlayerTreePos;
+                    m_assignedTreeScale = 1.0f;
+                    m_bestTreeIndex = 0; // Mock index
+                    
+                    // Search detected trees for scale
+                    m_detectedTrees.clear();
+                    chunkManager.GetTreesInRange(m_pos, 60.0f, m_detectedTrees);
+                    for (int i = 0; i < m_detectedTrees.size(); i++) {
+                        if (glm::distance(glm::vec3(m_detectedTrees[i].x, 0.0f, m_detectedTrees[i].z), glm::vec3(m_knownPlayerTreePos.x, 0.0f, m_knownPlayerTreePos.z)) < 0.5f) {
+                            m_bestTreeIndex = i;
+                            m_assignedTreeScale = m_detectedTrees[i].w;
+                            break;
+                        }
+                    }
+                    m_isClimbing = false;
                     m_treeClimbHeight = 0.0f;
                     m_stateTimer = 0.0f;
-                    std::cout << "[AI] Decided to climb tree. Walking to tree base..." << std::endl;
+                    std::cout << "[AI] TARGETING PLAYER TREE! Walking to tree base..." << std::endl;
                 } else {
-                    m_memTimeSinceSeen = 0.0f; // force state change
-                    targetVelocity = glm::vec3(0.0f);
+                    m_detectedTrees.clear();
+                    chunkManager.GetTreesInRange(m_pos, 25.0f, m_detectedTrees);
+                    if (!m_detectedTrees.empty()) {
+                        m_bestTreeIndex = rand() % m_detectedTrees.size();
+                        m_assignedTreePos = glm::vec3(m_detectedTrees[m_bestTreeIndex].x, 0.0f, m_detectedTrees[m_bestTreeIndex].z);
+                        m_assignedTreeScale = m_detectedTrees[m_bestTreeIndex].w;
+                        m_isClimbing = false; // Walk there first
+                        m_treeClimbHeight = 0.0f;
+                        m_stateTimer = 0.0f;
+                        std::cout << "[AI] Decided to climb tree. Walking to tree base..." << std::endl;
+                    } else {
+                        m_memTimeSinceSeen = 0.0f; // force state change
+                        targetVelocity = glm::vec3(0.0f);
+                    }
                 }
             } else {
                 glm::vec3 flatPos(m_pos.x, 0.0f, m_pos.z);
@@ -1306,10 +1812,12 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                 
                 if (!m_isClimbing && m_treeClimbHeight <= 0.0f) {
                     // Phase 1: Walk to tree base
-                    if (distToTree > 0.7f) {
+                    float minD = 0.5f + (0.6f * m_assignedTreeScale);
+                    if (distToTree > minD + 0.2f) {
                         glm::vec3 desiredDir = glm::normalize(flatTree - flatPos);
                         m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
-                        targetVelocity = desiredDir * m_speed * 1.0f; // Normal run/walk speed to tree
+                        float speedMult = m_isEnraged ? 2.3f : 1.0f; // Sprint if enraged/shot
+                        targetVelocity = desiredDir * m_speed * speedMult;
                         m_headPitch = 0.0f;
                     } else {
                         // Snap directly to trunk and start climbing
@@ -1322,8 +1830,8 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                     }
                 } else if (m_isClimbing) {
                     // Phase 2: Climb up
-                    targetVelocity = glm::vec3(0.0f);
-                    m_treeClimbHeight += 7.0f * deltaTime;
+                    float climbSpeed = m_isEnraged ? 15.0f : 7.0f; // Climb extremely fast if enraged
+                    m_treeClimbHeight += climbSpeed * deltaTime;
                     m_headPitch = 45.0f; // Look down while climbing
                     if (m_treeClimbHeight >= targetClimbHeight) {
                         m_treeClimbHeight = targetClimbHeight;
@@ -1341,10 +1849,10 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
                     m_headYaw = sin(m_stateTimer * 2.0f) * 45.0f; // Scan from canopy
                     
                     // Drop ambush logic:
-                    // 1. If player ammo is 0, or player is very close (dist2D < 3.5f), drop down!
+                    // 1. If estimated player ammo is 0, or player is very close (dist2D < 3.5f), drop down!
                     float dist2D = glm::distance(glm::vec2(m_pos.x, m_pos.z), glm::vec2(playerPos.x, playerPos.z));
                     bool playerUnderTree = (dist2D < 3.5f);
-                    bool shouldDropAttack = (playerAmmo == 0) || playerUnderTree;
+                    bool shouldDropAttack = (m_estimatedPlayerAmmo == 0) || playerUnderTree;
                     
                     if (shouldDropAttack) {
                         m_treeClimbHeight = 0.0f;
@@ -1387,6 +1895,22 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
         }
     }
 
+    // If cautious, player is in a tree, and we are too close to the player's tree trunk, run away to a safe distance
+    if (m_action != MonsterAction::CLIMB_TREE && glm::length(m_knownPlayerTreePos) > 0.1f) {
+        float distToPlayerTree = glm::distance(glm::vec3(m_pos.x, 0.0f, m_pos.z), glm::vec3(m_knownPlayerTreePos.x, 0.0f, m_knownPlayerTreePos.z));
+        if (distToPlayerTree < 6.0f) {
+            glm::vec3 awayDir = m_pos - m_knownPlayerTreePos;
+            awayDir.y = 0.0f;
+            if (glm::length(awayDir) > 0.01f) {
+                awayDir = glm::normalize(awayDir);
+            } else {
+                awayDir = glm::vec3(1.0f, 0.0f, 0.0f);
+            }
+            m_targetYaw = glm::degrees(atan2(awayDir.x, awayDir.z));
+            targetVelocity = awayDir * m_speed * 2.2f; // Run away fast to back off from trunk
+        }
+    }
+
     // Apply movement inertia by smoothly interpolating m_velocity towards targetVelocity.
     // If the monster is climbing trees vertically, snap velocity directly to avoid drifting.
     if (m_action != MonsterAction::CLIMB_TREE) {
@@ -1412,18 +1936,12 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
     }
 
     // Tree collision caching
-    if (glm::length(m_velocity) > 0.1f && m_action != MonsterAction::CLIMB_TREE) {
-        m_nearbyTreesCache.clear();
-        chunkManager.GetTreesInRange(m_pos + m_velocity * 0.1f, 3.0f, m_nearbyTreesCache); 
-    }
-
-physics_tick:
     // Ensure Visual Yaw follows Physics Yaw
     m_visualYaw = m_yaw;
 
     if (glm::length(m_velocity) > 0.01f) {
-        // Smooth Rotation (Physics)
-        float rotSpeed = 5.0f * deltaTime;
+        // Smooth Rotation (Physics) - Dynamic rotation speed (CHASE is much faster)
+        float rotSpeed = deltaTime * (m_action == MonsterAction::CHASE ? 12.0f : 5.0f);
         float yawDiff = std::fmod(m_targetYaw - m_yaw, 360.0f);
         if (yawDiff < -180) yawDiff += 360;
         else if (yawDiff > 180) yawDiff -= 360;
@@ -1525,6 +2043,15 @@ physics_tick:
     m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z) + m_treeClimbHeight;
     m_visualPos = m_pos;
 
+    // Head Tracking: Look at player if we have LOS and are not climbing/startled
+    if (hasLOS && m_action != MonsterAction::CLIMB_TREE && m_startleCooldownTimer <= 9.0f) {
+        glm::vec3 toPlayer = glm::normalize(playerPos + glm::vec3(0.0f, 1.2f, 0.0f) - (m_pos + glm::vec3(0.0f, 1.8f, 0.0f)));
+        float lookYaw = glm::degrees(atan2(toPlayer.x, toPlayer.z)) - m_yaw;
+        lookYaw = std::fmod(lookYaw + 180.0f, 360.0f) - 180.0f;
+        m_headYaw = glm::clamp(lookYaw, -70.0f, 70.0f);
+        m_headPitch = glm::clamp((float)(-glm::degrees(asin(toPlayer.y))), -45.0f, 45.0f);
+    }
+
     // Upgraded Real-time Procedural Animations Upload
     AnimateMesh();
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
@@ -1575,22 +2102,7 @@ void Monster::RenderDebug(GLuint shaderProgram) {
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(bodyModel));
     
     glBindVertexArray(VAO);
-    // Draw everything except the "Head" part (last 6 vertices)
-    if (m_meshVertices.size() > 54) { // Ensure safe size
-         glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(m_meshVertices.size()/9 - 6)); 
-    }
-
-    // Draw Head separately (Matches Render)
-    glm::mat4 headModel = bodyModel;
-    // Head pivot offset (matches Render)
-    headModel = glm::translate(headModel, glm::vec3(0, 2.1f, -0.25f)); 
-    headModel = glm::rotate(headModel, glm::radians(m_headYaw), glm::vec3(0,1,0));
-    headModel = glm::translate(headModel, -glm::vec3(0, 2.1f, -0.25f)); 
-    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(headModel));
-    
-    if (m_meshVertices.size() >= 54) {
-        glDrawArrays(GL_TRIANGLES, (GLsizei)(m_meshVertices.size()/9 - 6), 6); 
-    }
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(m_meshVertices.size() / 11));
     
     // Reset Debug State
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
@@ -1895,6 +2407,51 @@ void Monster::TakeDamage(float amount, bool isHeadshot) {
     } else {
         m_health -= amount;
         m_decisionLockTimer = 0.0f; // Break decision lock on taking damage
+        
+        // --- CLIMBING ATTACK vs FLEE DECISION ---
+        if (glm::length(m_knownPlayerTreePos) > 0.1f) {
+            // Decrement the estimated ammo immediately as they just fired the shot that hit us!
+            m_estimatedPlayerAmmo = std::max(0, m_estimatedPlayerAmmo - 1);
+
+            bool shouldFlee = false;
+            if (m_estimatedPlayerAmmo == 0) {
+                // Player has no ammo left, attack violently!
+                shouldFlee = false;
+            } else {
+                // Roll probability based on health
+                float fleeChance = 0.5f; // 50% base
+                if (m_health >= 3.0f) fleeChance = 0.3f; // 30% if high health
+                else if (m_health < 2.0f) fleeChance = 0.8f; // 80% if low health
+                
+                if ((rand() % 100) < (fleeChance * 100.0f)) {
+                    shouldFlee = true;
+                }
+            }
+            
+            if (shouldFlee) {
+                std::cout << "[AI-Damage] Shot in tree! Decided to FLEE. Retreating..." << std::endl;
+                m_climbCooldownTimer = 30.0f; // 30 seconds cooldown on tree climbing to prevent immediate re-climbing
+                m_knownPlayerTreePos = glm::vec3(0.0f);
+                m_memTimeSinceSeen = 999.0f;
+                m_memTimeSinceHeard = 999.0f;
+                m_memTimeSinceSmelled = 999.0f;
+                
+                m_action = MonsterAction::RETREAT;
+                m_stateTimer = 0.0f;
+                m_stress = 1.0f;
+                m_confidence = 0.0f;
+            } else {
+                std::cout << "[AI-Damage] Shot in tree! Decided to ATTACK VIOLENTLY. Enraging..." << std::endl;
+                m_isEnraged = true;
+                m_rageTimer = 0.0f;
+                m_confidence = 1.0f;
+                m_stress = 0.0f;
+                m_shouldScream = true; // Trigger visual scream burst in Update()
+                
+                m_action = MonsterAction::CLIMB_TREE;
+                m_stateTimer = 0.0f;
+            }
+        }
     }
 
     if (m_health <= 0.0f) {
@@ -1949,11 +2506,20 @@ bool Monster::IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& i
     glm::vec3 bodyMin = m_bodyMin;
     glm::vec3 bodyMax = m_bodyMax;
 
+    // Crouch Hitbox Adjustments (Visual matching)
+    if (m_crouchFactor > 0.01f) {
+        headMin.y -= 0.7f * m_crouchFactor;
+        headMax.y -= 0.7f * m_crouchFactor;
+        bodyMax.y -= 0.6f * m_crouchFactor;
+    }
+
     // Lean Hitbox Compensation: during chase, body tilts forward (bodyLean = 0.4)
-    // Offset bounding box boundaries forward on the Z axis (local forward) to stay aligned.
+    // Offset bounding box boundaries forward on the Z axis (local forward) and lower head to stay aligned.
     if (m_action == MonsterAction::CHASE) {
         headMin.z += 0.3f;
         headMax.z += 0.5f;
+        headMin.y -= 0.25f; // Lower head hitbox to match visually leaned run
+        headMax.y -= 0.25f;
         bodyMin.z += 0.1f;
         bodyMax.z += 0.4f;
     }
@@ -2059,27 +2625,230 @@ bool Monster::CheckLineOfSight(glm::vec3 playerPos, ChunkManager& chunkManager) 
         else closest = A + d * ab;
 
         float distToCenterSq = glm::dot(closest - center, closest - center);
+        
+        // A. Trunk Check
         if (distToCenterSq < radius * radius) {
-            return false; // Blocked by tree
+            float dClamp = glm::clamp(d, 0.0f, 1.0f);
+            float rayY = startPos.y + (endPos.y - startPos.y) * dClamp;
+            if (rayY <= t.y + 6.0f * t.w) {
+                return false; // Blocked by trunk
+            }
+        }
+        
+        // B. Leaves Check
+        float leavesRadius = 3.0f * t.w;
+        if (distToCenterSq < leavesRadius * leavesRadius) {
+            float dClamp = glm::clamp(d, 0.0f, 1.0f);
+            float rayY = startPos.y + (endPos.y - startPos.y) * dClamp;
+            if (rayY >= t.y + 5.0f * t.w && rayY <= t.y + 25.0f * t.w) {
+                // Leaves block sight UNLESS the monster heard the player recently (focuses attention)
+                bool hasAttentiveHearing = (m_memTimeSinceHeard < 4.0f);
+                if (!hasAttentiveHearing) {
+                    return false; // Blocked by leaves!
+                }
+            }
         }
     }
     
     return true;
 }
 
+bool Monster::GetBlockingTree(glm::vec3 targetPos, ChunkManager& chunkManager, glm::vec4& outTree) {
+    glm::vec3 startPos = m_pos + glm::vec3(0, 1.0f, 0); // Ray from lower chest height
+    glm::vec3 endPos = targetPos + glm::vec3(0, 1.0f, 0);
+    glm::vec3 dir = endPos - startPos;
+    float dist = glm::length(dir);
+    if (dist < 0.1f) return false;
+    dir = glm::normalize(dir);
+
+    // 1. Terrain Check
+    float stepSize = 1.0f;
+    for (float d = stepSize; d < dist; d += stepSize) {
+        glm::vec3 p = startPos + dir * d;
+        float h = WorldGenerator::GetHeight(p.x, p.z);
+        if (p.y < h) return false; // Blocked by terrain
+    }
+
+    // 2. Tree Check
+    std::vector<glm::vec4> trees;
+    chunkManager.GetTreesInRange(startPos, dist + 2.0f, trees);
+    
+    glm::vec2 A(startPos.x, startPos.z);
+    glm::vec2 B(endPos.x, endPos.z);
+    
+    float closestDist = 9999.0f;
+    bool found = false;
+
+    for (const auto& t : trees) {
+        glm::vec2 center(t.x, t.z);
+        if (glm::distance(A, center) < 0.1f) continue;
+        float radius = 0.5f + (0.6f * t.w); // Tree radius logic
+
+        glm::vec2 ac = center - A;
+        glm::vec2 ab = B - A;
+        float ab2 = glm::dot(ab, ab);
+        if (ab2 == 0.0f) continue;
+
+        float d = glm::dot(ac, ab) / ab2;
+        
+        glm::vec2 closest;
+        if (d < 0.0f) closest = A;
+        else if (d > 1.0f) closest = B;
+        else closest = A + d * ab;
+
+        float distToCenterSq = glm::dot(closest - center, closest - center);
+        if (distToCenterSq < radius * radius) {
+            float distToTree = glm::distance(A, center);
+            if (distToTree < closestDist) {
+                closestDist = distToTree;
+                outTree = t;
+                found = true;
+            }
+        }
+    }
+    return found;
+}
+
+float Monster::MultiRaycastExposure(glm::vec3 playerPos, ChunkManager& chunkManager) {
+    std::vector<glm::vec3> samplePoints = {
+        m_pos + glm::vec3(0.0f, 2.0f, 0.0f),
+        m_pos + glm::vec3(0.0f, 1.2f, 0.0f),
+        m_pos + glm::vec3(0.0f, 0.2f, 0.0f)
+    };
+    
+    int hits = 0;
+    glm::vec3 startPos = playerPos + glm::vec3(0.0f, 1.5f, 0.0f); // Player eye line
+    
+    // Find maximum distance to fetch trees once
+    float maxDist = 0.0f;
+    for (const auto& targetPoint : samplePoints) {
+        maxDist = std::max(maxDist, glm::distance(startPos, targetPoint));
+    }
+    
+    std::vector<glm::vec4> trees;
+    chunkManager.GetTreesInRange(startPos, maxDist + 2.0f, trees);
+    
+    for (const auto& targetPoint : samplePoints) {
+        glm::vec3 dir = targetPoint - startPos;
+        float dist = glm::length(dir);
+        if (dist < 0.1f) {
+            hits++;
+            continue;
+        }
+        dir = glm::normalize(dir);
+        
+        bool blocked = false;
+        
+        // A. Check terrain collision
+        float stepSize = 1.0f;
+        for (float d = stepSize; d < dist; d += stepSize) {
+            glm::vec3 p = startPos + dir * d;
+            float h = WorldGenerator::GetHeight(p.x, p.z);
+            if (p.y < h) {
+                blocked = true;
+                break;
+            }
+        }
+        
+        if (blocked) continue;
+        
+        // B. Check tree collision using pre-fetched trees list
+        glm::vec2 A(startPos.x, startPos.z);
+        glm::vec2 B(targetPoint.x, targetPoint.z);
+        
+        for (const auto& t : trees) {
+            glm::vec2 center(t.x, t.z);
+            if (glm::distance(A, center) < 0.1f) continue;
+            float radius = 0.5f + (0.6f * t.w);
+            
+            glm::vec2 ac = center - A;
+            glm::vec2 ab = B - A;
+            float ab2 = glm::dot(ab, ab);
+            if (ab2 == 0.0f) continue;
+            
+            float d = glm::dot(ac, ab) / ab2;
+            
+            glm::vec2 closest;
+            if (d < 0.0f) closest = A;
+            else if (d > 1.0f) closest = B;
+            else closest = A + d * ab;
+            
+            float distToCenterSq = glm::dot(closest - center, closest - center);
+            
+            // Trunk Check
+            if (distToCenterSq < radius * radius) {
+                float dClamp = glm::clamp(d, 0.0f, 1.0f);
+                float rayY = startPos.y + (targetPoint.y - startPos.y) * dClamp;
+                if (rayY <= t.y + 6.0f * t.w) {
+                    blocked = true;
+                    break;
+                }
+            }
+            
+            // Leaves Check
+            float leavesRadius = 3.0f * t.w;
+            if (distToCenterSq < leavesRadius * leavesRadius) {
+                float dClamp = glm::clamp(d, 0.0f, 1.0f);
+                float rayY = startPos.y + (targetPoint.y - startPos.y) * dClamp;
+                if (rayY >= t.y + 5.0f * t.w && rayY <= t.y + 25.0f * t.w) {
+                    bool hasAttentiveHearing = (m_memTimeSinceHeard < 4.0f);
+                    if (!hasAttentiveHearing) {
+                        blocked = true;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        if (!blocked) {
+            hits++;
+        }
+    }
+    
+    return (float)hits / 3.0f;
+}
+
 glm::vec3 Monster::ApplyObstacleAvoidance(glm::vec3 desiredVel, ChunkManager& chunkManager) {
     if (glm::length(desiredVel) < 0.01f) return desiredVel;
     
+    // Ensure cache is updated if it was empty (e.g. action transitioned from CLIMB_TREE)
+    if (m_nearbyTreesCache.empty() && m_action != MonsterAction::CLIMB_TREE) {
+        chunkManager.GetTreesInRange(m_pos, 5.0f, m_nearbyTreesCache);
+    }
+    
     glm::vec3 forward = glm::normalize(desiredVel);
     glm::vec3 avoidForce(0.0f);
-    
-    std::vector<glm::vec4> nearbyTrees;
-    // Query trees in a 5.0 meter radius from the monster
-    chunkManager.GetTreesInRange(m_pos, 5.0f, nearbyTrees);
+
+    // --- VALLEY/GULLY STEERING BIAS ---
+    if (m_action == MonsterAction::STALK || m_action == MonsterAction::RETREAT) {
+        glm::vec3 right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+        if (glm::length(right) < 0.01f) right = glm::vec3(1.0f, 0.0f, 0.0f);
+        
+        float sampleDist = 3.5f;
+        glm::vec3 centerPt = m_pos + forward * sampleDist;
+        glm::vec3 leftPt = m_pos + (forward * 0.866f - right * 0.5f) * sampleDist; // 30 deg left
+        glm::vec3 rightPt = m_pos + (forward * 0.866f + right * 0.5f) * sampleDist; // 30 deg right
+        
+        float hCenter = WorldGenerator::GetHeight(centerPt.x, centerPt.z);
+        float hLeft = WorldGenerator::GetHeight(leftPt.x, leftPt.z);
+        float hRight = WorldGenerator::GetHeight(rightPt.x, rightPt.z);
+        
+        glm::vec3 terrainForce(0.0f);
+        if (hLeft < hCenter && hLeft < hRight) {
+            float slopeDiff = hCenter - hLeft;
+            terrainForce = -right * glm::clamp(slopeDiff * 1.5f, 0.0f, 2.5f);
+        } else if (hRight < hCenter && hRight < hLeft) {
+            float slopeDiff = hCenter - hRight;
+            terrainForce = right * glm::clamp(slopeDiff * 1.5f, 0.0f, 2.5f);
+        }
+        
+        avoidForce += terrainForce;
+    }
     
     float maxAvoidDistance = 4.0f;
     
-    for (const auto& t : nearbyTrees) {
+    // Re-use m_nearbyTreesCache for obstacle avoidance to avoid redundant queries
+    for (const auto& t : m_nearbyTreesCache) {
         glm::vec3 treePos(t.x, m_pos.y, t.z);
         glm::vec3 toTree = treePos - m_pos;
         

@@ -33,6 +33,14 @@ void Player::ProcessMouseMovement(float xoffset, float yoffset) {
     WeaponSwayPos.x = glm::clamp(WeaponSwayPos.x, -maxSway, maxSway);
     WeaponSwayPos.y = glm::clamp(WeaponSwayPos.y, -maxSway, maxSway);
 
+    if (IsClimbing) {
+        m_cameraNoiseAccumulator += std::abs(xoffset) + std::abs(yoffset);
+        if (m_cameraNoiseAccumulator > 15.0f) {
+            SoundVolumeEmitted = 8.0f; // Leaves rustling sound (quieter, 8m range)
+            m_cameraNoiseAccumulator = 0.0f;
+        }
+    }
+
     updateCameraVectors();
 }
 
@@ -41,83 +49,185 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
     glm::vec3 flatFront = glm::normalize(glm::vec3(Front.x, 0.0f, Front.z));
     glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, WorldUp));
 
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) { moveDir += flatFront; }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) { moveDir -= flatFront; }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) { moveDir -= flatRight; }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) { moveDir += flatRight; }
-
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space) && IsGrounded) {
-        Velocity.y = JumpForce;
-        IsGrounded = false;
-    }
-
-    if (glm::length(moveDir) > 0.0f) {
-        moveDir = glm::normalize(moveDir);
-        glm::vec3 displacement = moveDir * WalkSpeed * deltaTime;
-        glm::vec3 nextPos = Position + displacement;
-        
-        // Footprints
-        if(IsGrounded) {
-             static float distAccumulator = 0.0f;
-             distAccumulator += glm::length(displacement);
-             if(distAccumulator > 1.5f) {
-                 distAccumulator = 0.0f;
-                 footprints.AddFootprint(Position - glm::vec3(0.0f, PlayerHeight, 0.0f), Yaw);
-             }
-        }
-
-        // Tree Collision using ChunkManager
-        std::vector<glm::vec4> nearbyTrees;
-        chunkManager.GetTreesInRange(nextPos, 3.0f, nearbyTrees); 
-
-        for (const auto& treeData : nearbyTrees) {
-            glm::vec3 treePos(treeData.x, treeData.y, treeData.z);
-            float treeScale = treeData.w;
-            
-            float dx = nextPos.x - treePos.x;
-            float dz = nextPos.z - treePos.z;
-            float dist = sqrt(dx*dx + dz*dz);
-            
-            // Base radius for trunk is 0.6 (matches WorldGenerator::trunkW)
-            float scaledRadius = 0.6f * treeScale; 
-            float minDist = PlayerRadius + scaledRadius;
-
-            if (dist < minDist) {
-                if (dist > 0.0001f) {
-                    float push = minDist - dist;
-                    nextPos.x += (dx / dist) * push;
-                    nextPos.z += (dz / dist) * push;
-                }
+    // Proximity check to nearby trees for climbing
+    std::vector<glm::vec4> nearbyTrees;
+    chunkManager.GetTreesInRange(Position, 2.5f, nearbyTrees);
+    
+    glm::vec4 closestTree(0.0f);
+    bool treeNear = false;
+    float closestDist = 9999.0f;
+    
+    for (const auto& t : nearbyTrees) {
+        glm::vec3 tPos(t.x, t.y, t.z);
+        float dist = glm::distance(glm::vec3(Position.x, tPos.y, Position.z), tPos);
+        float scaledRadius = 0.6f * t.w;
+        // Check if player is close enough to touch the trunk
+        if (dist < (scaledRadius + PlayerRadius + 0.35f)) {
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestTree = t;
+                treeNear = true;
             }
         }
-        
-        // Limit to World Bounds (Invisible Wall)
-        // Use MapRadius - 1 to be safe (avoid seeing the void)
-        float limit = (Config::World::MapRadius - 1) * Config::World::ChunkSize * Config::World::ChunkScale;
-        
-        if (nextPos.x > limit) nextPos.x = limit;
-        if (nextPos.x < -limit) nextPos.x = -limit;
-        if (nextPos.z > limit) nextPos.z = limit;
-        if (nextPos.z < -limit) nextPos.z = -limit;
+    }
 
-        Position.x = nextPos.x;
-        Position.z = nextPos.z;
-
-        // Set horizontal velocity components for AI detection
-        Velocity.x = moveDir.x * WalkSpeed;
-        Velocity.z = moveDir.z * WalkSpeed;
-
-        if(IsGrounded) {
-            HeadBobTimer += deltaTime * HeadBobSpeed;
+    if (IsClimbing) {
+        // Lock player's 2D position to the trunk boundary
+        glm::vec3 treePos(ClimbingTreePos.x, Position.y, ClimbingTreePos.z);
+        glm::vec3 toPlayer = Position - treePos;
+        toPlayer.y = 0.0f;
+        if (glm::length(toPlayer) > 0.01f) {
+            toPlayer = glm::normalize(toPlayer);
+        } else {
+            toPlayer = glm::vec3(0.0f, 0.0f, 1.0f);
         }
-    } else {
-        HeadBobTimer = 0.0f;
+        
+        float scaledRadius = 0.6f * ClimbingTreeScale;
+        glm::vec3 snapPos = treePos + toPlayer * (scaledRadius + PlayerRadius + 0.05f);
+        Position.x = snapPos.x;
+        Position.z = snapPos.z;
+        
         Velocity.x = 0.0f;
         Velocity.z = 0.0f;
+        Velocity.y = 0.0f;
+        IsGrounded = false;
+        
+        float climbSpeed = 5.0f;
+        bool isMoving = false;
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+            Position.y += climbSpeed * deltaTime;
+            isMoving = true;
+        }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
+            Position.y -= climbSpeed * deltaTime;
+            isMoving = true;
+        }
+        
+        if (isMoving) {
+            m_climbNoiseTimer += deltaTime;
+            if (m_climbNoiseTimer >= 0.35f) {
+                SoundVolumeEmitted = 12.0f; // Rustling/creaking sound (quieter, 12m range)
+                m_climbNoiseTimer = 0.0f;
+            }
+        } else {
+            m_climbNoiseTimer = 0.35f; // Ready to sound immediately on next move
+        }
+        
+        // Canopy limit
+        float maxClimb = ClimbingTreePos.y + 16.0f * ClimbingTreeScale; // leaves area
+        if (Position.y > maxClimb) {
+            Position.y = maxClimb;
+        }
+        
+        // Ground release
+        float terrainHeight = WorldGenerator::GetHeight(Position.x, Position.z);
+        if (Position.y < terrainHeight + PlayerHeight) {
+            Position.y = terrainHeight + PlayerHeight;
+            IsClimbing = false;
+            IsGrounded = true;
+        }
+        
+        // Jump off
+        static bool spaceWasPressed = false;
+        bool spaceIsPressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Space);
+        if (spaceIsPressed && !spaceWasPressed) {
+            IsClimbing = false;
+            Velocity.y = JumpForce * 0.8f;
+            Velocity.x = toPlayer.x * WalkSpeed * 0.8f;
+            Velocity.z = toPlayer.z * WalkSpeed * 0.8f;
+        }
+        spaceWasPressed = spaceIsPressed;
+        
+    } else {
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) { moveDir += flatFront; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) { moveDir -= flatFront; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) { moveDir -= flatRight; }
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) { moveDir += flatRight; }
+
+        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
+            if (treeNear) {
+                IsClimbing = true;
+                ClimbingTreePos = glm::vec3(closestTree.x, closestTree.y, closestTree.z);
+                ClimbingTreeScale = closestTree.w;
+                Velocity = glm::vec3(0.0f);
+                IsGrounded = false;
+            } else if (IsGrounded) {
+                Velocity.y = JumpForce;
+                IsGrounded = false;
+            }
+        }
+
+        if (glm::length(moveDir) > 0.0f) {
+            moveDir = glm::normalize(moveDir);
+            glm::vec3 displacement = moveDir * WalkSpeed * deltaTime;
+            glm::vec3 nextPos = Position + displacement;
+            
+            // Footprints
+            if(IsGrounded) {
+                 static float distAccumulator = 0.0f;
+                 distAccumulator += glm::length(displacement);
+                 if(distAccumulator > 1.5f) {
+                     distAccumulator = 0.0f;
+                     footprints.AddFootprint(Position - glm::vec3(0.0f, PlayerHeight, 0.0f), Yaw);
+                 }
+            }
+
+            // Tree Collision using ChunkManager (Skip when not climbing)
+            std::vector<glm::vec4> collideTrees;
+            chunkManager.GetTreesInRange(nextPos, 3.0f, collideTrees); 
+
+            for (const auto& treeData : collideTrees) {
+                glm::vec3 treePos(treeData.x, treeData.y, treeData.z);
+                float treeScale = treeData.w;
+                
+                float dx = nextPos.x - treePos.x;
+                float dz = nextPos.z - treePos.z;
+                float dist = sqrt(dx*dx + dz*dz);
+                
+                float scaledRadius = 0.6f * treeScale; 
+                float minDist = PlayerRadius + scaledRadius;
+
+                if (dist < minDist) {
+                    if (dist > 0.0001f) {
+                        float push = minDist - dist;
+                        nextPos.x += (dx / dist) * push;
+                        nextPos.z += (dz / dist) * push;
+                    }
+                }
+            }
+            
+            // Limit to World Bounds (Invisible Wall)
+            float limit = (Config::World::MapRadius - 1) * Config::World::ChunkSize * Config::World::ChunkScale;
+            
+            if (nextPos.x > limit) nextPos.x = limit;
+            if (nextPos.x < -limit) nextPos.x = -limit;
+            if (nextPos.z > limit) nextPos.z = limit;
+            if (nextPos.z < -limit) nextPos.z = -limit;
+
+            Position.x = nextPos.x;
+            Position.z = nextPos.z;
+
+            Velocity.x = moveDir.x * WalkSpeed;
+            Velocity.z = moveDir.z * WalkSpeed;
+
+            if(IsGrounded) {
+                HeadBobTimer += deltaTime * HeadBobSpeed;
+            }
+        } else {
+            HeadBobTimer = 0.0f;
+            Velocity.x = 0.0f;
+            Velocity.z = 0.0f;
+        }
     }
 }
 
 void Player::Update(float deltaTime) {
+    if (IsClimbing) {
+        BreathTimer += deltaTime * BreathSpeed;
+        m_cameraNoiseAccumulator = std::max(0.0f, m_cameraNoiseAccumulator - deltaTime * 10.0f);
+        return;
+    }
+
     Velocity.y -= Gravity * deltaTime;
     Position.y += Velocity.y * deltaTime;
 

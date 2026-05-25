@@ -392,9 +392,9 @@ void WeaponSystem::TryFire(glm::vec3 camPos, glm::vec3 camDir, ParticleSystem& p
     p.Velocity = fireDir * Config::Gameplay::ProjectileSpeed; 
     projectiles.push_back(p);
 
-    // Notify Monsters of Sound (150m range)
+    // Notify Monsters of Sound (Infinite range)
     for (const auto& monsterPtr : monsters) {
-        monsterPtr->HearSound(muzzlePos, 150.0f);
+        monsterPtr->HearSound(muzzlePos, Config::Gameplay::GunshotSoundRange);
     }
 }
 
