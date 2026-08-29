@@ -1,0 +1,12 @@
+#include "DefenseDebuff.h"
+#include "entities/Entity.h"
+
+void DefenseDebuff::onExecute(Entity* caster, Entity* target, ParticleSystem* particles) {
+    if (!caster || !target) return;
+    for (const auto& eff : effects) {
+        if (eff.type == EffectType::BUFF_STAT) {
+            float val = getEffectiveValue(eff.value);
+            target->applyBuff(eff.statToBuff, val, eff.duration, this->id, this->statusEffectId);
+        }
+    }
+}

@@ -1,0 +1,9 @@
+# Tree Trunk - Ancient Broad Oak
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+
+BOX  0.0 -2.0  0.0   1.40 6.0 1.40   0 0 0  0.34 0.20 0.10  TRUNK_BASE
+BOX  0.0  3.5  0.0   1.15 5.0 1.15   0 0 0  0.36 0.22 0.12  TRUNK_MID
+BOX  1.1  4.8  0.0   0.50 4.2 0.50   0 0 -0.65  0.32 0.18 0.08  BRANCH_R
+BOX -1.1  4.8  0.0   0.50 4.2 0.50   0 0  0.65  0.32 0.18 0.08  BRANCH_L
+BOX  0.0  4.8  1.1   0.50 4.2 0.50   0.65 0 0  0.32 0.18 0.08  BRANCH_F
+BOX  0.0  4.8 -1.1   0.50 4.2 0.50  -0.65 0 0  0.32 0.18 0.08  BRANCH_B

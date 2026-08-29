@@ -89,6 +89,13 @@ add_executable(${PROJECT_NAME}
 # Include directories
 target_include_directories(${PROJECT_NAME} PRIVATE 
     src
+    src/core
+    src/entities
+    src/combat
+    src/world
+    src/graphics
+    src/ui
+    src/inventory
     ${glad_SOURCE_DIR}/include
 )
 

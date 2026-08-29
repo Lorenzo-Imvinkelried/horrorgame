@@ -1,0 +1,7 @@
+# Tree Leaves - Slender Birch (Airy, light spring foliage)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+
+BOX  0.0  9.8  0.0   2.6 2.6 2.6   0 0 0  0.08 0.58 0.12  BIRCH_LEAVES_TOP
+BOX  1.4  8.8  0.0   2.0 2.0 2.0   0.1 0 -0.2  0.10 0.64 0.15  BIRCH_LEAVES_R
+BOX -1.4  9.2  0.0   2.0 2.0 2.0  -0.1 0  0.2  0.09 0.62 0.14  BIRCH_LEAVES_L
+BOX  0.0 11.5  0.0   1.6 1.6 1.6   0 0 0  0.12 0.68 0.18  BIRCH_LEAVES_PEAK

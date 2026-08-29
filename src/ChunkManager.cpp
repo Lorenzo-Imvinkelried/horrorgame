@@ -247,27 +247,33 @@ void ChunkManager::RebuildBatch(RenderBatch& batch) {
     glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
     batch.waterVertexCount = (int)batchWaterVertices.size();
     
-    // Upload Tree Instances
-    std::vector<glm::vec4> batchTrees;
+    // Upload Tree Instances by Archetype (0=Oak, 1=Pine, 2=Birch, 3=Willow)
+    std::vector<glm::vec4> batchTrees[4];
     for (int z = 0; z < B_SIZE; z++) {
         for (int x = 0; x < B_SIZE; x++) {
             int cx = startCX + x;
             int cz = startCZ + z;
             auto it = m_chunks.find({cx, cz});
             if (it != m_chunks.end()) {
-                batchTrees.insert(batchTrees.end(), it->second.treePositions.begin(), it->second.treePositions.end());
+                for (const auto& t : it->second.treePositions) {
+                    float treeHash = sin(t.x * 37.19f + t.z * 91.43f) * 43758.5453f;
+                    int arch = std::abs((int)(treeHash * 100.0f)) % 4;
+                    batchTrees[arch].push_back(t);
+                }
             }
         }
     }
     
-    if (batch.treeInstanceVBO == 0) glGenBuffers(1, &batch.treeInstanceVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, batch.treeInstanceVBO);
-    if (!batchTrees.empty()) {
-        glBufferData(GL_ARRAY_BUFFER, batchTrees.size() * sizeof(glm::vec4), batchTrees.data(), GL_STATIC_DRAW);
-    } else {
-        glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_STATIC_DRAW);
+    for (int i = 0; i < 4; ++i) {
+        if (batch.treeInstanceVBO[i] == 0) glGenBuffers(1, &batch.treeInstanceVBO[i]);
+        glBindBuffer(GL_ARRAY_BUFFER, batch.treeInstanceVBO[i]);
+        if (!batchTrees[i].empty()) {
+            glBufferData(GL_ARRAY_BUFFER, batchTrees[i].size() * sizeof(glm::vec4), batchTrees[i].data(), GL_STATIC_DRAW);
+        } else {
+            glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_STATIC_DRAW);
+        }
+        batch.treeCount[i] = (int)batchTrees[i].size();
     }
-    batch.treeCount = (int)batchTrees.size();
 
     batch.dirty = false;
     
@@ -304,7 +310,6 @@ void ChunkManager::RenderWater(GLuint shaderProgram) {
     glm::mat4 identity(1.0f);
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(identity));
     
-    // Asegurar que el agua no use instancing ni viento raro
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
     
     glEnable(GL_BLEND);
@@ -314,12 +319,6 @@ void ChunkManager::RenderWater(GLuint shaderProgram) {
     glEnable(GL_POLYGON_OFFSET_FILL);
     glPolygonOffset(-1.0f, -1.0f); 
 
-    // Use SORTED visible batches (Transparency usually requires Back-to-Front... 
-    // BUT for single-layer water plane, Front-to-Back is fine or irrelevant if depth mask is off but depth test on.
-    // Actually, for transparency, Back-to-Front is strictly better.
-    // Let's reverse iterate for water?
-    // Since water is flat and mostly uniform, it might not matter much for the "forest lag".
-    // Let's just use forward iteration for now, water is not lag source.
     for (RenderBatch* bPtr : m_visibleBatches) {
         RenderBatch& b = *bPtr;
         if (b.waterVertexCount > 0) {
@@ -334,10 +333,11 @@ void ChunkManager::RenderWater(GLuint shaderProgram) {
     glBindVertexArray(0);
 }
 
-void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint leavesVAO, int trunkVertexCount, int leavesVertexCount, glm::vec3 playerPos) {
+void ChunkManager::RenderTrees(GLuint shaderProgram, const GLuint trunkVAO[4], const GLuint leavesVAO[4], const int trunkVertexCount[4], const int leavesVertexCount[4], glm::vec3 playerPos) {
     // 1. Identify if the player is inside any tree foliage
     glm::vec4 playerTree(0.0f);
     bool hasPlayerTree = false;
+    int playerTreeArch = 0;
     
     std::vector<glm::vec4> nearbyTrees;
     GetTreesInRange(playerPos, 15.0f, nearbyTrees);
@@ -349,6 +349,8 @@ void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint lea
         if (dist2D < leavesRadius && playerPos.y >= leavesBase && playerPos.y <= leavesTop) {
             playerTree = t;
             hasPlayerTree = true;
+            float treeHash = sin(t.x * 37.19f + t.z * 91.43f) * 43758.5453f;
+            playerTreeArch = std::abs((int)(treeHash * 100.0f)) % 4;
             break;
         }
     }
@@ -362,83 +364,73 @@ void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint lea
     GLint isPlayerTreePassLoc = glGetUniformLocation(shaderProgram, "u_IsPlayerTreePass");
     GLint playerTreeDataLoc   = glGetUniformLocation(shaderProgram, "u_PlayerTreeData");
 
-    // NEW: Wind LOD Uniforms
     glUniform1f(glGetUniformLocation(shaderProgram, "u_LodDistNear"), Config::Trees::WindLodNear);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_LodDistFar"), Config::Trees::WindLodFar);
 
     glUniform1i(instancedLoc, 1);
     glUniform1i(conformLoc, 0);
-    glUniform1i(birdAttribsLoc, 0); // Ensure Tree Mode
+    glUniform1i(birdAttribsLoc, 0);
     
-    // Upload Player Tree Data (if any) to the shader for normal pass clipping
     if (hasPlayerTree) {
         glUniform4f(playerTreeDataLoc, playerTree.x, playerTree.y, playerTree.z, playerTree.w);
     } else {
         glUniform4f(playerTreeDataLoc, 0.0f, 0.0f, 0.0f, 0.0f);
     }
-    glUniform1i(isPlayerTreePassLoc, 0); // Normal Pass initially
+    glUniform1i(isPlayerTreePassLoc, 0);
 
     GLuint lastInstanceVBO = 0;
 
     for (RenderBatch* bPtr : m_visibleBatches) {
         RenderBatch& b = *bPtr;
-        if (b.treeCount == 0) continue;
         
-        lastInstanceVBO = b.treeInstanceVBO;
+        for (int arch = 0; arch < 4; ++arch) {
+            if (b.treeCount[arch] == 0) continue;
+            
+            lastInstanceVBO = b.treeInstanceVBO[arch];
 
-        // --- PASS A: TRUNKS ---
-        glUniform1f(windStrLoc, 0.0f);
-        
-        glBindVertexArray(trunkVAO);
-        
-        // Setup Instance Buffer
-        glBindBuffer(GL_ARRAY_BUFFER, b.treeInstanceVBO);
-        
-        // Clean Bird Attributes
-        glDisableVertexAttribArray(6);
-        glDisableVertexAttribArray(7);
-        
-        // Setup Tree Attribute (4)
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-        glVertexAttribDivisor(4, 1); // CRITICAL
-        
-        // Disable potential conflicts
-        glDisableVertexAttribArray(5);
-        
-        glDrawArraysInstanced(GL_TRIANGLES, 0, trunkVertexCount, b.treeCount);
+            // --- PASS A: TRUNKS ---
+            glUniform1f(windStrLoc, 0.0f);
+            glBindVertexArray(trunkVAO[arch]);
+            glBindBuffer(GL_ARRAY_BUFFER, b.treeInstanceVBO[arch]);
+            
+            glDisableVertexAttribArray(6);
+            glDisableVertexAttribArray(7);
+            
+            glEnableVertexAttribArray(4);
+            glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+            glVertexAttribDivisor(4, 1);
+            glDisableVertexAttribArray(5);
+            
+            glDrawArraysInstanced(GL_TRIANGLES, 0, trunkVertexCount[arch], b.treeCount[arch]);
 
-        // --- PASS B: LEAVES (OPAQUE PASS, normal depth writing, no blending) ---
-        glUniform1f(windStrLoc, 1.0f);
-        
-        glBindVertexArray(leavesVAO);
-        
-        // Setup Instance Buffer Again (New VAO)
-        glBindBuffer(GL_ARRAY_BUFFER, b.treeInstanceVBO);
-        glEnableVertexAttribArray(4);
-        glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-        glVertexAttribDivisor(4, 1); // CRITICAL
-        
-        glDisableVertexAttribArray(5);
-        glDisableVertexAttribArray(6);
-        glDisableVertexAttribArray(7);
+            // --- PASS B: LEAVES ---
+            glUniform1f(windStrLoc, 1.0f);
+            glBindVertexArray(leavesVAO[arch]);
+            glBindBuffer(GL_ARRAY_BUFFER, b.treeInstanceVBO[arch]);
+            glEnableVertexAttribArray(4);
+            glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+            glVertexAttribDivisor(4, 1);
+            
+            glDisableVertexAttribArray(5);
+            glDisableVertexAttribArray(6);
+            glDisableVertexAttribArray(7);
 
-        glDrawArraysInstanced(GL_TRIANGLES, 0, leavesVertexCount, b.treeCount);
-        
-        // Cleanup
-        glDisableVertexAttribArray(4);
+            glDrawArraysInstanced(GL_TRIANGLES, 0, leavesVertexCount[arch], b.treeCount[arch]);
+            
+            glDisableVertexAttribArray(4);
+        }
     }
 
-    // --- PASS C: PLAYER TREE LEAVES (TRANSLUCENT PASS, depth writing disabled, blending enabled) ---
+    // --- PASS C: PLAYER TREE LEAVES (TRANSLUCENT PASS) ---
     if (hasPlayerTree && lastInstanceVBO != 0) {
         glUniform1i(isPlayerTreePassLoc, 1);
         glUniform1f(windStrLoc, 1.0f);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glDepthMask(GL_FALSE); // Disable depth write for transparent foliage
+        glDepthMask(GL_FALSE);
 
-        glBindVertexArray(leavesVAO);
+        glBindVertexArray(leavesVAO[playerTreeArch]);
         glBindBuffer(GL_ARRAY_BUFFER, lastInstanceVBO);
         glEnableVertexAttribArray(4);
         glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
@@ -448,9 +440,9 @@ void ChunkManager::RenderTrees(GLuint shaderProgram, GLuint trunkVAO, GLuint lea
         glDisableVertexAttribArray(6);
         glDisableVertexAttribArray(7);
 
-        glDrawArraysInstanced(GL_TRIANGLES, 0, leavesVertexCount, 1);
+        glDrawArraysInstanced(GL_TRIANGLES, 0, leavesVertexCount[playerTreeArch], 1);
 
-        glDepthMask(GL_TRUE); // Re-enable depth write
+        glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
         glDisableVertexAttribArray(4);
     }

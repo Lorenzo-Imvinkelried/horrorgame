@@ -52,11 +52,14 @@ public:
     // Helper: Returns deterministically generated tree positions for a chunk (used for shadows)
     static std::vector<glm::vec2> GetChunkTreeLocations(int chunkX, int chunkZ, int chunkSize, float scale);
 
-    // Returns a static mesh for ONE tree (to be used with instancing)
-    static std::vector<Vertex> GetTreeTrunkMesh();
-    static std::vector<Vertex> GetTreeLeavesMesh();
+    // Returns a static mesh for ONE tree archetype (0=Oak, 1=Pine, 2=Birch, 3=Willow)
+    static std::vector<Vertex> GetTreeTrunkMesh(int type = 0);
+    static std::vector<Vertex> GetTreeLeavesMesh(int type = 0);
     // Returns a simple quad mesh for blob shadows
     static std::vector<Vertex> GetShadowMesh();
+
+    // Helper: Returns mountain factor (0..1) for biome/ridge logic
+    static float GetMountainFactor(float x, float z);
 
     // Calculates SMOOTH height at a given (x, z) for physics/collision
     static float GetHeight(float x, float z);
@@ -67,13 +70,11 @@ public:
     // Calculates QUANTIZED height for visual terrain rendering
     static float GetVisualHeight(float x, float z);
 
-    // Returns terrain color at (x, z) - useful for particles
+    // Returns terrain color at (x, z)
     static glm::vec3 GetTerrainColor(float x, float z, float y);
+    static glm::vec3 GetTerrainColor(float x, float z, float y, const glm::vec3& normal);
 
     // Calculates EXACT height on the terrain mesh (Interpolated)
-    // Matches the triangulation (0,0)-(1,0)-(0,1) and (1,0)-(1,1)-(0,1)
-    // Calculates EXACT height on the terrain mesh (Interpolated)
-    // Matches the triangulation (0,0)-(1,0)-(0,1) and (1,0)-(1,1)-(0,1)
     static float GetExactHeight(float x, float z);
     
     // Check if a point is in a lagoon (Water + Low Height)
@@ -85,3 +86,4 @@ public:
 private:
     static void Internal_AddTreeGeometry(float x, float y, float z, float trunkW, float trunkH, float leavesW, float leavesH, std::vector<Vertex>& vertices);
 };
+

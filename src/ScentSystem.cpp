@@ -389,3 +389,13 @@ void ScentSystem::RenderDebug(GLuint shaderProgram, glm::vec3 cullPos) {
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
     glEnable(GL_DEPTH_TEST);
 }
+
+void ScentSystem::AddBloodScent(glm::vec3 pos, glm::vec3 windDir) {
+    ScentPacket packet;
+    packet.spawnPos = pos + glm::vec3(0.0f, 0.5f, 0.0f);
+    packet.id = m_nextPacketId++;
+    glm::vec3 flatWind(windDir.x, 0.0f, windDir.z);
+    packet.windDir = (glm::length(flatWind) > 0.001f) ? glm::normalize(flatWind) : glm::vec3(1.0f, 0.0f, 0.0f);
+    packet.spawnTime = m_globalTime;
+    m_packets.push_back(packet);
+}

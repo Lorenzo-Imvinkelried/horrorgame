@@ -31,12 +31,8 @@ public:
     void UpdateVisibility(const glm::mat4& viewProj); // New Method
     void RenderTerrain(GLuint shaderProgram);
     void RenderWater(GLuint shaderProgram); // Water Pass (Transparent)
+    void RenderTrees(GLuint shaderProgram, const GLuint trunkVAO[4], const GLuint leavesVAO[4], const int trunkVertexCount[4], const int leavesVertexCount[4], glm::vec3 playerPos);
     void RenderDebug(GLuint shaderProgram, glm::vec3 playerPos);
-    
-    // Instancing support
-    // Instancing support
-    // (Removed CollectAllTreePositions - using static batching now)
-
 
     // Collision support
     void GetTreesInRange(glm::vec3 pos, float range, std::vector<glm::vec4>& outTrees);
@@ -47,9 +43,9 @@ public:
         GLuint VAO, VBO;
         GLuint waterVAO, waterVBO; 
         
-        // Tree Instance Data (Static per batch)
-        GLuint treeInstanceVBO; 
-        int treeCount;
+        // Tree Instance Data (Static per batch, 4 archetypes)
+        GLuint treeInstanceVBO[4]; 
+        int treeCount[4];
 
         int vertexCount;
         int waterVertexCount;
@@ -57,14 +53,23 @@ public:
         bool dirty;
         float distFromCam; // For Front-to-Back Sorting
         
-        RenderBatch() : VAO(0), VBO(0), waterVAO(0), waterVBO(0), treeInstanceVBO(0), treeCount(0), vertexCount(0), waterVertexCount(0), visible(false), dirty(true), distFromCam(0.0f) {}
+        RenderBatch() : VAO(0), VBO(0), waterVAO(0), waterVBO(0), vertexCount(0), waterVertexCount(0), visible(false), dirty(true), distFromCam(0.0f) {
+            for (int i = 0; i < 4; ++i) {
+                treeInstanceVBO[i] = 0;
+                treeCount[i] = 0;
+            }
+        }
         void Cleanup() {
             if(VAO) glDeleteVertexArrays(1, &VAO);
             if(VBO) glDeleteBuffers(1, &VBO);
             if(waterVAO) glDeleteVertexArrays(1, &waterVAO);
             if(waterVBO) glDeleteBuffers(1, &waterVBO);
-            if(treeInstanceVBO) glDeleteBuffers(1, &treeInstanceVBO); // VAO is shared (TrunkVAO/LeavesVAO)
-            VAO=0; VBO=0; waterVAO=0; waterVBO=0; treeInstanceVBO=0; treeCount=0; vertexCount=0;
+            for (int i = 0; i < 4; ++i) {
+                if(treeInstanceVBO[i]) glDeleteBuffers(1, &treeInstanceVBO[i]);
+                treeInstanceVBO[i] = 0;
+                treeCount[i] = 0;
+            }
+            VAO=0; VBO=0; waterVAO=0; waterVBO=0; vertexCount=0;
         }
     };
 

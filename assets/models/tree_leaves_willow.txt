@@ -1,0 +1,9 @@
+# Tree Leaves - Gnarled Willow (Drooping wide weeping canopy)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+
+BOX  0.0  7.5  0.0   4.2 3.2 4.2   0 0 0  0.04 0.42 0.12  WILLOW_DOME
+BOX  2.4  5.8  0.0   2.6 3.6 2.6   0.1 0 -0.2  0.05 0.46 0.14  WILLOW_WEEP_R
+BOX -2.4  5.8  0.0   2.6 3.6 2.6  -0.1 0  0.2  0.05 0.46 0.14  WILLOW_WEEP_L
+BOX  0.0  5.8  2.4   2.6 3.6 2.6   0.2 0  0.1  0.05 0.46 0.14  WILLOW_WEEP_F
+BOX  0.0  5.8 -2.4   2.6 3.6 2.6  -0.2 0 -0.1  0.05 0.46 0.14  WILLOW_WEEP_B
+BOX  0.0  9.4  0.0   2.4 2.2 2.4   0 0 0  0.06 0.50 0.16  WILLOW_TOP

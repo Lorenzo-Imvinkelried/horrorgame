@@ -1,0 +1,80 @@
+# Dark Fantasy Hunter / Knight Model
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+# Coordinate space: Y=0 (Ground), +Z=Forward, +X=Right
+
+# --- HEAD & HOOD ---
+# Head Core (Dark mystery shadow face)
+BOX  0.0  1.52  0.0     0.26 0.28 0.28   0 0 0   0.12 0.10 0.10  HEAD_CORE
+# Hood (Dark leather / fabric covering head)
+BOX  0.0  1.56 -0.02    0.32 0.32 0.34   0 0 0   0.20 0.16 0.14  HOOD_MAIN
+BOX  0.0  1.68 -0.06    0.26 0.14 0.28  -0.2 0 0 0.18 0.14 0.12  HOOD_TOP
+BOX  0.0  1.42 -0.08    0.28 0.18 0.20   0 0 0   0.20 0.16 0.14  HOOD_BACK
+# Hunter Eyes / Mask slit (Eerie amber glow)
+BOX  0.0  1.53  0.13    0.16 0.04 0.04   0 0 0   0.85 0.65 0.25  MASK_EYES
+
+# --- UPPER BODY / TORSO & CAPE ---
+# Neck / Collar
+BOX  0.0  1.38  0.0     0.22 0.10 0.22   0 0 0   0.22 0.18 0.15  NECK_COLLAR
+# Chestplate / Leather Cuirass
+BOX  0.0  1.18  0.0     0.46 0.36 0.30   0 0 0   0.28 0.22 0.18  CHEST_PLATE
+# Belt & Buckle
+BOX  0.0  0.96  0.0     0.44 0.10 0.28   0 0 0   0.18 0.14 0.10  BELT
+BOX  0.0  0.96  0.15    0.10 0.08 0.04   0 0 0   0.65 0.52 0.20  BUCKLE_BRONZE
+# Pouch on belt
+BOX  0.18 0.94  0.12    0.10 0.12 0.10   0 0 0   0.25 0.18 0.12  POUCH_R
+# Cape / Coat (Back & Shoulders)
+BOX  0.0  1.08 -0.16    0.48 0.58 0.08   0.08 0 0 0.16 0.12 0.12 CAPE_BACK
+BOX  0.0  0.72 -0.19    0.46 0.42 0.06   0.15 0 0 0.14 0.10 0.10 CAPE_LOWER
+
+# --- SHOULDERS & ARMS ---
+# Left Shoulder (Pauldrons)
+BOX -0.28 1.30  0.0     0.18 0.14 0.22   0 0 0.15 0.32 0.26 0.20 SHOULDER_L
+# Left Upper Arm
+BOX -0.28 1.12  0.0     0.14 0.24 0.16   0 0 0    0.24 0.18 0.14 ARM_UPPER_L
+# Left Forearm & Gauntlet
+BOX -0.28 0.88  0.04    0.14 0.26 0.16  -0.15 0 0 0.20 0.16 0.12 FOREARM_L
+# Left Hand
+BOX -0.28 0.72  0.08    0.12 0.10 0.14   0 0 0    0.15 0.12 0.10 HAND_L
+
+# Right Shoulder (Pauldrons)
+BOX  0.28 1.30  0.0     0.18 0.14 0.22   0 0 -0.15 0.32 0.26 0.20 SHOULDER_R
+# Right Upper Arm
+BOX  0.28 1.12  0.0     0.14 0.24 0.16   0 0 0     0.24 0.18 0.14 ARM_UPPER_R
+# Right Forearm & Gauntlet
+BOX  0.28 0.88  0.04    0.14 0.26 0.16  -0.15 0 0  0.20 0.16 0.12 FOREARM_R
+# Right Hand
+BOX  0.28 0.72  0.08    0.12 0.10 0.14   0 0 0     0.15 0.12 0.10 HAND_R
+
+# --- EQUIPPED WEAPON (STEEL SWORD IN RIGHT HAND) ---
+# Grip / Handle in Hand (Leather wrapped)
+BOX  0.28 0.72 0.08    0.07 0.07 0.24   0 0 0    0.30 0.20 0.12  SWORD_HANDLE
+# Pommel (Bronze counterbalance at rear)
+BOX  0.28 0.72 -0.06   0.09 0.09 0.08   0 0 0    0.70 0.58 0.22  SWORD_POMMEL
+# Crossguard (Bronze crossbar)
+BOX  0.28 0.72 0.22    0.07 0.34 0.07   0 0 0    0.72 0.60 0.24  SWORD_GUARD
+# Blade Base (Steel)
+BOX  0.28 0.72 0.50    0.03 0.11 0.50   0 0 0    0.85 0.90 0.96  SWORD_BLADE1
+# Blade Mid (Steel)
+BOX  0.28 0.72 0.96    0.025 0.09 0.44  0 0 0    0.88 0.92 0.98  SWORD_BLADE2
+# Blade Tip (Tapered tip)
+BOX  0.28 0.72 1.28    0.02 0.05 0.22   0 0 0    0.92 0.95 1.00  SWORD_TIP
+
+# --- LEGS & BOOTS ---
+# Pelvis / Tassets
+BOX  0.0  0.88  0.0     0.40 0.14 0.26   0 0 0    0.22 0.18 0.14 PELVIS
+# Coat Skirt / Faldón
+BOX  0.0  0.74  0.0     0.44 0.22 0.28   0 0 0    0.18 0.14 0.12 SKIRT
+
+# Left Leg (Thigh)
+BOX -0.13 0.62  0.0     0.16 0.30 0.18   0 0 0    0.20 0.16 0.12 THIGH_L
+# Left Boot / Greave
+BOX -0.13 0.30  0.0     0.17 0.36 0.20   0 0 0    0.14 0.10 0.08 BOOT_L
+# Left Foot
+BOX -0.13 0.06  0.05    0.17 0.12 0.26   0 0 0    0.12 0.09 0.07 FOOT_L
+
+# Right Leg (Thigh)
+BOX  0.13 0.62  0.0     0.16 0.30 0.18   0 0 0    0.20 0.16 0.12 THIGH_R
+# Right Boot / Greave
+BOX  0.13 0.30  0.0     0.17 0.36 0.20   0 0 0    0.14 0.10 0.08 BOOT_R
+# Right Foot
+BOX  0.13 0.06  0.05    0.17 0.12 0.26   0 0 0    0.12 0.09 0.07 FOOT_R

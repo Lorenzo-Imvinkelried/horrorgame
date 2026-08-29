@@ -42,6 +42,7 @@ public:
     void TakeDamage(float amount, bool isHeadshot);
     bool IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& isHeadshot);
     bool IsDead() const { return m_isDead; }
+    float GetHealth() const { return m_health; }
     
     glm::vec3 GetPosition() const { return m_pos; }
     MonsterAction GetAction() const { return m_action; }

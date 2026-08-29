@@ -34,6 +34,13 @@ float SmoothNoise(float x, float z) {
     return glm::mix(glm::mix(a, b, u), glm::mix(c, d, u), v);
 }
 
+float WorldGenerator::GetMountainFactor(float x, float z) {
+    // Large tectonic noise for distant, grand mountain ranges
+    float mNoise = SmoothNoise(x * 0.0020f + 500.0f, z * 0.0020f + 500.0f);
+    // Smooth transition: only higher values create mountain ridges (15-20% of map)
+    return glm::smoothstep(0.60f, 0.82f, mNoise);
+}
+
 float WorldGenerator::GetHeight(float x, float z) {
     // Apply Random Offset for Per-Run Variety
     x += OffsetX;
@@ -41,26 +48,40 @@ float WorldGenerator::GetHeight(float x, float z) {
 
     float y = 0.0f;
     
-    // Octave 1: Base Hills (Large features)
-    // Value Noise returns 0..1, so we center it around 0 (-0.5..0.5) for hills/valleys if desired, 
-    // or just scale it. Let's keep 0..1 and scale.
+    // Octave 1: Base Hills (Valleys & Foothills)
     y += SmoothNoise(x * Config::Terrain::BaseFreqX, z * Config::Terrain::BaseFreqZ) * Config::Terrain::BaseAmplitude;
     
     // Octave 2: Detail (Roughness)
     y += SmoothNoise(x * Config::Terrain::DetailFreqX, z * Config::Terrain::DetailFreqZ) * Config::Terrain::DetailAmplitude;
     
-    // --- LAGOON CARVING ---
-    // If this area is "Wet", sink the terrain to make room for water.
-    float moisture = GetMoisture(x, z);
-    if (moisture > (1.0f - Config::Water::Chance)) {
-        // Calculate factor 0..1 based on how deep into the wet zone we are
-        float factor = (moisture - (1.0f - Config::Water::Chance)) / Config::Water::Chance;
-        
-        // Smooth the hole shape (Smoothstep) to avoid sharp cliffs
-        factor = factor * factor * (3.0f - 2.0f * factor);
-        
-        // Sink the terrain!
-        y -= factor * Config::Water::Depth;
+    // --- PROCEDURAL MOUNTAIN RANGES (Ridged Multifractal) ---
+    float mFactor = GetMountainFactor(x, z);
+    if (mFactor > 0.001f) {
+        // Octave 1: Main sharp ridges & knife-edge peaks
+        float r1 = SmoothNoise(x * 0.012f + 50.0f, z * 0.012f + 50.0f);
+        float ridge1 = 1.0f - std::abs(2.0f * r1 - 1.0f);
+        ridge1 = ridge1 * ridge1; // Sharpen peaks
+
+        // Octave 2: Secondary jagged crags
+        float r2 = SmoothNoise(x * 0.035f, z * 0.035f);
+        float ridge2 = 1.0f - std::abs(2.0f * r2 - 1.0f);
+
+        // Octave 3: High frequency rock ruggedness
+        float r3 = SmoothNoise(x * 0.12f, z * 0.12f);
+
+        float mountainElevation = (ridge1 * 44.0f) + (ridge2 * 14.0f) + (r3 * 3.5f);
+        y += mountainElevation * mFactor;
+    }
+
+    // --- LAGOON CARVING (Only in Lowland Valleys) ---
+    if (mFactor < 0.35f) {
+        float moisture = GetMoisture(x, z);
+        if (moisture > (1.0f - Config::Water::Chance)) {
+            float factor = (moisture - (1.0f - Config::Water::Chance)) / Config::Water::Chance;
+            factor = factor * factor * (3.0f - 2.0f * factor);
+            factor *= (1.0f - mFactor / 0.35f);
+            y -= factor * Config::Water::Depth;
+        }
     }
 
     return y;
@@ -96,7 +117,7 @@ std::vector<glm::vec2> WorldGenerator::GetChunkTreeLocations(int chunkX, int chu
             valid = true;
             for (const auto& pos : placedPositions) {
                 float dx = tx - pos.x;
-                float dz = tz - pos.y; // stored as x,y
+                float dz = tz - pos.y;
                 if (sqrt(dx*dx + dz*dz) < 5.0f) { 
                     valid = false; 
                     break;
@@ -107,13 +128,27 @@ std::vector<glm::vec2> WorldGenerator::GetChunkTreeLocations(int chunkX, int chu
 
         if (valid) {
             float h = GetExactHeight(tx, tz);
-            // Check for Lagoon
-            if (IsLagoon(tx, tz, h)) {
-                // Don't spawn trees in water
+            float mFactor = GetMountainFactor(tx, tz);
+
+            // Compute ground slope
+            float hL = GetExactHeight(tx - 1.0f, tz);
+            float hR = GetExactHeight(tx + 1.0f, tz);
+            float hD = GetExactHeight(tx, tz - 1.0f);
+            float hU = GetExactHeight(tx, tz + 1.0f);
+            glm::vec3 normal = glm::normalize(glm::vec3(hL - hR, 2.0f, hD - hU));
+            float slope = 1.0f - normal.y;
+
+            // Don't spawn trees in water or on sheer rock walls (slope > 0.38) or barren rocky tops (> 55m)
+            if (IsLagoon(tx, tz, h) || h > 55.0f || slope > 0.38f) {
                 valid = false;
             } else {
-                treePositions.push_back(glm::vec2(tx, tz));
-                placedPositions.push_back(glm::vec2(tx, tz));
+                // If on high mountain grassy area (mFactor > 0.45), spawn with balanced alpine distribution
+                if (mFactor > 0.45f && (rand() % 100 > 55)) {
+                    valid = false;
+                } else {
+                    treePositions.push_back(glm::vec2(tx, tz));
+                    placedPositions.push_back(glm::vec2(tx, tz));
+                }
             }
         }
     }
@@ -121,46 +156,53 @@ std::vector<glm::vec2> WorldGenerator::GetChunkTreeLocations(int chunkX, int chu
 }
 
 glm::vec3 WorldGenerator::GetTerrainColor(float x, float z, float y) {
-    // Organic Noise for Terrain Blending
-    // Octave 1: Large Shapes (Biome-like)
+    return GetTerrainColor(x, z, y, glm::vec3(0.0f, 1.0f, 0.0f));
+}
+
+glm::vec3 WorldGenerator::GetTerrainColor(float x, float z, float y, const glm::vec3& normal) {
+    // Organic Lowland Noise (Grass / Dirt)
     float n1 = SmoothNoise(x * 0.03f, z * 0.03f); 
-    
-    // Octave 2: Medium Detail
     float n2 = SmoothNoise(x * 0.1f, z * 0.1f);
-    
-    // Octave 3: Fine Grit
     float n3 = SmoothNoise(x * 0.5f, z * 0.5f);
-    
-    // Composite Noise (Weighted)
     float finalNoise = n1 * 0.6f + n2 * 0.3f + n3 * 0.1f;
     
     glm::vec3 baseColor;
-    
-    // Threshold for blending
-    // Use a smooth mix instead of hard if/else for better transitions? 
-    // For retro PS1 style, hard patches might be better, or slight dithering.
-    // Let's use a slightly soft threshold.
-    
     if (finalNoise > 0.55f) {
          // DIRT / MUD (Browns)
-         baseColor = glm::vec3(0.35f, 0.28f, 0.18f); 
-         
-         // Add grit
-         baseColor += glm::vec3(0.04f) * (n3 - 0.5f); 
+         baseColor = glm::vec3(0.35f, 0.28f, 0.18f) + glm::vec3(0.04f) * (n3 - 0.5f); 
     } else {
-         // GRASS (Greens)
-         // Varied green based on large noise
+         // GRASS (Forest Greens)
          float tone = n1; 
-         baseColor = glm::mix(glm::vec3(0.1f, 0.25f, 0.1f), glm::vec3(0.15f, 0.35f, 0.15f), tone);
-         
-         // Add grit
+         baseColor = glm::mix(glm::vec3(0.10f, 0.24f, 0.10f), glm::vec3(0.14f, 0.32f, 0.13f), tone);
          baseColor += glm::vec3(0.03f, 0.05f, 0.02f) * (n3 - 0.5f);
     }
 
-    // Height darkening (Valleys darker)
-    baseColor += glm::vec3(0.01f, (y + 5.0f) * 0.015f, 0.01f);
-    
-    return baseColor;
+    // Height darkening for valley depth
+    baseColor += glm::vec3(0.01f, (y + 5.0f) * 0.012f, 0.01f);
+
+    // --- MOUNTAIN & CLIFF ROCK SHADING ---
+    // 1. Slope cliff factor: steep surfaces turn to slate rock
+    float slope = 1.0f - normal.y; // 0 on flat, 1 on vertical wall
+    float cliffFactor = glm::smoothstep(0.18f, 0.40f, slope);
+
+    // 2. High altitude rock factor
+    float altFactor = glm::smoothstep(15.0f, 30.0f, y);
+
+    // Rock Color palette (Dark slate / granite / basalt)
+    float rockNoise = SmoothNoise(x * 0.35f, z * 0.35f);
+    glm::vec3 darkSlate = glm::vec3(0.20f, 0.20f, 0.22f) + glm::vec3(0.04f) * (rockNoise - 0.5f);
+    glm::vec3 lightGranite = glm::vec3(0.32f, 0.31f, 0.34f) + glm::vec3(0.05f) * (rockNoise - 0.5f);
+    glm::vec3 rockColor = glm::mix(darkSlate, lightGranite, SmoothNoise(x * 0.08f, z * 0.08f));
+
+    // High Peak Frost / Cold Stone (y > 32.0f)
+    if (y > 30.0f) {
+        float snowFactor = glm::smoothstep(30.0f, 46.0f, y);
+        glm::vec3 snowColor = glm::vec3(0.70f, 0.75f, 0.82f) + glm::vec3(0.04f) * rockNoise;
+        rockColor = glm::mix(rockColor, snowColor, snowFactor * (1.0f - cliffFactor * 0.4f));
+    }
+
+    float rockBlend = std::max(cliffFactor, altFactor);
+    return glm::mix(baseColor, rockColor, rockBlend);
 }
 
 // --- LAGOON LOGIC ---
@@ -239,12 +281,25 @@ WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunk
             float y10 = GetVisualHeight(x1, z0);
             float y01 = GetVisualHeight(x0, z1);
             float y11 = GetVisualHeight(x1, z1);
+
+            // Compute Geometric Normals
+            glm::vec3 p1(x0, y00, z0);
+            glm::vec3 p2(x0, y01, z1);
+            glm::vec3 p3(x1, y10, z0);
+            glm::vec3 n1 = glm::normalize(glm::cross(p2 - p1, p3 - p1));
+
+            glm::vec3 p4(x1, y10, z0);
+            glm::vec3 p5(x0, y01, z1);
+            glm::vec3 p6(x1, y11, z1);
+            glm::vec3 n2 = glm::normalize(glm::cross(p5 - p4, p6 - p4));
+
+            glm::vec3 avgNormal = glm::normalize(n1 + n2);
             
-            // 2. Calculate Base Colors
-            glm::vec3 c00 = GetTerrainColor(x0, z0, y00);
-            glm::vec3 c10 = GetTerrainColor(x1, z0, y10);
-            glm::vec3 c01 = GetTerrainColor(x0, z1, y01);
-            glm::vec3 c11 = GetTerrainColor(x1, z1, y11);
+            // 2. Calculate Base Colors with Slope & Altitude shading
+            glm::vec3 c00 = GetTerrainColor(x0, z0, y00, avgNormal);
+            glm::vec3 c10 = GetTerrainColor(x1, z0, y10, avgNormal);
+            glm::vec3 c01 = GetTerrainColor(x0, z1, y01, avgNormal);
+            glm::vec3 c11 = GetTerrainColor(x1, z1, y11, avgNormal);
             
             // 3. Check for Lagoon (Water)
             float cx = (x0 + x1) * 0.5f;
@@ -261,9 +316,7 @@ WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunk
                 // Translucent Blue
                 glm::vec3 wCol = glm::vec3(0.2f, 0.5f, 0.8f); 
                 
-                // Expansion to avoid gaps/square edges (User Request)
-                // "atraviese un poco el terreno"
-                float pad = scale * 0.5f; // overlap by 50% of a tile? 
+                float pad = scale * 0.5f;
                 
                 Vertex w1 = { glm::vec3(x0 - pad, wY, z0 - pad), wCol, glm::vec2(0,0), glm::vec3(0,1,0) };
                 Vertex w2 = { glm::vec3(x0 - pad, wY, z1 + pad), wCol, glm::vec2(0,1), glm::vec3(0,1,0) }; 
@@ -283,7 +336,6 @@ WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunk
             auto GetShadowFactor = [&](float vx, float vz) {
                 float shadow = 0.0f;
                 const float radiusSq = 2.5f * 2.5f;
-                // Simple distance check against all nearby trees
                 for (const auto& t : nearbyTrees) {
                     float dx = vx - t.x;
                     float dz = vz - t.y;
@@ -313,16 +365,6 @@ WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunk
             ApplyShadow(c11, s11);
 
             // 5. Generate Terrain Vertices
-            glm::vec3 p1(x0, y00, z0);
-            glm::vec3 p2(x0, y01, z1);
-            glm::vec3 p3(x1, y10, z0);
-            glm::vec3 n1 = glm::normalize(glm::cross(p2 - p1, p3 - p1));
-
-            glm::vec3 p4(x1, y10, z0);
-            glm::vec3 p5(x0, y01, z1);
-            glm::vec3 p6(x1, y11, z1);
-            glm::vec3 n2 = glm::normalize(glm::cross(p5 - p4, p6 - p4));
-
             data.vertices.push_back(Vertex{ p1, c00, glm::vec2(0.0f, 0.0f), n1 });
             data.vertices.push_back(Vertex{ p2, c01, glm::vec2(0.0f, 1.0f), n1 });
             data.vertices.push_back(Vertex{ p3, c10, glm::vec2(1.0f, 0.0f), n1 });
@@ -330,6 +372,157 @@ WorldData WorldGenerator::GenerateChunkTerrain(int chunkX, int chunkZ, int chunk
             data.vertices.push_back(Vertex{ p4, c10, glm::vec2(1.0f, 0.0f), n2 });
             data.vertices.push_back(Vertex{ p5, c01, glm::vec2(0.0f, 1.0f), n2 });
             data.vertices.push_back(Vertex{ p6, c11, glm::vec2(1.0f, 1.0f), n2 });
+
+            // 6. Generate Rocks (Piedras Sueltas) & Wildflowers (Flores)
+            float hVal = sin((x0 + 17.13f) * 12.9898f + (z0 + 43.19f) * 78.233f) * 43758.5453f;
+            float propHash = hVal - floor(hVal);
+
+            bool isWaterTile = IsLagoon(cx, cz, cy);
+
+            if (!isWaterTile) {
+                // --- PROCEDURAL ROCKS (Piedras Sueltas - 100% Closed Solid Boulders) ---
+                if (propHash > 0.962f) {
+                    float rx = cx + (propHash - 0.98f) * scale * 0.5f;
+                    float rz = cz + (sin(propHash * 33.0f) * 0.5f) * scale * 0.5f;
+                    float ry = GetExactHeight(rx, rz);
+                    
+                    float rSize = 0.32f + (propHash - 0.962f) * 12.0f; // 0.32m to 0.78m
+                    float rHeight = rSize * (0.65f + (propHash - 0.962f) * 4.0f);
+                    
+                    glm::vec3 rockCol = glm::vec3(0.38f, 0.39f, 0.36f) * (0.85f + (propHash - 0.962f) * 3.0f);
+                    if (avgNormal.y < 0.7f) rockCol *= 0.8f;
+                    
+                    float hs = rSize * 0.5f;
+                    float topHs = hs * 0.60f;
+                    
+                    // Bottom vertices (sunken into ground to seal base)
+                    glm::vec3 rb1(rx - hs, ry - 0.15f, rz - hs);
+                    glm::vec3 rb2(rx + hs, ry - 0.15f, rz - hs);
+                    glm::vec3 rb3(rx + hs, ry - 0.15f, rz + hs);
+                    glm::vec3 rb4(rx - hs, ry - 0.15f, rz + hs);
+                    
+                    // Top vertices
+                    glm::vec3 rt1(rx - topHs, ry + rHeight, rz - topHs);
+                    glm::vec3 rt2(rx + topHs, ry + rHeight, rz - topHs);
+                    glm::vec3 rt3(rx + topHs, ry + rHeight, rz + topHs);
+                    glm::vec3 rt4(rx - topHs, ry + rHeight, rz + topHs);
+                    
+                    // 1. Top Face
+                    glm::vec3 nTop(0.0f, 1.0f, 0.0f);
+                    data.vertices.push_back(Vertex{ rt1, rockCol * 1.15f, glm::vec2(0,0), nTop });
+                    data.vertices.push_back(Vertex{ rt2, rockCol * 1.15f, glm::vec2(1,0), nTop });
+                    data.vertices.push_back(Vertex{ rt3, rockCol * 1.15f, glm::vec2(1,1), nTop });
+                    data.vertices.push_back(Vertex{ rt1, rockCol * 1.15f, glm::vec2(0,0), nTop });
+                    data.vertices.push_back(Vertex{ rt3, rockCol * 1.15f, glm::vec2(1,1), nTop });
+                    data.vertices.push_back(Vertex{ rt4, rockCol * 1.15f, glm::vec2(0,1), nTop });
+                    
+                    // 2. Front Face (+Z)
+                    glm::vec3 nFront = glm::normalize(glm::cross(rb3 - rb4, rt4 - rb4));
+                    data.vertices.push_back(Vertex{ rb4, rockCol * 0.85f, glm::vec2(0,0), nFront });
+                    data.vertices.push_back(Vertex{ rb3, rockCol * 0.85f, glm::vec2(1,0), nFront });
+                    data.vertices.push_back(Vertex{ rt3, rockCol * 0.95f, glm::vec2(1,1), nFront });
+                    data.vertices.push_back(Vertex{ rb4, rockCol * 0.85f, glm::vec2(0,0), nFront });
+                    data.vertices.push_back(Vertex{ rt3, rockCol * 0.95f, glm::vec2(1,1), nFront });
+                    data.vertices.push_back(Vertex{ rt4, rockCol * 0.95f, glm::vec2(0,1), nFront });
+
+                    // 3. Back Face (-Z)
+                    glm::vec3 nBack = glm::normalize(glm::cross(rb1 - rb2, rt2 - rb2));
+                    data.vertices.push_back(Vertex{ rb2, rockCol * 0.80f, glm::vec2(0,0), nBack });
+                    data.vertices.push_back(Vertex{ rb1, rockCol * 0.80f, glm::vec2(1,0), nBack });
+                    data.vertices.push_back(Vertex{ rt1, rockCol * 0.90f, glm::vec2(1,1), nBack });
+                    data.vertices.push_back(Vertex{ rb2, rockCol * 0.80f, glm::vec2(0,0), nBack });
+                    data.vertices.push_back(Vertex{ rt1, rockCol * 0.90f, glm::vec2(1,1), nBack });
+                    data.vertices.push_back(Vertex{ rt2, rockCol * 0.90f, glm::vec2(0,1), nBack });
+
+                    // 4. Right Face (+X)
+                    glm::vec3 nRight = glm::normalize(glm::cross(rb2 - rb3, rt3 - rb3));
+                    data.vertices.push_back(Vertex{ rb3, rockCol * 0.88f, glm::vec2(0,0), nRight });
+                    data.vertices.push_back(Vertex{ rb2, rockCol * 0.88f, glm::vec2(1,0), nRight });
+                    data.vertices.push_back(Vertex{ rt2, rockCol * 0.98f, glm::vec2(1,1), nRight });
+                    data.vertices.push_back(Vertex{ rb3, rockCol * 0.88f, glm::vec2(0,0), nRight });
+                    data.vertices.push_back(Vertex{ rt2, rockCol * 0.98f, glm::vec2(1,1), nRight });
+                    data.vertices.push_back(Vertex{ rt3, rockCol * 0.98f, glm::vec2(0,1), nRight });
+
+                    // 5. Left Face (-X)
+                    glm::vec3 nLeft = glm::normalize(glm::cross(rb4 - rb1, rt1 - rb1));
+                    data.vertices.push_back(Vertex{ rb1, rockCol * 0.75f, glm::vec2(0,0), nLeft });
+                    data.vertices.push_back(Vertex{ rb4, rockCol * 0.75f, glm::vec2(1,0), nLeft });
+                    data.vertices.push_back(Vertex{ rt4, rockCol * 0.85f, glm::vec2(1,1), nLeft });
+                    data.vertices.push_back(Vertex{ rb1, rockCol * 0.75f, glm::vec2(0,0), nLeft });
+                    data.vertices.push_back(Vertex{ rt4, rockCol * 0.85f, glm::vec2(1,1), nLeft });
+                    data.vertices.push_back(Vertex{ rt1, rockCol * 0.85f, glm::vec2(0,1), nLeft });
+
+                    // 6. Bottom Face
+                    glm::vec3 nBottom(0.0f, -1.0f, 0.0f);
+                    data.vertices.push_back(Vertex{ rb1, rockCol * 0.60f, glm::vec2(0,0), nBottom });
+                    data.vertices.push_back(Vertex{ rb3, rockCol * 0.60f, glm::vec2(1,1), nBottom });
+                    data.vertices.push_back(Vertex{ rb2, rockCol * 0.60f, glm::vec2(1,0), nBottom });
+                    data.vertices.push_back(Vertex{ rb1, rockCol * 0.60f, glm::vec2(0,0), nBottom });
+                    data.vertices.push_back(Vertex{ rb4, rockCol * 0.60f, glm::vec2(0,1), nBottom });
+                    data.vertices.push_back(Vertex{ rb3, rockCol * 0.60f, glm::vec2(1,1), nBottom });
+                }
+                // --- PROCEDURAL WILDFLOWERS (Flores Silvestres - Firmly Rooted in Grass) ---
+                else if (propHash > 0.80f && propHash <= 0.855f && avgNormal.y > 0.80f && cy < 25.0f) {
+                    float fx = cx + (propHash - 0.82f) * scale * 0.6f;
+                    float fz = cz + (sin(propHash * 45.0f) * 0.5f) * scale * 0.6f;
+                    float fy = GetExactHeight(fx, fz);
+                    
+                    glm::vec3 flowerColors[] = {
+                        glm::vec3(0.92f, 0.18f, 0.22f), // Crimson Poppy
+                        glm::vec3(0.98f, 0.80f, 0.15f), // Golden Marigold
+                        glm::vec3(0.68f, 0.28f, 0.95f), // Violet Orchid
+                        glm::vec3(0.22f, 0.70f, 0.98f), // Azure Bellflower
+                        glm::vec3(0.95f, 0.95f, 0.90f)  // White Lily
+                    };
+                    int colIdx = (int)(propHash * 50.0f) % 5;
+                    glm::vec3 fCol = flowerColors[colIdx];
+                    glm::vec3 stemCol = glm::vec3(0.22f, 0.55f, 0.18f);
+                    
+                    float stemH = 0.22f + (propHash - 0.80f) * 0.25f;
+                    float petalW = 0.09f;
+                    
+                    // Stem (starts 0.05m below ground to guarantee seamless ground contact)
+                    float rootY = fy - 0.05f;
+                    float topY = fy + stemH;
+
+                    glm::vec3 s1(fx - 0.02f, rootY, fz);
+                    glm::vec3 s2(fx + 0.02f, rootY, fz);
+                    glm::vec3 s3(fx + 0.02f, topY, fz);
+                    glm::vec3 s4(fx - 0.02f, topY, fz);
+                    
+                    data.vertices.push_back(Vertex{ s1, stemCol, glm::vec2(0,0), avgNormal });
+                    data.vertices.push_back(Vertex{ s2, stemCol, glm::vec2(1,0), avgNormal });
+                    data.vertices.push_back(Vertex{ s3, stemCol, glm::vec2(1,1), avgNormal });
+                    data.vertices.push_back(Vertex{ s1, stemCol, glm::vec2(0,0), avgNormal });
+                    data.vertices.push_back(Vertex{ s3, stemCol, glm::vec2(1,1), avgNormal });
+                    data.vertices.push_back(Vertex{ s4, stemCol, glm::vec2(0,1), avgNormal });
+                    
+                    // Flower Blossom Petals (Cross Quad firmly at top of stem)
+                    glm::vec3 p1(fx - petalW, topY, fz - petalW);
+                    glm::vec3 p2(fx + petalW, topY, fz + petalW);
+                    glm::vec3 p3(fx + petalW, topY + 0.05f, fz + petalW);
+                    glm::vec3 p4(fx - petalW, topY + 0.05f, fz - petalW);
+                    
+                    data.vertices.push_back(Vertex{ p1, fCol, glm::vec2(0,0), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ p2, fCol, glm::vec2(1,0), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ p3, fCol * 1.15f, glm::vec2(1,1), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ p1, fCol, glm::vec2(0,0), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ p3, fCol * 1.15f, glm::vec2(1,1), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ p4, fCol * 1.15f, glm::vec2(0,1), glm::vec3(0,1,0) });
+
+                    glm::vec3 q1(fx - petalW, topY, fz + petalW);
+                    glm::vec3 q2(fx + petalW, topY, fz - petalW);
+                    glm::vec3 q3(fx + petalW, topY + 0.05f, fz - petalW);
+                    glm::vec3 q4(fx - petalW, topY + 0.05f, fz + petalW);
+                    
+                    data.vertices.push_back(Vertex{ q1, fCol, glm::vec2(0,0), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ q2, fCol, glm::vec2(1,0), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ q3, fCol * 1.15f, glm::vec2(1,1), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ q1, fCol, glm::vec2(0,0), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ q3, fCol * 1.15f, glm::vec2(1,1), glm::vec3(0,1,0) });
+                    data.vertices.push_back(Vertex{ q4, fCol * 1.15f, glm::vec2(0,1), glm::vec3(0,1,0) });
+                }
+            }
         }
     }
     return data;
@@ -389,12 +582,24 @@ std::vector<Vertex> LoadCachedMesh(const std::string& path) {
     return vertices;
 }
 
-std::vector<Vertex> WorldGenerator::GetTreeTrunkMesh() {
-    return LoadCachedMesh("assets/models/tree_trunk.txt");
+std::vector<Vertex> WorldGenerator::GetTreeTrunkMesh(int type) {
+    switch (type) {
+        case 0: return LoadCachedMesh("assets/models/tree_trunk_oak.txt");
+        case 1: return LoadCachedMesh("assets/models/tree_trunk_pine.txt");
+        case 2: return LoadCachedMesh("assets/models/tree_trunk_birch.txt");
+        case 3: return LoadCachedMesh("assets/models/tree_trunk_willow.txt");
+        default: return LoadCachedMesh("assets/models/tree_trunk_oak.txt");
+    }
 }
 
-std::vector<Vertex> WorldGenerator::GetTreeLeavesMesh() {
-    return LoadCachedMesh("assets/models/tree_leaves.txt");
+std::vector<Vertex> WorldGenerator::GetTreeLeavesMesh(int type) {
+    switch (type) {
+        case 0: return LoadCachedMesh("assets/models/tree_leaves_oak.txt");
+        case 1: return LoadCachedMesh("assets/models/tree_leaves_pine.txt");
+        case 2: return LoadCachedMesh("assets/models/tree_leaves_birch.txt");
+        case 3: return LoadCachedMesh("assets/models/tree_leaves_willow.txt");
+        default: return LoadCachedMesh("assets/models/tree_leaves_oak.txt");
+    }
 }
 
 std::vector<Vertex> WorldGenerator::GetShadowMesh() {

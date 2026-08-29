@@ -8,6 +8,11 @@
 #include "ScentSystem.h"
 #include "Monster.h"
 #include "BirdSystem.h" // NEW
+#include "CritterSystem.h" // Butterflies, Fireflies, Frogs
+#include "PassiveMob.h" // Forest Deer / Passive Mob
+#include "combat/TargetingSystem.h"
+#include "combat/DamageNumberSystem.h"
+#include "ui/UIRenderer.h"
 #include <ctime>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -25,7 +30,16 @@
 #include "FootprintSystem.h"
 #include "ChunkManager.h"
 #include "ScentSystem.h"
+#include "HorrorPropsSystem.h"
+#include "EnemyMob.h"
+#include "WaterMonster.h"
+#include "ProjectileSystem.h"
 #include "Config.h"
+#include "inventory/InventorySystem.h"
+#include "combat/SpellSystem.h"
+#include "world/SkinningSystem.h"
+#include "world/WeatherSystem.h"
+#include "world/StructureSystem.h"
 
 // Shader loader helper
 GLuint LoadShader(const char* vertPath, const char* fragPath) {
@@ -510,7 +524,7 @@ int main() {
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
     sf::Window window(desktop, "GamePS1Horror", sf::Style::None, settings);
     window.setVerticalSyncEnabled(Config::Graphics::VSyncEnabled);
-    window.setMouseCursorVisible(false);
+    window.setMouseCursorVisible(true);
 
     if (!gladLoadGL()) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
@@ -611,32 +625,37 @@ int main() {
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2); // Needed for gradient
 
-    // Tree Setup (Structural Separation)
-    // 1. TRUNK (Rigid)
-    auto trunkMesh = WorldGenerator::GetTreeTrunkMesh();
-    GLuint trunkVAO, trunkVBO;
-    glGenVertexArrays(1, &trunkVAO);
-    glGenBuffers(1, &trunkVBO);
-    glBindVertexArray(trunkVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, trunkVBO);
-    glBufferData(GL_ARRAY_BUFFER, trunkMesh.size() * sizeof(Vertex), trunkMesh.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
-    
-    // 2. LEAVES (Swaying)
-    auto leavesMesh = WorldGenerator::GetTreeLeavesMesh();
-    GLuint leavesVAO, leavesVBO;
-    glGenVertexArrays(1, &leavesVAO);
-    glGenBuffers(1, &leavesVBO);
-    glBindVertexArray(leavesVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, leavesVBO);
-    glBufferData(GL_ARRAY_BUFFER, leavesMesh.size() * sizeof(Vertex), leavesMesh.data(), GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2);
-    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
+    // Tree Setup (4 Archetypes: 0=Oak, 1=Pine, 2=Birch, 3=Willow)
+    GLuint trunkVAO[4], trunkVBO[4];
+    GLuint leavesVAO[4], leavesVBO[4];
+    int trunkVertexCount[4];
+    int leavesVertexCount[4];
+
+    for (int arch = 0; arch < 4; ++arch) {
+        auto tMesh = WorldGenerator::GetTreeTrunkMesh(arch);
+        trunkVertexCount[arch] = (int)tMesh.size();
+        glGenVertexArrays(1, &trunkVAO[arch]);
+        glGenBuffers(1, &trunkVBO[arch]);
+        glBindVertexArray(trunkVAO[arch]);
+        glBindBuffer(GL_ARRAY_BUFFER, trunkVBO[arch]);
+        glBufferData(GL_ARRAY_BUFFER, tMesh.size() * sizeof(Vertex), tMesh.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));    glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
+
+        auto lMesh = WorldGenerator::GetTreeLeavesMesh(arch);
+        leavesVertexCount[arch] = (int)lMesh.size();
+        glGenVertexArrays(1, &leavesVAO[arch]);
+        glGenBuffers(1, &leavesVBO[arch]);
+        glBindVertexArray(leavesVAO[arch]);
+        glBindBuffer(GL_ARRAY_BUFFER, leavesVBO[arch]);
+        glBufferData(GL_ARRAY_BUFFER, lMesh.size() * sizeof(Vertex), lMesh.data(), GL_STATIC_DRAW);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, position)); glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));    glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoord)); glEnableVertexAttribArray(2);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, normal));   glEnableVertexAttribArray(3);
+    }
 
     // Instance Buffer (Shared)
     GLuint instanceVBO;
@@ -736,6 +755,17 @@ int main() {
     // Bird System (Sparrows)
     BirdSystem birds;
 
+    // Critter System (Butterflies, Fireflies, Jumping Frogs)
+    CritterSystem critters;
+    critters.Init(player.Position);
+
+    // ARPG Core Systems (src_rpgarena_logic)
+    TargetingSystem targeting;
+    DamageNumberSystem damageNumbers;
+    UIRenderer uiRenderer;
+    HorrorPropsSystem horrorProps;
+    ProjectileSystem projectiles;
+
     // Chunk Manager - NOW needs bird system
     // ChunkManager was already instantiated at top of main
     chunkManager.SetBirdSystem(&birds);
@@ -792,30 +822,67 @@ int main() {
         } while(!IsPositionCurrentSafe(pPos.x, pPos.z) && attempts < 100);
         player.Position = pPos;
 
-        // 2. Spawn Monsters (Donut Distribution)
-        for (int mIndex = 0; mIndex < gameCfg.monsterCount; ++mIndex) {
-            attempts = 0;
-            glm::vec3 mPos;
-            do {
-                 // Random Angle
-                 float angleDeg = angleDist(gen);
-                 float angleRad = glm::radians(angleDeg);
-                 
-                 // Random Radius (200 - 300)
-                 float dist = radiusDist(gen);
-                 
-                 float mx = pPos.x + cos(angleRad) * dist;
-                 float mz = pPos.z + sin(angleRad) * dist;
-                 
-                 mPos = glm::vec3(mx, WorldGenerator::GetHeight(mx, mz), mz);
-                 attempts++;
-            } while(!IsPositionCurrentSafe(mPos.x, mPos.z) && attempts < 100);
-            
-            auto monster = std::make_unique<Monster>(mPos);
-            monster->LookAt(player.Position);
-            monsters.push_back(std::move(monster));
+        // Monsters will be dynamically spawned at night by the Day/Night manager
+    }
+
+    // Dynamic Day/Night Cycle (240s = 4 minutes full cycle: Day -> Sunset -> Night -> Dawn)
+    float dayCycleTime = 25.0f; // Start in pleasant morning/day
+    const float dayCycleLength = 240.0f;
+
+    // Passive & Hostile Mobs (Forest Deer: Fawns, Adults, Alphas, Demonic)
+    std::vector<std::unique_ptr<PassiveMob>> passiveMobs;
+    for (int i = 0; i < 8; ++i) {
+        float angle = (float)(rand() % 360) * 0.01745f;
+        float dist = 14.0f + (rand() % 45);
+        float dx = player.Position.x + cos(angle) * dist;
+        float dz = player.Position.z + sin(angle) * dist;
+        float dy = WorldGenerator::GetHeight(dx, dz);
+        DeerSize size = (i == 0) ? DeerSize::DEMONIC : ((i == 1 || i == 5) ? DeerSize::ALPHA : ((i % 2 == 0) ? DeerSize::FAWN : DeerSize::ADULT));
+        passiveMobs.push_back(std::make_unique<PassiveMob>(glm::vec3(dx, dy, dz), size));
+    }
+
+    // Humanoid & Mythic Enemy Mobs (Living Treants, Blood Vampires, Corrupted Warriors, Neutral Giants, Dark Mages)
+    std::vector<std::unique_ptr<EnemyMob>> enemyMobs;
+    for (int i = 0; i < 7; ++i) {
+        float angle = (float)(rand() % 360) * 0.01745f;
+        float dist = 22.0f + (rand() % 50);
+        float ex = player.Position.x + cos(angle) * dist;
+        float ez = player.Position.z + sin(angle) * dist;
+        float ey = WorldGenerator::GetHeight(ex, ez);
+        if (ey > 1.5f) {
+            EnemyType type;
+            if (i % 5 == 0) type = EnemyType::TREANT;
+            else if (i % 5 == 1) type = EnemyType::CORRUPTED_WARRIOR;
+            else if (i % 5 == 2) type = EnemyType::DARK_MAGE;
+            else if (i % 5 == 3) type = EnemyType::NEUTRAL_GIANT;
+            else type = EnemyType::VAMPIRE;
+
+            enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(ex, ey, ez), type, 1));
         }
     }
+
+    // Hidden Lake Water Monsters (Submerged in lakes/lagoons)
+    std::vector<std::unique_ptr<WaterMonster>> waterMonsters;
+    for (int attempts = 0; attempts < 100 && waterMonsters.size() < 4; ++attempts) {
+        float angle = (float)(rand() % 360) * 0.01745f;
+        float dist = 20.0f + (rand() % 90);
+        float wx = player.Position.x + cos(angle) * dist;
+        float wz = player.Position.z + sin(angle) * dist;
+        float wy = WorldGenerator::GetHeight(wx, wz);
+        if (wy < Config::Water::Level) { // Under water level -> Lake!
+            waterMonsters.push_back(std::make_unique<WaterMonster>(glm::vec3(wx, Config::Water::Level - 0.6f, wz)));
+        }
+    }
+
+    bool isCharacterPanelOpen = false;
+    FatalErrorPopup fatalError;
+    LoreDocumentModal loreModal;
+
+    InventorySystem inventory;
+    SpellSystem spellSystem;
+    SkinningSystem skinningSystem;
+    WeatherSystem weatherSystem;
+    StructureSystem structureSystem;
 
     sf::Clock clock;
     sf::Clock fpsClock;
@@ -900,6 +967,90 @@ int main() {
                     showMonsterMarker = !showMonsterMarker;
                     std::cout << "O Key Pressed! Monster Marker: " << (showMonsterMarker ? "ON" : "OFF") << std::endl;
                 }
+
+                // Toggle Camera Mode (V key: 3rd Person / 1st Person)
+                if (event.key.code == sf::Keyboard::V) {
+                    player.ToggleCameraMode();
+                    std::cout << "V Key Pressed! Camera: " << (player.IsThirdPerson ? "3rd Person" : "1st Person") << std::endl;
+                }
+
+                // Toggle Character Stats Panel (C key)
+                if (event.key.code == sf::Keyboard::C) {
+                    isCharacterPanelOpen = !isCharacterPanelOpen;
+                }
+
+                // Allocate Stat Points (1: STR, 2: AGI, 3: VIT, 4: INT)
+                if (isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
+                    if (event.key.code == sf::Keyboard::Num1 || event.key.code == sf::Keyboard::Numpad1) {
+                        if (player.Stats.AllocateStrength()) {
+                            for (int i = 0; i < 18; ++i) {
+                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.30f, 0.25f, 1.0f), 0.15f, 0.8f, -9.8f);
+                            }
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num2 || event.key.code == sf::Keyboard::Numpad2) {
+                        if (player.Stats.AllocateAgility()) {
+                            for (int i = 0; i < 18; ++i) {
+                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.25f, 0.95f, 0.40f, 1.0f), 0.15f, 0.8f, -9.8f);
+                            }
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num3 || event.key.code == sf::Keyboard::Numpad3) {
+                        if (player.Stats.AllocateVitality()) {
+                            for (int i = 0; i < 18; ++i) {
+                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.85f, 0.20f, 1.0f), 0.15f, 0.8f, -9.8f);
+                            }
+                        }
+                    }
+                    else if (event.key.code == sf::Keyboard::Num4 || event.key.code == sf::Keyboard::Numpad4) {
+                        if (player.Stats.AllocateIntelligence()) {
+                            for (int i = 0; i < 18; ++i) {
+                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.35f, 0.65f, 0.95f, 1.0f), 0.15f, 0.8f, -9.8f);
+                            }
+                        }
+                    }
+                }
+
+                // Toggle Inventory Window (I or Tab)
+                if (event.key.code == sf::Keyboard::I || event.key.code == sf::Keyboard::Tab) {
+                    inventory.ToggleOpen();
+                }
+
+                // Spell [Q] - Blood Burst
+                if (event.key.code == sf::Keyboard::Q) {
+                    spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
+                }
+
+                // Spell [R] - Arcane Beam
+                if (event.key.code == sf::Keyboard::R) {
+                    spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
+                }
+
+                // Skinning [G] - Skin Animal Corpse
+                if (event.key.code == sf::Keyboard::G) {
+                    skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
+                }
+
+                // Dismiss Fatal Error Popup (Enter / Space)
+                if (event.key.code == sf::Keyboard::Return || event.key.code == sf::Keyboard::Space) {
+                    if (fatalError.active) fatalError.active = false;
+                }
+
+                // Multi-functional Interaction & Spell (E key)
+                if (event.key.code == sf::Keyboard::E) {
+                    if (loreModal.active) {
+                        loreModal.active = false;
+                    } else if (structureSystem.TryInteract(player.Position, player, inventory, damageNumbers, particles)) {
+                        // Successfully opened ancient chest or performed blood sacrifice!
+                    } else if (!horrorProps.TryLootNearby(player.Position, &player, damageNumbers, loreModal)) {
+                        // If no prop or structure nearby -> Cast [E] Shadow Aegis
+                        spellSystem.CastShadowAegis(player, particles);
+                    }
+                }
             }
         }
 
@@ -970,29 +1121,20 @@ int main() {
             std::cout << "============================\n" << std::endl;
         }
 
-        // GAME OVER CHECK & TIMING
+        // GAME OVER CHECK & TIMING (Linked to true Player RPG Health)
         if (isGameOver) {
             gameOverTimer -= deltaTime;
             if (gameOverTimer <= 0.0f) {
                 window.close();
             }
         } else {
-            for (const auto& mPtr : monsters) {
-                if (mPtr->IsDead()) continue;
-                glm::vec3 mPos = mPtr->GetPosition();
-                glm::vec2 diff2D = glm::vec2(player.Position.x - mPos.x, player.Position.z - mPos.z);
-                float dist2D = glm::length(diff2D);
-                float heightDiff = abs((player.Position.y - 1.6f) - mPos.y);
-                
-                if (dist2D < 1.5f && heightDiff < 3.0f) {
-                    isGameOver = true;
-                    gameOverTimer = 3.5f;
-                    std::cout << "GAME OVER! Spawning blood explosion..." << std::endl;
-                    for (int i = 0; i < 40; ++i) {
-                        glm::vec3 velocity((rand()%100/50.0f - 1.0f)*5.0f, (rand()%100/50.0f - 0.3f)*6.0f, (rand()%100/50.0f - 1.0f)*5.0f);
-                        particles.SpawnParticle(player.Position + glm::vec3(0, -0.6f, 0), velocity, glm::vec4(0.8f, 0.0f, 0.0f, 1.0f), 0.15f, 1.5f, -9.8f);
-                    }
-                    break;
+            if (player.Stats.CurrentHP <= 0) {
+                isGameOver = true;
+                gameOverTimer = 3.5f;
+                std::cout << "GAME OVER! Player HP depleted..." << std::endl;
+                for (int i = 0; i < 40; ++i) {
+                    glm::vec3 velocity((rand()%100/50.0f - 1.0f)*5.0f, (rand()%100/50.0f - 0.3f)*6.0f, (rand()%100/50.0f - 1.0f)*5.0f);
+                    particles.SpawnParticle(player.Position + glm::vec3(0, -0.6f, 0), velocity, glm::vec4(0.8f, 0.0f, 0.0f, 1.0f), 0.15f, 1.5f, -9.8f);
                 }
             }
         }
@@ -1016,30 +1158,533 @@ int main() {
             if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) freeCamPos += camRight * camSpeed;
         }
 
+        float mouseNdcX = -999.0f;
+        float mouseNdcY = -999.0f;
+
         if (window.hasFocus()) {
+            static bool firstMouse = true;
+            static sf::Vector2i lastMousePos = sf::Mouse::getPosition(window);
             sf::Vector2i mousePos = sf::Mouse::getPosition(window);
-            sf::Vector2i center(desktop.width / 2, desktop.height / 2);
-            sf::Mouse::setPosition(center, window);
-            float xoff = (float)(mousePos.x - center.x);
-            float yoff = (float)(center.y - mousePos.y);
+            
+            if (firstMouse) {
+                lastMousePos = mousePos;
+                firstMouse = false;
+            }
 
-            if (!debugCam) {
-                player.ProcessMouseMovement(xoff, yoff);
+            float xoff = (float)(mousePos.x - lastMousePos.x);
+            float yoff = (float)(lastMousePos.y - mousePos.y);
+            lastMousePos = mousePos;
+
+            bool rightIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Right);
+
+            sf::Vector2u winSize = window.getSize();
+            mouseNdcX = ((float)mousePos.x / (float)winSize.x) * 2.0f - 1.0f;
+            mouseNdcY = 1.0f - ((float)mousePos.y / (float)winSize.y) * 2.0f;
+
+            bool isUiModalActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen();
+
+            // In 3rd Person or when UI is open: ONLY rotate camera when Right Click is held down (WoW style)
+            // In 1st Person: Rotate camera when UI is not active
+            bool shouldRotateCam = (!isUiModalActive && !player.IsThirdPerson) || rightIsPressed;
+
+            if (shouldRotateCam) {
+                if (std::abs(xoff) < 250.0f && std::abs(yoff) < 250.0f && (std::abs(xoff) > 0.001f || std::abs(yoff) > 0.001f)) {
+                    if (!debugCam) {
+                        player.ProcessMouseMovement(xoff, yoff);
+                    } else {
+                        freeCamYaw += xoff * 0.1f;
+                        freeCamPitch += yoff * 0.1f;
+                        if (freeCamPitch > 89.0f) freeCamPitch = 89.0f;
+                        if (freeCamPitch < -89.0f) freeCamPitch = -89.0f;
+                        glm::vec3 f;
+                        f.x = cos(glm::radians(freeCamYaw)) * cos(glm::radians(freeCamPitch));
+                        f.y = sin(glm::radians(freeCamPitch));
+                        f.z = sin(glm::radians(freeCamYaw)) * cos(glm::radians(freeCamPitch));
+                        freeCamFront = glm::normalize(f);
+                    }
+                }
+            }
+
+            // Left Click: UI Button Clicks, Target Selection & Sword Attack
+            static bool leftWasPressed = false;
+            bool leftIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Left);
+            if (leftIsPressed && !leftWasPressed) {
+                // 1. Check UI Modals First
+                if (inventory.IsOpen()) {
+                    bool closeReq = false;
+                    if (inventory.HandleMouseClick(mouseNdcX, mouseNdcY, player.Stats, closeReq)) {
+                        if (closeReq) inventory.SetOpen(false);
+                        leftWasPressed = leftIsPressed;
+                        goto skipWorldTargeting;
+                    }
+                }
+
+                if (fatalError.active) {
+                    if (UIRenderer::HandleFatalErrorClick(mouseNdcX, mouseNdcY, fatalError)) {
+                        leftWasPressed = leftIsPressed;
+                        goto skipWorldTargeting;
+                    }
+                }
+
+                if (loreModal.active) {
+                    if (UIRenderer::HandleLoreModalClick(mouseNdcX, mouseNdcY, loreModal)) {
+                        leftWasPressed = leftIsPressed;
+                        goto skipWorldTargeting;
+                    }
+                }
+
+                if (isCharacterPanelOpen) {
+                    bool closeReq = false;
+                    if (UIRenderer::HandleCharacterPanelClick(mouseNdcX, mouseNdcY, player.Stats, closeReq)) {
+                        if (closeReq) {
+                            isCharacterPanelOpen = false;
+                        } else {
+                            // Stat allocated! Spawn golden fanfare particles
+                            for (int i = 0; i < 22; ++i) {
+                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.85f, 0.20f, 1.0f), 0.15f, 0.8f, -9.8f);
+                            }
+                        }
+                        leftWasPressed = leftIsPressed;
+                        goto skipWorldTargeting;
+                    }
+                }
+
+                // 2. World Targeting & Combat
+                glm::vec3 activeCamPos = player.GetCameraPosition();
+                glm::vec3 camForward = player.Front;
+
+                // Find closest target in aim direction
+                float bestDot = 0.80f;
+                PassiveMob* bestDeer = nullptr;
+                Monster* bestMonster = nullptr;
+                EnemyMob* bestEnemy = nullptr;
+                WaterMonster* bestWater = nullptr;
+                // Darkness & Flashlight logic on targeting:
+                float maxTargetingRange = 42.0f;
+                bool isNightTimeNow = (dayCycleTime >= 120.0f && dayCycleTime <= 228.0f);
+                if (isNightTimeNow && !gameCfg.flashlightEnabled) {
+                    maxTargetingRange = 4.0f; // Blind targeting in dark mist without flashlight!
+                }
+                float closestDist = maxTargetingRange;
+
+                for (auto& deer : passiveMobs) {
+                    if (!deer->IsAlive()) continue;
+                    glm::vec3 mPos = deer->GetPosition() + glm::vec3(0, 1.2f, 0);
+                    glm::vec3 toM = glm::normalize(mPos - activeCamPos);
+                    float dot = glm::dot(camForward, toM);
+                    float dist = glm::distance(player.Position, deer->GetPosition());
+                    if (dot > bestDot && dist < closestDist) {
+                        bestDot = dot;
+                        closestDist = dist;
+                        bestDeer = deer.get();
+                        bestMonster = nullptr;
+                        bestEnemy = nullptr;
+                        bestWater = nullptr;
+                    }
+                }
+
+                for (auto& enemy : enemyMobs) {
+                    if (!enemy->IsAlive()) continue;
+                    glm::vec3 ePos = enemy->GetPosition() + glm::vec3(0, 1.4f, 0);
+                    glm::vec3 toE = glm::normalize(ePos - activeCamPos);
+                    float dot = glm::dot(camForward, toE);
+                    float dist = glm::distance(player.Position, enemy->GetPosition());
+                    if (dot > bestDot && dist < closestDist) {
+                        bestDot = dot;
+                        closestDist = dist;
+                        bestEnemy = enemy.get();
+                        bestDeer = nullptr;
+                        bestMonster = nullptr;
+                        bestWater = nullptr;
+                    }
+                }
+
+                for (auto& wm : waterMonsters) {
+                    if (!wm->IsAlive()) continue;
+                    glm::vec3 wPos = wm->GetPosition() + glm::vec3(0, 1.2f, 0);
+                    glm::vec3 toW = glm::normalize(wPos - activeCamPos);
+                    float dot = glm::dot(camForward, toW);
+                    float dist = glm::distance(player.Position, wm->GetPosition());
+                    if (dot > bestDot && dist < closestDist) {
+                        bestDot = dot;
+                        closestDist = dist;
+                        bestWater = wm.get();
+                        bestDeer = nullptr;
+                        bestMonster = nullptr;
+                        bestEnemy = nullptr;
+                    }
+                }
+
+                for (auto& mPtr : monsters) {
+                    if (mPtr->IsDead()) continue;
+                    glm::vec3 mPos = mPtr->GetPosition() + glm::vec3(0, 1.5f, 0);
+                    glm::vec3 toM = glm::normalize(mPos - activeCamPos);
+                    float dot = glm::dot(camForward, toM);
+                    float dist = glm::distance(player.Position, mPtr->GetPosition());
+                    if (dot > bestDot && dist < closestDist) {
+                        bestDot = dot;
+                        closestDist = dist;
+                        bestMonster = mPtr.get();
+                        bestDeer = nullptr;
+                        bestEnemy = nullptr;
+                        bestWater = nullptr;
+                    }
+                }
+
+                if (bestWater) {
+                    targeting.SelectWaterMonster(bestWater);
+                    targeting.SetAutoApproaching(true);
+                } else if (bestEnemy) {
+                    targeting.SelectEnemy(bestEnemy);
+                    targeting.SetAutoApproaching(true);
+                } else if (bestDeer) {
+                    targeting.SelectPassive(bestDeer);
+                    targeting.SetAutoApproaching(true);
+                } else if (bestMonster) {
+                    targeting.SelectMonster(bestMonster);
+                    targeting.SetAutoApproaching(true);
+                }
+
+                // If already within melee range or clicked empty space, swing sword immediately
+                if (closestDist < 3.5f || (!bestDeer && !bestMonster && !bestEnemy && !bestWater)) {
+                    if (player.TryAttack()) {
+                        horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
+                    }
+                }
+            }
+        skipWorldTargeting:
+            leftWasPressed = leftIsPressed;
+        }
+
+        // Check manual input to cancel auto-approach
+        bool isMovingManual = sf::Keyboard::isKeyPressed(sf::Keyboard::W) || sf::Keyboard::isKeyPressed(sf::Keyboard::A) ||
+                              sf::Keyboard::isKeyPressed(sf::Keyboard::S) || sf::Keyboard::isKeyPressed(sf::Keyboard::D);
+        targeting.Update(deltaTime, player.Position, isMovingManual);
+
+        // Handle Auto-Approach Movement toward selected target
+        if (targeting.IsAutoApproaching() && targeting.HasTarget() && !isMovingManual) {
+            glm::vec3 tPos = targeting.GetTargetPosition();
+            glm::vec2 toTarget(tPos.x - player.Position.x, tPos.z - player.Position.z);
+            float dist = glm::length(toTarget);
+
+            if (dist > 2.6f) {
+                glm::vec2 moveDir = glm::normalize(toTarget);
+                player.Position.x += moveDir.x * player.WalkSpeed * deltaTime;
+                player.Position.z += moveDir.y * player.WalkSpeed * deltaTime;
+                float groundY = WorldGenerator::GetHeight(player.Position.x, player.Position.z);
+                player.Position.y = groundY + player.PlayerHeight;
+                player.Velocity.x = moveDir.x * player.WalkSpeed;
+                player.Velocity.z = moveDir.y * player.WalkSpeed;
+                player.Velocity.y = 0.0f;
+                player.IsGrounded = true;
+                player.ModelYaw = glm::degrees(atan2(moveDir.x, moveDir.y));
+                player.WalkAnimTimer += deltaTime * 8.0f;
             } else {
-                freeCamYaw += xoff * 0.1f;
-                freeCamPitch += yoff * 0.1f;
-                if (freeCamPitch > 89.0f) freeCamPitch = 89.0f;
-                if (freeCamPitch < -89.0f) freeCamPitch = -89.0f;
-                glm::vec3 f;
-                f.x = cos(glm::radians(freeCamYaw)) * cos(glm::radians(freeCamPitch));
-                f.y = sin(glm::radians(freeCamPitch));
-                f.z = sin(glm::radians(freeCamYaw)) * cos(glm::radians(freeCamPitch));
-                freeCamFront = glm::normalize(f);
+                targeting.SetAutoApproaching(false);
+                player.Velocity.x = 0.0f;
+                player.Velocity.z = 0.0f;
+                player.TryAttack();
+            }
+        }
+
+        // 1. Advance Day/Night Cycle Progression & Dynamic Weather / Spells
+        spellSystem.Update(deltaTime, player, particles);
+        weatherSystem.Update(deltaTime, dayCycleTime, player.Position, glm::vec3(windDir.x, 0, windDir.y), particles);
+
+        dayCycleTime += deltaTime;
+        float cycleNormalized = fmod(dayCycleTime, dayCycleLength) / dayCycleLength;
+
+        // Day: 0.00 - 0.45, Sunset: 0.45 - 0.58, Night: 0.58 - 0.88, Dawn: 0.88 - 1.00
+        float nightFactor = 0.0f;
+        glm::vec3 fogCol(0.40f, 0.60f, 0.95f);
+
+        if (cycleNormalized < 0.45f) {
+            // Day
+            nightFactor = 0.0f;
+            fogCol = glm::vec3(0.40f, 0.60f, 0.95f);
+        } else if (cycleNormalized < 0.58f) {
+            // Sunset / Dusk
+            float t = (cycleNormalized - 0.45f) / 0.13f;
+            nightFactor = t;
+            glm::vec3 sunsetCol(0.85f, 0.32f, 0.14f);
+            glm::vec3 nightCol(0.005f, 0.005f, 0.015f);
+            if (t < 0.5f) {
+                fogCol = glm::mix(glm::vec3(0.40f, 0.60f, 0.95f), sunsetCol, t * 2.0f);
+            } else {
+                fogCol = glm::mix(sunsetCol, nightCol, (t - 0.5f) * 2.0f);
+            }
+        } else if (cycleNormalized < 0.88f) {
+            // Night
+            nightFactor = 1.0f;
+            fogCol = glm::vec3(0.005f, 0.005f, 0.015f);
+        } else {
+            // Dawn / Sunrise
+            float t = (cycleNormalized - 0.88f) / 0.12f;
+            nightFactor = 1.0f - t;
+            glm::vec3 sunriseCol(0.90f, 0.45f, 0.25f);
+            glm::vec3 dayCol(0.40f, 0.60f, 0.95f);
+            if (t < 0.5f) {
+                fogCol = glm::mix(glm::vec3(0.005f, 0.005f, 0.015f), sunriseCol, t * 2.0f);
+            } else {
+                fogCol = glm::mix(sunriseCol, dayCol, (t - 0.5f) * 2.0f);
+            }
+        }
+
+        fogCol = weatherSystem.GetAdjustedFog(fogCol);
+
+        bool isNightTime = (nightFactor > 0.45f) || weatherSystem.IsBloodMoon();
+
+        // Dynamic Night Monster Spawning & Stalking
+        static float monsterSpawnTimer = 0.0f;
+        monsterSpawnTimer += deltaTime;
+
+        if (isNightTime) {
+            // Remove dead monsters
+            for (auto it = monsters.begin(); it != monsters.end();) {
+                if ((*it)->IsDead()) {
+                    if (targeting.GetMonsterTarget() == it->get()) targeting.ClearTarget();
+                    it = monsters.erase(it);
+                } else {
+                    ++it;
+                }
             }
 
-            if (sf::Mouse::isButtonPressed(sf::Mouse::Left)) {
-                weapon.TryFire(player.Position, player.Front, particles, monsters);
+            // Spawn smart shadow monsters at night if population < 3
+            if (monsterSpawnTimer >= 5.0f && monsters.size() < 3) {
+                monsterSpawnTimer = 0.0f;
+                float mAngle = (float)(rand() % 360) * 0.01745f;
+                float mDist = 38.0f + (rand() % 35);
+                float mx = player.Position.x + cos(mAngle) * mDist;
+                float mz = player.Position.z + sin(mAngle) * mDist;
+                float my = WorldGenerator::GetHeight(mx, mz);
+                if (my > 1.5f) {
+                    auto m = std::make_unique<Monster>(glm::vec3(mx, my, mz));
+                    m->LookAt(player.Position);
+                    monsters.push_back(std::move(m));
+                }
             }
+        } else {
+            // During the day, monsters retreat / dissolve into mist
+            for (auto it = monsters.begin(); it != monsters.end();) {
+                if (targeting.GetMonsterTarget() == it->get()) targeting.ClearTarget();
+                it = monsters.erase(it);
+            }
+        }
+
+        // Update Active Monsters AI & Combat (Night Stalkers)
+        static float monsterAttackCooldown = 0.0f;
+        if (monsterAttackCooldown > 0.0f) monsterAttackCooldown -= deltaTime;
+
+        for (auto& mPtr : monsters) {
+            if (mPtr->IsDead()) continue;
+            mPtr->Update(deltaTime, player.Position, player.Front, windDir,
+                         chunkManager, scentSystem, particles,
+                         player.Velocity, 0, false,
+                         player.IsClimbing, player.ClimbingTreePos,
+                         isNightTime);
+
+            // Monster Melee Attack against Player (Balanced 18-24 damage, NOT 1-hit kill)
+            float distToPlayer = glm::distance(player.Position, mPtr->GetPosition());
+            if (distToPlayer < 2.3f && monsterAttackCooldown <= 0.0f) {
+                monsterAttackCooldown = 1.6f;
+                int dmg = 18 + (rand() % 7);
+                player.TakeDamage(dmg, damageNumbers, &fatalError);
+
+                // Claw impact particles
+                glm::vec3 hitPos = player.Position + glm::vec3(0.0f, 1.2f, 0.0f);
+                for (int i = 0; i < 20; ++i) {
+                    glm::vec3 pVel((rand()%100/50.0f - 1.0f)*3.2f, (rand()%100/50.0f + 0.3f)*3.5f, (rand()%100/50.0f - 1.0f)*3.2f);
+                    particles.SpawnParticle(hitPos, pVel, glm::vec4(0.85f, 0.05f, 0.05f, 1.0f), 0.14f, 0.85f, -9.8f);
+                }
+            }
+        }
+
+        // Dynamic Deer Spawning & Herd Management
+        static float deerSpawnTimer = 0.0f;
+        deerSpawnTimer += deltaTime;
+        if (deerSpawnTimer >= 1.5f) {
+            deerSpawnTimer = 0.0f;
+
+            // 1. Despawn dead deer after decay or deer too far away (> 130m)
+            for (auto it = passiveMobs.begin(); it != passiveMobs.end();) {
+                float dist = glm::distance(glm::vec2(player.Position.x, player.Position.z), glm::vec2((*it)->GetPosition().x, (*it)->GetPosition().z));
+                if ((*it)->IsRemovable() || (dist > 140.0f && !(*it)->IsAlive())) {
+                    if (targeting.GetPassiveTarget() == it->get()) {
+                        targeting.ClearTarget();
+                    }
+                    it = passiveMobs.erase(it);
+                } else if (dist > 150.0f) {
+                    it = passiveMobs.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            // 2. Spawn a herd (2-4 deer together) if population < 10
+            if (passiveMobs.size() < 10) {
+                float herdAngle = (float)(rand() % 360) * 0.01745f;
+                float herdDist = 42.0f + (rand() % 38);
+                float herdCenterX = player.Position.x + cos(herdAngle) * herdDist;
+                float herdCenterZ = player.Position.z + sin(herdAngle) * herdDist;
+
+                int herdSize = 2 + rand() % 3;
+                for (int i = 0; i < herdSize; ++i) {
+                    float offX = herdCenterX + (rand() % 100 / 10.0f - 5.0f);
+                    float offZ = herdCenterZ + (rand() % 100 / 10.0f - 5.0f);
+                    float offY = WorldGenerator::GetHeight(offX, offZ);
+                    if (offY > 1.5f) { // Above water level
+                        int roll = rand() % 100;
+                        int demonicChance = isNightTime ? 24 : 8;
+                        DeerSize size;
+                        if (roll < demonicChance) {
+                            size = DeerSize::DEMONIC;
+                        } else if (roll < demonicChance + 22) {
+                            size = DeerSize::ALPHA;
+                        } else if (roll < demonicChance + 55) {
+                            size = DeerSize::FAWN;
+                        } else {
+                            size = DeerSize::ADULT;
+                        }
+                        passiveMobs.push_back(std::make_unique<PassiveMob>(glm::vec3(offX, offY, offZ), size));
+                    }
+                }
+            }
+        }
+
+        // Dynamic Enemy Mobs Spawning & Cleanup (Corrupted Warriors, Giants, Mages)
+        static float enemySpawnTimer = 0.0f;
+        enemySpawnTimer += deltaTime;
+        if (enemySpawnTimer >= 2.0f) {
+            enemySpawnTimer = 0.0f;
+
+            for (auto it = enemyMobs.begin(); it != enemyMobs.end();) {
+                float dist = glm::distance(glm::vec2(player.Position.x, player.Position.z), glm::vec2((*it)->GetPosition().x, (*it)->GetPosition().z));
+                if ((*it)->IsRemovable() || (dist > 140.0f && !(*it)->IsAlive())) {
+                    if (targeting.GetEnemyTarget() == it->get()) targeting.ClearTarget();
+                    it = enemyMobs.erase(it);
+                } else if (dist > 160.0f) {
+                    it = enemyMobs.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            if (enemyMobs.size() < 8) {
+                float angle = (float)(rand() % 360) * 0.01745f;
+                float dist = 45.0f + (rand() % 40);
+                float ex = player.Position.x + cos(angle) * dist;
+                float ez = player.Position.z + sin(angle) * dist;
+                float ey = WorldGenerator::GetHeight(ex, ez);
+                if (ey > 1.5f) {
+                    int roll = rand() % 100;
+                    int currentNightLevel = weatherSystem.GetNightCount();
+                    EnemyType type;
+                    if (isNightTime) {
+                        if (roll < 30) type = EnemyType::VAMPIRE;
+                        else if (roll < 55) type = EnemyType::CORRUPTED_WARRIOR;
+                        else if (roll < 72) type = EnemyType::DARK_MAGE;
+                        else if (roll < 88) type = EnemyType::TREANT;
+                        else type = EnemyType::NEUTRAL_GIANT;
+                    } else {
+                        if (roll < 35) type = EnemyType::TREANT;
+                        else if (roll < 65) type = EnemyType::CORRUPTED_WARRIOR;
+                        else if (roll < 85) type = EnemyType::DARK_MAGE;
+                        else type = EnemyType::NEUTRAL_GIANT;
+                    }
+                    enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(ex, ey, ez), type, currentNightLevel));
+                }
+            }
+        }
+
+        // Dynamic Water Monster Spawning in Lakes & Lagoons
+        static float waterSpawnTimer = 0.0f;
+        waterSpawnTimer += deltaTime;
+        if (waterSpawnTimer >= 2.5f) {
+            waterSpawnTimer = 0.0f;
+
+            for (auto it = waterMonsters.begin(); it != waterMonsters.end();) {
+                float dist = glm::distance(glm::vec2(player.Position.x, player.Position.z), glm::vec2((*it)->GetPosition().x, (*it)->GetPosition().z));
+                if ((*it)->IsRemovable() || (dist > 150.0f && !(*it)->IsAlive())) {
+                    if (targeting.GetWaterTarget() == it->get()) targeting.ClearTarget();
+                    it = waterMonsters.erase(it);
+                } else if (dist > 170.0f) {
+                    it = waterMonsters.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+
+            if (waterMonsters.size() < 5) {
+                for (int attempts = 0; attempts < 30; ++attempts) {
+                    float angle = (float)(rand() % 360) * 0.01745f;
+                    float dist = 25.0f + (rand() % 65);
+                    float wx = player.Position.x + cos(angle) * dist;
+                    float wz = player.Position.z + sin(angle) * dist;
+                    float wy = WorldGenerator::GetHeight(wx, wz);
+                    if (wy < Config::Water::Level) {
+                        waterMonsters.push_back(std::make_unique<WaterMonster>(glm::vec3(wx, Config::Water::Level - 0.6f, wz)));
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Update Lake Water Monsters
+        for (auto& wm : waterMonsters) {
+            wm->Update(deltaTime, player.Position, &player, particles, damageNumbers);
+        }
+
+        // Update Enemy Mobs
+        for (auto& enemy : enemyMobs) {
+            enemy->Update(deltaTime, player.Position, &player, particles, damageNumbers, projectiles);
+        }
+
+        // Update Flying Magic Projectiles
+        projectiles.Update(deltaTime, &player, particles, damageNumbers);
+
+        // Update Passive Mobs (Forest Deer: Fawns, Adults, Alphas, Demonic)
+        for (auto& deer : passiveMobs) {
+            deer->Update(deltaTime, player.Position, &player, particles, damageNumbers);
+        }
+
+        // Update Floating Combat Numbers (Damage & EXP)
+        damageNumbers.Update(deltaTime);
+
+        // Update Melee Combat (Monsters, Passive Mobs, Enemy Mobs, Water Monsters, EXP & Level Up)
+        player.UpdateCombat(deltaTime, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
+
+        // Update Critters (Butterflies, Fireflies, Jumping Frogs)
+        critters.Update(deltaTime, player.Position);
+
+        // Update Environmental Horror Props (Hanging Victims Physics & Blood Scent)
+        std::vector<glm::vec4> nearbyTreesForProps;
+        chunkManager.GetTreesInRange(player.Position, 85.0f, nearbyTreesForProps);
+        horrorProps.Update(deltaTime, player.Position, nearbyTreesForProps, particles, scentSystem);
+
+        // Calculate Danger Level for SUFFERING_MONITOR.EXE ECG Oscilloscope
+        float dangerLevel = 0.0f;
+        for (auto& mPtr : monsters) {
+            if (!mPtr->IsDead()) {
+                float d = glm::distance(player.Position, mPtr->GetPosition());
+                if (d < 24.0f) dangerLevel = std::max(dangerLevel, 1.0f - (d / 24.0f));
+            }
+        }
+        for (auto& ePtr : enemyMobs) {
+            if (ePtr->IsAlive()) {
+                float d = glm::distance(player.Position, ePtr->GetPosition());
+                if (d < 24.0f) dangerLevel = std::max(dangerLevel, 1.0f - (d / 24.0f));
+            }
+        }
+        for (auto& wPtr : waterMonsters) {
+            if (wPtr->IsAlive()) {
+                float d = glm::distance(player.Position, wPtr->GetPosition());
+                if (d < 20.0f) dangerLevel = std::max(dangerLevel, 1.0f - (d / 20.0f));
+            }
+        }
+        if (fatalError.timer > 0.0f) {
+            fatalError.timer -= deltaTime;
+            if (fatalError.timer <= 0.0f) fatalError.active = false;
         }
 
         // Handle climbing noises (camera/movement noise)
@@ -1081,6 +1726,7 @@ int main() {
         // Draw Loop
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
         glViewport(0, 0, INTERNAL_W, INTERNAL_H);
+        glClearColor(fogCol.r, fogCol.g, fogCol.b, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         glUseProgram(shaderProgram);
@@ -1093,12 +1739,11 @@ int main() {
         glUniform1f(glGetUniformLocation(shaderProgram, "u_FogEnd"), Config::World::FogDistEnd);
         
         // DAY/NIGHT & FLASHLIGHT CONFIGURATION
-        glUniform1i(glGetUniformLocation(shaderProgram, "u_IsNight"), gameCfg.isNight ? 1 : 0);
-        glUniform1f(glGetUniformLocation(shaderProgram, "u_Darkness"), gameCfg.darkness);
-        glUniform1i(glGetUniformLocation(shaderProgram, "u_FlashlightEnabled"), gameCfg.flashlightEnabled ? 1 : 0);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_IsNight"), isNightTime ? 1 : 0);
+        glUniform1f(glGetUniformLocation(shaderProgram, "u_Darkness"), nightFactor * 0.95f);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_FlashlightEnabled"), nightFactor > 0.35f ? 1 : 0);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerPos"), player.Position.x, player.Position.y, player.Position.z);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerFront"), player.Front.x, player.Front.y, player.Front.z);
-        glm::vec3 fogCol = gameCfg.isNight ? glm::vec3(0.005f, 0.005f, 0.015f) : glm::vec3(0.4f, 0.6f, 1.0f);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_FogColor"), fogCol.r, fogCol.g, fogCol.b);
 
         glm::mat4 view;
@@ -1182,10 +1827,7 @@ int main() {
         // Let's assuming the original code only drew Trunks and Leaves there.
         // I will replace that block with RenderTrees.
         
-        // However, I need to make sure I pass the correct counts.
-        // trunkMesh.size() and leavesMesh.size().
-        
-        chunkManager.RenderTrees(shaderProgram, trunkVAO, leavesVAO, (int)trunkMesh.size(), (int)leavesMesh.size(), player.Position);
+        chunkManager.RenderTrees(shaderProgram, trunkVAO, leavesVAO, trunkVertexCount, leavesVertexCount, player.Position);
 
         // 3. Footprints
         glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0); // DISABLED: Using CPU Exact Height
@@ -1193,20 +1835,16 @@ int main() {
         footprints.Render(shaderProgram);
         glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
 
-        glm::vec3 activeCamPos = debugCam ? freeCamPos : player.Position;
-        if (!debugCam && player.IsGrounded) {
-             if (player.HeadBobTimer > 0.001f) {
-                 // Walking Head Bob
-                 activeCamPos.y += sin(player.HeadBobTimer) * player.HeadBobAmount;
-             } else {
-                 // Idle Breathing
-                 activeCamPos.y += sin(player.BreathTimer) * player.BreathAmount;
-             }
-        }
+        glm::vec3 activeCamPos = debugCam ? freeCamPos : player.GetCameraPosition();
 
         particles.Render(shaderProgram, activeCamPos);
         
-        // 4. Monster Render (Normal)
+        // 4. Player & Monster Render (Normal)
+        if (player.IsThirdPerson) {
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            player.Render(shaderProgram);
+        }
+
         // Explicitly bind noise texture to match terrain style (Render will switch to white for eyes)
         for (auto& mPtr : monsters) {
             glBindTexture(GL_TEXTURE_2D, textureID);
@@ -1216,6 +1854,45 @@ int main() {
         // Render Birds (Using noise texture)
         glBindTexture(GL_TEXTURE_2D, textureID);
         birds.Render(shaderProgram);
+
+        // Render Critters (Butterflies, Fireflies, Jumping Frogs)
+        critters.Render(shaderProgram);
+
+        // Render Passive Mobs (Forest Deer)
+        for (auto& deer : passiveMobs) {
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            deer->Render(shaderProgram);
+            deer->RenderHealthBar(shaderProgram, activeCamPos);
+        }
+
+        // Render Enemy Mobs (Corrupted Warriors, Neutral Giants, Dark Mages)
+        for (auto& enemy : enemyMobs) {
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            enemy->Render(shaderProgram);
+            enemy->RenderHealthBar(shaderProgram, activeCamPos);
+        }
+
+        // Render Lake Water Monsters (Water Lurkers)
+        for (auto& wm : waterMonsters) {
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            wm->Render(shaderProgram);
+            wm->RenderHealthBar(shaderProgram, activeCamPos);
+        }
+
+        // Render Magic Projectiles
+        projectiles.Render(shaderProgram);
+
+        // Render 3D Target Ring
+        targeting.RenderTargetRing(shaderProgram);
+
+        // Render Environmental Horror Props (Hanging Victims & Claw-Marked Trunks)
+        nearbyTreesForProps.clear();
+        chunkManager.GetTreesInRange(player.Position, 85.0f, nearbyTreesForProps);
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        horrorProps.Render(shaderProgram, nearbyTreesForProps, globalTime, windDir);
+
+        // Render Procedural World Structures (Ancient Ruin Pillars, Loot Chests, Sacrifice Altars)
+        structureSystem.Render(shaderProgram, activeCamPos);
         
         // --- SAFETY RESET (Fix for State Leakage) ---
         glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
@@ -1356,14 +2033,19 @@ int main() {
              glBufferData(GL_ARRAY_BUFFER, 0, nullptr, GL_DYNAMIC_DRAW);
         }
 
-        // 5. Weapon (Overlay - Clear Depth)
-        glClear(GL_DEPTH_BUFFER_BIT); 
-        glm::mat4 viewIdentity = glm::mat4(1.0f);
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(viewIdentity));
-        
-        // Use NOISE texture for weapon
-        glBindTexture(GL_TEXTURE_2D, textureID);
-        weapon.Render(shaderProgram, isGameOver, gameOverTimer);
+        // 5. Weapon (Overlay - Clear Depth - 1st Person Only)
+        if (!player.IsThirdPerson) {
+            glClear(GL_DEPTH_BUFFER_BIT); 
+            glm::mat4 viewIdentity = glm::mat4(1.0f);
+            glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(viewIdentity));
+            
+            // Render 1st Person Sword
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            player.RenderFirstPersonSword(shaderProgram);
+
+            // (Shotgun deactivated for ARPG mode):
+            // weapon.Render(shaderProgram, isGameOver, gameOverTimer);
+        }
 
         // 4. UI Pass (SEPARATE SHADER PASS - IN FBO FOR RETRO LOOK)
         glDisable(GL_DEPTH_TEST);
@@ -1385,15 +2067,16 @@ int main() {
         glUniform1i(glGetUniformLocation(uiProgram, "u_Texture"), 0);
         glBindTexture(GL_TEXTURE_2D, whiteTexID);
 
-        // Crosshair (Thinner, finer lines but visible at 640x480)
-        std::vector<float> chData;
-        float chS = 0.03f; float chT = 0.0022f;
-        // Fix aspect for UI in 320x240 / 640x480
-        PushQuad(chData, -chS, -chT, chS*2, chT*2); 
-        PushQuad(chData, -chT, -chS*INTERNAL_ASPECT, chT*2, chS*INTERNAL_ASPECT*2);  
-        glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
-        glBufferData(GL_ARRAY_BUFFER, chData.size() * sizeof(float), chData.data(), GL_DYNAMIC_DRAW);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(chData.size()/3));
+        // Crosshair (Visible ONLY in First Person)
+        if (!player.IsThirdPerson) {
+            std::vector<float> chData;
+            float chS = 0.03f; float chT = 0.0022f;
+            PushQuad(chData, -chS, -chT, chS*2, chT*2); 
+            PushQuad(chData, -chT, -chS*INTERNAL_ASPECT, chT*2, chS*INTERNAL_ASPECT*2);  
+            glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
+            glBufferData(GL_ARRAY_BUFFER, chData.size() * sizeof(float), chData.data(), GL_DYNAMIC_DRAW);
+            glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(chData.size()/3));
+        }
 
         // FPS Counter
         std::string fpsStr = std::to_string(currentFPS);
@@ -1404,25 +2087,51 @@ int main() {
             charX += charSize * 1.3f; 
         }
 
-        // Ammo Counter (Bottom Right)
-        int ammo = weapon.GetAmmo();
-        bool showAmmo = true;
-        if (weapon.IsReloading()) {
-            showAmmo = (((int)(globalTime * 4.0f)) % 2 == 0); // Blink at 4Hz
-        }
-        if (showAmmo) {
-            glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), 0.8f, 0.1f, 0.1f); // Red digit
-            DrawDigitSolid(ammo, 0.82f, -0.85f, 0.08f, uiVAO, uiVBO);
-        }
-        // Restore white color
-        glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), 1.0f, 1.0f, 1.0f);
-
         // Wind Arrow
         float windAngle = atan2(windDir.y, windDir.x);
         float playerYawRad = glm::radians(player.Yaw);
         // Relative Angle: PlayerYaw - WindAngle + 90deg (Offset for Arrow UP)
         float relativeAngle = playerYawRad - windAngle + 1.5708f; 
         DrawArrow(0.9f, 0.1f, 0.05f, relativeAngle, uiVAO, uiVBO); 
+
+        // Windows 98 ARPG HUD Pass (SUFFERING_MONITOR.EXE, ECG Oscilloscope, Taskbar, Target Frame & Damage Numbers)
+        uiRenderer.RenderHUD(uiProgram, uiVAO, uiVBO, player.Stats, targeting, damageNumbers, projection * view, dangerLevel, globalTime, weatherSystem.GetNightCount(), weatherSystem.IsBloodMoon());
+
+        // Interaction Prompts (Prioritized: Structures > Skinning > Fallen Corpses)
+        std::string prompt = structureSystem.GetPrompt(player.Position);
+        if (prompt.empty()) prompt = skinningSystem.GetPrompt(player.Position, passiveMobs);
+        if (prompt.empty()) prompt = horrorProps.GetNearbyPrompt(player.Position);
+        if (!prompt.empty() && !loreModal.active) {
+            uiRenderer.RenderInteractionPrompt(uiProgram, uiVAO, uiVBO, prompt);
+        }
+
+        // Spell Hotbar HUD ([Q], [E], [R])
+        spellSystem.RenderHUDSpells(uiProgram, uiVAO, uiVBO);
+
+        // Posture Broken Stun Warning
+        if (player.StunTimer > 0.0f) {
+            uiRenderer.RenderStunWarning(uiProgram, uiVAO, uiVBO, player.StunTimer);
+        }
+
+        // Character Stats & Attribute Allocation Panel (C key)
+        if (isCharacterPanelOpen) {
+            uiRenderer.RenderCharacterPanel(uiProgram, uiVAO, uiVBO, player.Stats, mouseNdcX, mouseNdcY);
+        }
+
+        // Forensic Lore Notepad Window (E key)
+        if (loreModal.active) {
+            uiRenderer.RenderLoreModal(uiProgram, uiVAO, uiVBO, loreModal, mouseNdcX, mouseNdcY);
+        }
+
+        // Windows 98 Critical Fatal Error Dialog
+        if (fatalError.active) {
+            uiRenderer.RenderFatalErrorModal(uiProgram, uiVAO, uiVBO, fatalError, mouseNdcX, mouseNdcY);
+        }
+
+        // Inventory & Equipment Window (I key)
+        if (inventory.IsOpen()) {
+            inventory.RenderWindow(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY);
+        }
 
         glEnable(GL_DEPTH_TEST);
         glDepthRange(0, 1.0); // Restore Depth

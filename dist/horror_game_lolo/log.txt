@@ -1,0 +1,565 @@
+[Config] Loaded configuration from: config.json (isNight: true, darkness: 0.16, monsterCount: 1, flashlightEnabled: true, spawnMin: 30, spawnMax: 30)
+[WindSystem] Wind changing direction to: (0.910275, -0.414004)
+[ChunkManager] BirdSystem linked: YES
+[ChunkManager] Pre-loading World (24 chunk radius)...
+[ChunkManager] World Loaded. Built 625 batches.
+[AI] Action Change -> RETREAT (Score: 100)
+[AI] Heard noise! Memory updated.
+[AI] Heard noise! Memory updated.
+[AI] STARTLED! Entering Panic Flee mode for 3s...
+
+=== GAME STATE DEBUG ===
+Player Position: (-98.6978, 7.95281, 3.63791)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (-102.397, 8.21382, -36.5162)
+  Action: RETREAT
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 0.427417 | Stress: 0.165029
+  Estimated Player Ammo: 2
+  Distance to Player: 40.325m
+============================
+
+[AI] Heard noise! Memory updated.
+[AI] Heard shotgun blast! Estimated player ammo: 1
+[AI] Action Change -> STALK (Score: 100.505)
+[AI] Action Change -> RETREAT (Score: 68.714)
+[AI] Action Change -> STALK (Score: 100.621)
+
+=== GAME STATE DEBUG ===
+Player Position: (-98.902, 7.89269, 2.86477)
+Player Velocity: (-1.53267, 0, -5.80094)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (736, 16.4934, 736)
+  Action: STALK
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 0.456577 | Stress: 0.0875464
+  Estimated Player Ammo: 1
+  Distance to Player: 1111.14m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-97.0594, 7.72397, -2.5568)
+Player Velocity: (2.65843, 0, -5.37892)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (736, 16.4934, 736)
+  Action: STALK
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 0.486579 | Stress: 0.00754162
+  Estimated Player Ammo: 1
+  Distance to Player: 1113.34m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99586, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (736, 16.4934, 736)
+  Action: STALK
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 0.517071 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1114.14m
+============================
+
+[AI] Twig-Snap! Spawning fake audio event to distract player.
+O Key Pressed! Monster Marker: ON
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99686, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (736, 16.3271, 733.617)
+  Action: STALK
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 0.547563 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1112.55m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99685, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (732.231, 15.0129, 729.418)
+  Action: STALK
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 0.578058 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1106.94m
+============================
+
+[AI] DETECTADO CAMPEO. Entrando en modo Berserk.
+O Key Pressed! Monster Marker: OFF
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99687, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (727.203, 13.7099, 724.928)
+  Action: STALK
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1100.19m
+============================
+
+[AI] Action Change -> INVESTIGATE (Score: 60.4044)
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99688, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (723.075, 12.8515, 721.276)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1094.67m
+============================
+
+O Key Pressed! Monster Marker: ON
+O Key Pressed! Monster Marker: OFF
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99687, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (719.641, 12.2721, 717.966)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1089.9m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99687, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (717.966, 11.9823, 713.121)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1085.43m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99688, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (714.354, 11.7645, 709.91)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 1
+  Distance to Player: 1080.6m
+============================
+
+[AI] Heard noise! Memory updated.
+[AI] Heard shotgun blast! Estimated player ammo: 0
+[AI] Action Change -> CHASE (Score: 200)
+O Key Pressed! Monster Marker: ON
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99686, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (703.807, 10.5205, 700.606)
+  Action: CHASE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 1066.53m
+============================
+
+O Key Pressed! Monster Marker: OFF
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99689, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (684.36, 9.67887, 683.388)
+  Action: CHASE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 1040.56m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.9968, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (665.803, 12.6125, 669.576)
+  Action: CHASE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 1017.52m
+============================
+
+O Key Pressed! Monster Marker: ON
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99687, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (647.422, 17.3962, 653.211)
+  Action: CHASE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 992.941m
+============================
+
+[AI] Action Change -> INVESTIGATE (Score: 68.9371)
+O Key Pressed! Monster Marker: OFF
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99687, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (636.617, 20.3353, 642.868)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 978.027m
+============================
+
+O Key Pressed! Monster Marker: ON
+
+=== GAME STATE DEBUG ===
+Player Position: (-94.7264, 7.99685, -6.37933)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (632.994, 20.9202, 639.615)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 973.166m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-93.6917, 8.28691, -5.76997)
+Player Velocity: (5.143, 0, 3.09023)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (629.374, 21.2217, 636.406)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 967.151m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-88.3962, 9.40271, -2.76328)
+Player Velocity: (4.9089, 0, 3.45004)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (625.753, 21.4516, 633.198)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 956.348m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-83.4384, 10.1605, 0.787069)
+Player Velocity: (4.8541, 0, 3.52672)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (622.132, 20.9947, 629.99)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 945.433m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-78.5267, 10.4438, 4.3918)
+Player Velocity: (4.82936, 0, 3.56052)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (618.511, 20.2177, 626.781)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 934.518m
+============================
+
+[Weapon] Reloading shotgun... (2.8s)
+
+=== GAME STATE DEBUG ===
+Player Position: (-76.2726, 10.4161, 6.06235)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (614.895, 18.6366, 623.577)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 926.879m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-76.2726, 10.416, 6.06235)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (611.327, 17.785, 620.415)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 922.104m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-76.2726, 10.4161, 6.06235)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (607.711, 17.3681, 617.211)
+  Action: INVESTIGATE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 0
+  Distance to Player: 917.27m
+============================
+
+[Weapon] Reload complete! Ammo refilled to 2
+[AI] Player reload complete! Reset estimated player ammo to 2.
+[AI] Action Change -> CLIMB_TREE (Score: 60)
+[AI] Decided to climb tree. Walking to tree base...
+
+=== GAME STATE DEBUG ===
+Player Position: (-76.2726, 10.4161, 6.06235)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (606.881, 17.5367, 619.145)
+  Action: CLIMB_TREE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 917.943m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-76.2726, 10.4161, 6.06235)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (608.524, 18.624, 625.85)
+  Action: CLIMB_TREE
+  Is Climbing: No
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 923.661m
+============================
+
+[AI] Reached tree base. Starting vertical climb...
+
+=== GAME STATE DEBUG ===
+Player Position: (-76.2726, 10.4163, 6.06235)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (609.982, 20.9822, 631.804)
+  Action: CLIMB_TREE
+  Is Climbing: Yes (Height: 0.63345)
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 928.768m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-76.2726, 10.4161, 6.06235)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (609.982, 27.9858, 631.804)
+  Action: CLIMB_TREE
+  Is Climbing: Yes (Height: 7.63705)
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 928.874m
+============================
+
+[AI] Reached canopy leaves, observing player (Wait time: 9.84s)...
+
+=== GAME STATE DEBUG ===
+Player Position: (-75.7175, 10.445, 7.23365)
+Player Velocity: (2.63963, 0, 5.38817)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (609.982, 30.7246, 631.804)
+  Action: CLIMB_TREE
+  Is Climbing: No (Height: 10.3758)
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 927.73m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-72.2316, 9.83593, 11.6928)
+Player Velocity: (2.61139, 0, 5.40191)
+Player IsGrounded: Yes | IsClimbing: No
+Monster #0:
+  Position: (609.982, 30.7246, 631.804)
+  Action: CLIMB_TREE
+  Is Climbing: No (Height: 10.3758)
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 922.166m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-70.8442, 12.7747, 15.2356)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: No | IsClimbing: Yes
+Monster #0:
+  Position: (609.982, 30.7246, 631.804)
+  Action: CLIMB_TREE
+  Is Climbing: No (Height: 10.3758)
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 918.697m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-70.8442, 17.7798, 15.2356)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: No | IsClimbing: Yes
+Monster #0:
+  Position: (609.982, 30.7246, 631.804)
+  Action: CLIMB_TREE
+  Is Climbing: No (Height: 10.3758)
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 918.612m
+============================
+
+
+=== GAME STATE DEBUG ===
+Player Position: (-70.8442, 19.2879, 15.2356)
+Player Velocity: (0, 0, 0)
+Player IsGrounded: No | IsClimbing: Yes
+Monster #0:
+  Position: (609.982, 30.7246, 631.804)
+  Action: CLIMB_TREE
+  Is Climbing: No (Height: 10.3758)
+  Enraged: NO
+  LOS to Player: No
+  Confidence: 1 | Stress: 0
+  Estimated Player Ammo: 2
+  Distance to Player: 918.592m
+============================
+

@@ -1,8 +1,8 @@
 {
-  "isNight": true,
+  "isNight": false,
   "darkness": 0.16,
   "flashlightEnabled": true,
-  "monsterCount": 1,
+  "monsterCount": 0,
   "baseFreqX": 0.02,
   "baseFreqZ": 0.02,
   "baseAmplitude": 22.0,

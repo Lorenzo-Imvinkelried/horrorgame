@@ -25,6 +25,7 @@ public:
     ~ScentSystem();
 
     void Update(float deltaTime, glm::vec3 playerPos, glm::vec3 windDir, float windStrength);
+    void AddBloodScent(glm::vec3 pos, glm::vec3 windDir = glm::vec3(1, 0, 0));
     void RenderDebug(GLuint shaderProgram, glm::vec3 cullPos);
 
     // Physics / Logic

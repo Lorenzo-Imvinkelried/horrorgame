@@ -1,0 +1,14 @@
+# Tree Leaves - Ancient Broad Oak
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+
+BOX  0.0  7.5  0.0   4.6 4.0 4.6   0 0 0  0.03 0.40 0.05  OAK_CANOPY_MAIN
+BOX  0.0 10.2  0.0   3.6 3.2 3.6   0 0 0  0.05 0.48 0.07  OAK_CANOPY_TOP
+BOX  0.0 12.2  0.0   2.2 2.0 2.2   0 0 0  0.06 0.55 0.09  OAK_CANOPY_PEAK
+BOX  2.4  6.8  0.0   3.0 3.0 3.0   0.15 0 -0.20  0.04 0.44 0.06  OAK_CLUSTER_R
+BOX -2.4  6.8  0.0   3.0 3.0 3.0  -0.15 0  0.20  0.04 0.44 0.06  OAK_CLUSTER_L
+BOX  0.0  6.8  2.4   3.0 3.0 3.0   0.20 0  0.15  0.04 0.44 0.06  OAK_CLUSTER_F
+BOX  0.0  6.8 -2.4   3.0 3.0 3.0  -0.20 0 -0.15  0.04 0.44 0.06  OAK_CLUSTER_B
+BOX  1.5  7.8  1.5   2.6 2.6 2.6   0 0 0  0.03 0.38 0.04  OAK_FILL_FR
+BOX -1.5  7.8 -1.5   2.6 2.6 2.6   0 0 0  0.03 0.38 0.04  OAK_FILL_BL
+BOX  1.5  7.8 -1.5   2.6 2.6 2.6   0 0 0  0.03 0.38 0.04  OAK_FILL_BR
+BOX -1.5  7.8  1.5   2.6 2.6 2.6   0 0 0  0.03 0.38 0.04  OAK_FILL_FL

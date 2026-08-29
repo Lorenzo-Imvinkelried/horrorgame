@@ -118,12 +118,12 @@ void main()
             float wave = (rawWave + 1.0) * 0.5;
             wave = wave * wave; // Sharp gusts
 
-            // Simple Height Factor
-            float normalizedH = clamp((aPos.y - 6.0) / 9.0, 0.0, 1.0);
-            float hFactor = 0.5 + 1.5 * (normalizedH * normalizedH);
+            // Height Factor: 0.0 at branch connection (aPos.y <= 4.0), smoothly scaling to top
+            float normalizedH = clamp((aPos.y - 4.0) / 10.0, 0.0, 1.0);
+            float hFactor = normalizedH * normalizedH; // EXACTLY 0.0 at trunk connection!
 
             // Apply Wind
-            worldPos.xz += u_WindDirection * wave * 1.0 * hFactor * u_WindStrength * windEnabled;
+            worldPos.xz += u_WindDirection * (wave * 0.40) * hFactor * u_WindStrength * windEnabled;
         }
     }
 
