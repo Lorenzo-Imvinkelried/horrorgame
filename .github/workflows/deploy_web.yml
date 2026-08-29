@@ -42,7 +42,7 @@ jobs:
 
       - name: Build WebAssembly Project
         run: |
-          cmake --build build_web --config Release -- -j2
+          cmake --build build_web --config Release --verbose
 
       - name: Prepare Web Distribution
         run: |

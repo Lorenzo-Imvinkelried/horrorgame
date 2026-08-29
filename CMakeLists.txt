@@ -132,15 +132,7 @@ else()
         OUTPUT_NAME "index"
         SUFFIX ".html"
     )
-    target_link_options(${PROJECT_NAME} PRIVATE
-        "-sUSE_GLFW=3"
-        "-sFULL_ES3=1"
-        "-sMAX_WEBGL_VERSION=2"
-        "-sMIN_WEBGL_VERSION=2"
-        "-sALLOW_MEMORY_GROWTH=1"
-        "-sINITIAL_MEMORY=134217728"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/assets@assets"
-        "--preload-file" "${CMAKE_SOURCE_DIR}/config.json@config.json"
-        "--shell-file" "${CMAKE_SOURCE_DIR}/web/shell.html"
+    set_property(TARGET ${PROJECT_NAME} PROPERTY LINK_FLAGS
+        "-sUSE_GLFW=3 -sFULL_ES3=1 -sMAX_WEBGL_VERSION=2 -sMIN_WEBGL_VERSION=2 -sALLOW_MEMORY_GROWTH=1 -sINITIAL_MEMORY=134217728 --preload-file \"${CMAKE_SOURCE_DIR}/assets@assets\" --preload-file \"${CMAKE_SOURCE_DIR}/config.json@config.json\" --shell-file \"${CMAKE_SOURCE_DIR}/web/shell.html\""
     )
 endif()

@@ -1354,7 +1354,6 @@ int main() {
 
             // Left Click: UI Button Clicks, Target Selection & Sword Attack
             static bool leftWasPressed = false;
-            bool leftIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Left);
             if (leftIsPressed && !leftWasPressed) {
                 // 1. Check UI Modals First
                 if (inventory.IsOpen()) {
