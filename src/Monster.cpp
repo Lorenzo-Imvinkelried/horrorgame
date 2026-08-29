@@ -2389,10 +2389,14 @@ void Monster::RenderDebug(GLuint shaderProgram) {
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3*sizeof(float))); glEnableVertexAttribArray(1);
 
         glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 3); // Vertex Color Mode
+#ifndef __EMSCRIPTEN__
         glPointSize(12.0f); // Big dots
+#endif
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
         glDrawArrays(GL_POINTS, 0, (GLsizei)m_detectedTrees.size());
+#ifndef __EMSCRIPTEN__
         glPointSize(1.0f); 
+#endif
 
         glDeleteVertexArrays(1, &pVAO);
         glDeleteBuffers(1, &pVBO);
