@@ -496,7 +496,7 @@ void UIRenderer::RenderCharacterPanel(GLuint uiProgram, GLuint uiVAO, GLuint uiV
     };
 
     drawAttrButtonRow(0, "FUERZA", stats.Strength, "(+2 ATQ)", glm::vec3(0.80f, 0.20f, 0.15f));
-    drawAttrButtonRow(1, "AGILIDAD", stats.Agility, "(+CRIT +EVA)", glm::vec3(0.15f, 0.65f, 0.30f));
+    drawAttrButtonRow(1, "AGILIDAD", stats.Agility, "(+VEL.ATQ +CRIT +EVA)", glm::vec3(0.15f, 0.65f, 0.30f));
     drawAttrButtonRow(2, "VITALIDAD", stats.Vitality, "(+5 VIDA)", glm::vec3(0.75f, 0.55f, 0.10f));
     drawAttrButtonRow(3, "INTELIGENCIA", stats.Intelligence, "(+5 MANA)", glm::vec3(0.15f, 0.35f, 0.80f));
 
@@ -699,4 +699,33 @@ void UIRenderer::RenderStunWarning(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     drawColoredQuad(uiProgram, uiVAO, uiVBO, pX + 0.005f, pY + 0.005f, pW - 0.010f, pH - 0.010f, glm::vec3(0.15f, 0.05f, 0.05f));
 
     DrawString("! POSTURA QUEBRADA - ATURDIDO !", pX + 0.035f, pY + 0.040f, 0.028f, glm::vec3(1.0f, 0.85f, 0.20f), uiProgram, uiVAO, uiVBO);
+}
+
+void UIRenderer::RenderCursor(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY) {
+    if (mouseNdcX < -1.1f || mouseNdcX > 1.1f || mouseNdcY < -1.1f || mouseNdcY > 1.1f) return;
+
+    float x = mouseNdcX;
+    float y = mouseNdcY;
+    float pw = 0.0040f;
+    float ph = 0.0070f;
+
+    // Outer black border
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x, y - 12.0f * ph, 2.0f * pw, 13.0f * ph, glm::vec3(0.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x, y - ph, 9.0f * pw, 2.0f * ph, glm::vec3(0.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + pw, y - 3.0f * ph, 8.0f * pw, 2.0f * ph, glm::vec3(0.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 2.0f * pw, y - 5.0f * ph, 7.0f * pw, 2.0f * ph, glm::vec3(0.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 3.0f * pw, y - 7.0f * ph, 6.0f * pw, 2.0f * ph, glm::vec3(0.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 4.0f * pw, y - 9.0f * ph, 5.0f * pw, 2.0f * ph, glm::vec3(0.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 5.0f * pw, y - 14.0f * ph, 3.0f * pw, 6.0f * ph, glm::vec3(0.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 7.0f * pw, y - 15.0f * ph, 2.0f * pw, 3.0f * ph, glm::vec3(0.0f));
+
+    // Inner white fill
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + pw, y - 10.0f * ph, pw, 10.0f * ph, glm::vec3(1.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 2.0f * pw, y - 9.0f * ph, pw, 8.0f * ph, glm::vec3(1.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 3.0f * pw, y - 8.0f * ph, pw, 6.0f * ph, glm::vec3(1.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 4.0f * pw, y - 7.0f * ph, pw, 4.0f * ph, glm::vec3(1.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 5.0f * pw, y - 12.0f * ph, pw, 7.0f * ph, glm::vec3(1.0f));
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 6.0f * pw, y - 13.0f * ph, pw, 2.0f * ph, glm::vec3(1.0f));
+
+    glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), 1.0f, 1.0f, 1.0f);
 }

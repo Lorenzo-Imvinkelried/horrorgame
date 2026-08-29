@@ -39,6 +39,10 @@ struct PlayerStats {
         CritChance = 5.0f + Agility * 0.7f;
     }
 
+    float GetAttackSpeedMultiplier() const {
+        return 1.0f + std::max(0, Agility - 8) * 0.05f;
+    }
+
     bool AllocateStrength() {
         if (AvailableStatPoints > 0) {
             AvailableStatPoints--;

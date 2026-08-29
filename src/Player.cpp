@@ -36,9 +36,9 @@ Player::~Player() {
 bool Player::TryAttack() {
     if (StunTimer > 0.0f) return false;
     if (m_attackTimer <= 0.0f && m_attackCooldownTimer <= 0.0f && !m_isBlocking) {
-        float agiFactor = 1.0f + (Stats.Agility - 10) * 0.015f;
-        m_attackDuration = 0.58f / agiFactor;
-        m_attackCooldown = 0.35f / agiFactor;
+        float agiFactor = Stats.GetAttackSpeedMultiplier();
+        m_attackDuration = 0.52f / agiFactor;
+        m_attackCooldown = 0.28f / agiFactor;
         m_attackTimer = m_attackDuration;
         m_attackCooldownTimer = m_attackDuration + m_attackCooldown;
         m_attackHitDone = false;

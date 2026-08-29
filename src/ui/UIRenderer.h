@@ -73,6 +73,8 @@ public:
     static void DrawString(const std::string& text, float x, float y, float size, glm::vec3 color, 
                            GLuint uiProgram, GLuint uiVAO, GLuint uiVBO);
 
+    static void RenderCursor(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY);
+
 private:
     static void pushQuad(std::vector<float>& data, float x, float y, float w, float h);
     static void drawColoredQuad(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float x, float y, float w, float h, glm::vec3 color);

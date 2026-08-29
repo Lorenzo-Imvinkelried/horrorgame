@@ -1325,8 +1325,28 @@ int main() {
             lastMouseX = curMouseX;
             lastMouseY = curMouseY;
 
+#ifdef __EMSCRIPTEN__
+            static float virtualMouseX = (float)screenW * 0.5f;
+            static float virtualMouseY = (float)screenH * 0.5f;
+            static bool s_firstVirtual = true;
+            if (s_firstVirtual) {
+                virtualMouseX = (float)screenW * 0.5f;
+                virtualMouseY = (float)screenH * 0.5f;
+                s_firstVirtual = false;
+            }
+            virtualMouseX += xoff;
+            virtualMouseY -= yoff;
+            if (virtualMouseX < 0.0f) virtualMouseX = 0.0f;
+            if (virtualMouseX > (float)screenW) virtualMouseX = (float)screenW;
+            if (virtualMouseY < 0.0f) virtualMouseY = 0.0f;
+            if (virtualMouseY > (float)screenH) virtualMouseY = (float)screenH;
+
+            mouseNdcX = (virtualMouseX / (float)screenW) * 2.0f - 1.0f;
+            mouseNdcY = 1.0f - (virtualMouseY / (float)screenH) * 2.0f;
+#else
             mouseNdcX = (curMouseX / (float)screenW) * 2.0f - 1.0f;
             mouseNdcY = 1.0f - (curMouseY / (float)screenH) * 2.0f;
+#endif
 
             bool isUiModalActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen();
 
@@ -2279,8 +2299,14 @@ int main() {
             inventory.RenderWindow(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY);
         }
 
+        // Render software cursor on top of UI if any modal is active or in 3rd person
+        bool isUiActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen();
+        if (isUiActive || player.IsThirdPerson) {
+            UIRenderer::RenderCursor(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY);
+        }
+
         glEnable(GL_DEPTH_TEST);
-        glDepthRange(0, 1.0); // Restore Depth
+        glDepthRange(0.0f, 1.0f); // Restore Depth
 
         // =================================================================================
         // PASS 2: UPSCALE TO SCREEN
