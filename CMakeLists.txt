@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
 project(GamePS1Horror VERSION 0.1.0 LANGUAGES CXX C)
-# Force CMake Re-scan for Monster & ScentManager
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,26 +10,10 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 include(FetchContent)
 
 # -----------------------------------------------------------------------------
-# Dependencies
+# Common Dependencies (GLM, tinyobjloader, stb)
 # -----------------------------------------------------------------------------
 
-# 1. SFML (Window, System, Audio)
-# We disable graphics/network to keep it minimal as requested, but Window needs System.
-set(SFML_BUILD_WINDOW ON CACHE BOOL "" FORCE)
-set(SFML_BUILD_GRAPHICS OFF CACHE BOOL "" FORCE) # Reverting to OpenGL UI due to linker issues
-set(SFML_BUILD_NETWORK OFF CACHE BOOL "" FORCE)
-set(SFML_BUILD_AUDIO OFF CACHE BOOL "" FORCE)
-set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(SFML_BUILD_DOC OFF CACHE BOOL "" FORCE)
-# set(SFML_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # Revert to default
-
-FetchContent_Declare(
-    sfml
-    URL ${CMAKE_SOURCE_DIR}/libs/sfml.zip
-)
-FetchContent_MakeAvailable(sfml)
-
-# 2. GLM
+# 1. GLM
 FetchContent_Declare(
     glm
     URL ${CMAKE_SOURCE_DIR}/libs/glm.zip
@@ -42,21 +25,14 @@ if(NOT glm_POPULATED)
     target_include_directories(glm INTERFACE ${glm_SOURCE_DIR})
 endif()
 
-# 3. GLAD
-FetchContent_Declare(
-    glad
-    URL ${CMAKE_SOURCE_DIR}/libs/glad.zip
-)
-FetchContent_MakeAvailable(glad)
-
-# 4. tinyobjloader
+# 2. tinyobjloader
 FetchContent_Declare(
     tinyobjloader
     URL ${CMAKE_SOURCE_DIR}/libs/tinyobjloader.zip
 )
 FetchContent_MakeAvailable(tinyobjloader)
 
-# 5. stb
+# 3. stb
 FetchContent_Declare(
     stb
     URL ${CMAKE_SOURCE_DIR}/libs/stb.zip
@@ -69,16 +45,41 @@ if(NOT stb_POPULATED)
 endif()
 
 # -----------------------------------------------------------------------------
+# Platform Specific Dependencies (SFML & GLAD for Desktop)
+# -----------------------------------------------------------------------------
+
+if(NOT EMSCRIPTEN)
+    # SFML (Window, System)
+    set(SFML_BUILD_WINDOW ON CACHE BOOL "" FORCE)
+    set(SFML_BUILD_GRAPHICS OFF CACHE BOOL "" FORCE)
+    set(SFML_BUILD_NETWORK OFF CACHE BOOL "" FORCE)
+    set(SFML_BUILD_AUDIO OFF CACHE BOOL "" FORCE)
+    set(SFML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(SFML_BUILD_DOC OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        sfml
+        URL ${CMAKE_SOURCE_DIR}/libs/sfml.zip
+    )
+    FetchContent_MakeAvailable(sfml)
+
+    # GLAD
+    FetchContent_Declare(
+        glad
+        URL ${CMAKE_SOURCE_DIR}/libs/glad.zip
+    )
+    FetchContent_MakeAvailable(glad)
+    set(GLAD_SOURCE "${glad_SOURCE_DIR}/src/glad.c")
+else()
+    set(GLAD_SOURCE "")
+endif()
+
+# -----------------------------------------------------------------------------
 # Main Executable
 # -----------------------------------------------------------------------------
 
-# Gather source files
 file(GLOB_RECURSE SOURCES "src/*.cpp")
-# Force re-scan for new files
 file(GLOB_RECURSE HEADERS "src/*.h" "src/*.hpp")
-
-# GLAD Source (from fetched content)
-set(GLAD_SOURCE "${glad_SOURCE_DIR}/src/glad.c")
 
 add_executable(${PROJECT_NAME} 
     ${SOURCES} 
@@ -90,31 +91,56 @@ add_executable(${PROJECT_NAME}
 target_include_directories(${PROJECT_NAME} PRIVATE 
     src
     src/core
+    src/core/glad_shim
     src/entities
     src/combat
     src/world
     src/graphics
     src/ui
     src/inventory
-    ${glad_SOURCE_DIR}/include
 )
 
-# Link Libraries
-target_link_libraries(${PROJECT_NAME} PRIVATE
-    sfml-window
-    sfml-system
-    glm
-    glad
-    tinyobjloader
-    stb
-)
+if(NOT EMSCRIPTEN)
+    target_include_directories(${PROJECT_NAME} PRIVATE 
+        ${glad_SOURCE_DIR}/include
+    )
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        sfml-window
+        sfml-system
+        glm
+        glad
+        tinyobjloader
+        stb
+    )
 
-# Copy assets and config.json to bin folder (Post-build)
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/assets
-    ${CMAKE_BINARY_DIR}/bin/assets
-    COMMAND ${CMAKE_COMMAND} -E copy
-    ${CMAKE_SOURCE_DIR}/config.json
-    ${CMAKE_BINARY_DIR}/bin/config.json
-)
+    # Copy assets and config.json to bin folder (Post-build)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        ${CMAKE_BINARY_DIR}/bin/assets
+        COMMAND ${CMAKE_COMMAND} -E copy
+        ${CMAKE_SOURCE_DIR}/config.json
+        ${CMAKE_BINARY_DIR}/bin/config.json
+    )
+else()
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        glm
+        tinyobjloader
+        stb
+    )
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        OUTPUT_NAME "index"
+        SUFFIX ".html"
+    )
+    target_link_options(${PROJECT_NAME} PRIVATE
+        "-sUSE_GLFW=3"
+        "-sFULL_ES3=1"
+        "-sMAX_WEBGL_VERSION=2"
+        "-sMIN_WEBGL_VERSION=2"
+        "-sALLOW_MEMORY_GROWTH=1"
+        "-sINITIAL_MEMORY=134217728"
+        "--preload-file" "${CMAKE_SOURCE_DIR}/assets@assets"
+        "--preload-file" "${CMAKE_SOURCE_DIR}/config.json@config.json"
+        "--shell-file" "${CMAKE_SOURCE_DIR}/web/shell.html"
+    )
+endif()

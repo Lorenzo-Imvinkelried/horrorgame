@@ -1,7 +1,7 @@
 #include "Player.h"
 #include <cmath>
 #include <iostream>
-#include <SFML/Window/Keyboard.hpp>
+#include "core/PlatformInput.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <glad/glad.h>
 #include "Config.h"
@@ -553,11 +553,11 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
         
         float climbSpeed = 5.0f;
         bool isMoving = false;
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) {
+        if (PlatformInput::IsKeyPressed(PlatformInput::W)) {
             Position.y += climbSpeed * deltaTime;
             isMoving = true;
         }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
+        if (PlatformInput::IsKeyPressed(PlatformInput::S)) {
             Position.y -= climbSpeed * deltaTime;
             isMoving = true;
         }
@@ -585,7 +585,7 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
         }
         
         static bool spaceWasPressed = false;
-        bool spaceIsPressed = sf::Keyboard::isKeyPressed(sf::Keyboard::Space);
+        bool spaceIsPressed = PlatformInput::IsKeyPressed(PlatformInput::Space);
         if (spaceIsPressed && !spaceWasPressed) {
             IsClimbing = false;
             Velocity.y = JumpForce * 0.8f;
@@ -595,12 +595,12 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
         spaceWasPressed = spaceIsPressed;
         
     } else {
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) { moveDir += flatFront; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) { moveDir -= flatFront; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) { moveDir -= flatRight; }
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) { moveDir += flatRight; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::W)) { moveDir += flatFront; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::S)) { moveDir -= flatFront; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::A)) { moveDir -= flatRight; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::D)) { moveDir += flatRight; }
 
-        if (sf::Keyboard::isKeyPressed(sf::Keyboard::Space)) {
+        if (PlatformInput::IsKeyPressed(PlatformInput::Space)) {
             if (treeNear) {
                 IsClimbing = true;
                 ClimbingTreePos = glm::vec3(closestTree.x, closestTree.y, closestTree.z);

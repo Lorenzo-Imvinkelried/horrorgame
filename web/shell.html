@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>The Horror Forest - PS1 Horror Game</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            background-color: #050508;
+            color: #d1d5db;
+            font-family: 'Courier New', Courier, monospace, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle, #0e1118 0%, #030407 100%);
+        }
+
+        canvas.emscripten {
+            border: 2px solid #1f293d;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), 0 0 10px rgba(70, 85, 120, 0.2);
+            background-color: #000;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            max-width: 100vw;
+            max-height: 100vh;
+            outline: none;
+            display: block;
+        }
+
+        /* Overlay UI */
+        .overlay-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(3, 4, 7, 0.88);
+            backdrop-filter: blur(6px);
+            z-index: 50;
+            transition: opacity 0.4s ease, visibility 0.4s ease;
+        }
+
+        .overlay-screen.hidden {
+            opacity: 0;
+            visibility: hidden;
+            pointer-events: none;
+        }
+
+        .title-box {
+            text-align: center;
+            margin-bottom: 24px;
+            text-shadow: 0 0 12px rgba(180, 20, 20, 0.7);
+        }
+
+        .title-box h1 {
+            font-size: 2.5rem;
+            color: #e53e3e;
+            letter-spacing: 6px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .title-box p {
+            font-size: 0.9rem;
+            color: #9ca3af;
+            letter-spacing: 2px;
+        }
+
+        /* Progress Bar */
+        #loading-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 320px;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 18px;
+            background: #111827;
+            border: 2px solid #374151;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 10px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.6);
+        }
+
+        .progress-bar-fill {
+            width: 0%;
+            height: 100%;
+            background: linear-gradient(90deg, #991b1b, #ef4444);
+            transition: width 0.15s ease-out;
+        }
+
+        #status-text {
+            font-size: 0.8rem;
+            color: #9ca3af;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        /* Menu Card */
+        #menu-box {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            max-width: 520px;
+            padding: 24px;
+            border: 1px solid #2d3748;
+            background: rgba(13, 17, 27, 0.92);
+            border-radius: 6px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+        }
+
+        .btn-play {
+            padding: 14px 44px;
+            font-size: 1.25rem;
+            font-weight: bold;
+            font-family: inherit;
+            color: #fff;
+            background: linear-gradient(180deg, #b91c1c 0%, #7f1d1d 100%);
+            border: 2px solid #ef4444;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s;
+            margin-bottom: 20px;
+        }
+
+        .btn-play:hover {
+            transform: scale(1.04);
+            box-shadow: 0 0 25px rgba(239, 68, 68, 0.7);
+            background: linear-gradient(180deg, #dc2626 0%, #991b1b 100%);
+        }
+
+        .btn-play:active {
+            transform: scale(0.97);
+        }
+
+        .controls-card {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px dashed #374151;
+            border-radius: 4px;
+            padding: 12px 16px;
+            margin-bottom: 16px;
+        }
+
+        .controls-card h3 {
+            font-size: 0.85rem;
+            color: #f87171;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px 14px;
+            font-size: 0.78rem;
+            color: #cbd5e1;
+        }
+
+        .key-badge {
+            display: inline-block;
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            color: #f3f4f6;
+            padding: 1px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+
+        .footer-note {
+            font-size: 0.72rem;
+            color: #6b7280;
+            text-align: center;
+        }
+
+        /* Floating Fullscreen button */
+        #btn-fullscreen {
+            position: absolute;
+            bottom: 16px;
+            right: 16px;
+            background: rgba(17, 24, 39, 0.8);
+            border: 1px solid #374151;
+            color: #9ca3af;
+            padding: 8px 12px;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            cursor: pointer;
+            z-index: 40;
+            transition: all 0.2s;
+        }
+
+        #btn-fullscreen:hover {
+            color: #fff;
+            border-color: #6b7280;
+            background: rgba(31, 41, 55, 0.9);
+        }
+
+        /* Click to Resume overlay when cursor unlocks */
+        #resume-banner {
+            position: absolute;
+            top: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(185, 28, 28, 0.9);
+            color: white;
+            padding: 8px 16px;
+            font-size: 0.8rem;
+            letter-spacing: 1px;
+            border-radius: 4px;
+            display: none;
+            cursor: pointer;
+            z-index: 60;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.9; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- WebGL Canvas -->
+    <canvas class="emscripten" id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+
+    <!-- Overlay Screen (Loading / Start Menu) -->
+    <div id="overlay-screen" class="overlay-screen">
+        <div class="title-box">
+            <h1>PS1 HORROR FOREST</h1>
+            <p>RETRO SURVIVAL HORROR</p>
+        </div>
+
+        <!-- Loading Bar -->
+        <div id="loading-box">
+            <div class="progress-bar-bg">
+                <div id="progress-fill" class="progress-bar-fill"></div>
+            </div>
+            <div id="status-text">DESCARGANDO ASSETS Y MUNDO 3D...</div>
+        </div>
+
+        <!-- Start Menu Box (Revealed once loaded) -->
+        <div id="menu-box">
+            <button id="btn-play" class="btn-play">▶ JUGAR</button>
+
+            <div class="controls-card">
+                <h3>Guía de Controles:</h3>
+                <div class="controls-grid">
+                    <div><span class="key-badge">W A S D</span> Moverse</div>
+                    <div><span class="key-badge">MOUSE</span> Mirar / Rotar</div>
+                    <div><span class="key-badge">ESPACIO</span> Saltar / Trepar</div>
+                    <div><span class="key-badge">F</span> Linterna</div>
+                    <div><span class="key-badge">CLICK IZQ</span> Atacar / Disparar</div>
+                    <div><span class="key-badge">E</span> Interactuar</div>
+                    <div><span class="key-badge">TAB / I</span> Inventario</div>
+                    <div><span class="key-badge">1 - 4</span> Cambiar Arma</div>
+                </div>
+            </div>
+
+            <div class="footer-note">
+                💡 Haz clic para atrapar el mouse. Presiona <span class="key-badge">ESC</span> para liberar el cursor.
+            </div>
+        </div>
+    </div>
+
+    <!-- Resume Banner if cursor unlocked -->
+    <div id="resume-banner">CLICK AQUÍ PARA RETOMAR EL CONTROL</div>
+
+    <!-- Fullscreen Button -->
+    <button id="btn-fullscreen" onclick="toggleFullScreen()">⛶ Pantalla Completa</button>
+</div>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const overlayScreen = document.getElementById('overlay-screen');
+    const loadingBox = document.getElementById('loading-box');
+    const menuBox = document.getElementById('menu-box');
+    const progressFill = document.getElementById('progress-fill');
+    const statusText = document.getElementById('status-text');
+    const btnPlay = document.getElementById('btn-play');
+    const resumeBanner = document.getElementById('resume-banner');
+
+    let isGameReady = false;
+    let isPlaying = false;
+
+    // Pointer Lock Management
+    function requestLock() {
+        canvas.focus();
+        if (canvas.requestPointerLock) {
+            canvas.requestPointerLock();
+        } else if (canvas.mozRequestPointerLock) {
+            canvas.mozRequestPointerLock();
+        } else if (canvas.webkitRequestPointerLock) {
+            canvas.webkitRequestPointerLock();
+        }
+    }
+
+    document.addEventListener('pointerlockchange', onPointerLockChange, false);
+    document.addEventListener('mozpointerlockchange', onPointerLockChange, false);
+    document.addEventListener('webkitpointerlockchange', onPointerLockChange, false);
+
+    function onPointerLockChange() {
+        const isLocked = document.pointerLockElement === canvas ||
+                         document.mozPointerLockElement === canvas ||
+                         document.webkitPointerLockElement === canvas;
+        
+        if (isPlaying) {
+            resumeBanner.style.display = isLocked ? 'none' : 'block';
+        }
+    }
+
+    btnPlay.addEventListener('click', () => {
+        if (!isGameReady) return;
+        isPlaying = true;
+        overlayScreen.classList.add('hidden');
+        requestLock();
+    });
+
+    resumeBanner.addEventListener('click', () => {
+        requestLock();
+    });
+
+    canvas.addEventListener('click', () => {
+        if (isPlaying) {
+            requestLock();
+        }
+    });
+
+    function toggleFullScreen() {
+        const elem = document.getElementById('game-container');
+        if (!document.fullscreenElement) {
+            if (elem.requestFullscreen) elem.requestFullscreen();
+            else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+            else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+        } else {
+            if (document.exitFullscreen) document.exitFullscreen();
+        }
+    }
+
+    // Emscripten Module Bridge
+    var Module = {
+        preRun: [],
+        postRun: [
+            function() {
+                // Game engine is initialized
+                isGameReady = true;
+                loadingBox.style.display = 'none';
+                menuBox.style.display = 'flex';
+                statusText.innerText = "LISTO";
+            }
+        ],
+        print: function(text) {
+            console.log(text);
+        },
+        printErr: function(text) {
+            console.error(text);
+        },
+        canvas: (function() {
+            canvas.addEventListener("webglcontextlost", function(e) {
+                alert('WebGL context lost. Please reload the page.');
+                e.preventDefault();
+            }, false);
+            return canvas;
+        })(),
+        setStatus: function(text) {
+            if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
+            if (text === Module.setStatus.last.text) return;
+            var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+            var now = Date.now();
+            if (m) {
+                var current = parseFloat(m[2]);
+                var total = parseFloat(m[4]);
+                var percent = Math.round((current / total) * 100);
+                progressFill.style.width = percent + '%';
+                statusText.innerText = 'CARGANDO ASSETS: ' + percent + '%';
+            } else {
+                if (text) {
+                    statusText.innerText = text;
+                }
+            }
+        },
+        totalDependencies: 0,
+        monitorRunDependencies: function(left) {
+            this.totalDependencies = Math.max(this.totalDependencies, left);
+            if (left) {
+                var percent = Math.round(((this.totalDependencies - left) / this.totalDependencies) * 100);
+                progressFill.style.width = percent + '%';
+                statusText.innerText = 'PREPARANDO JUEGO: ' + percent + '%';
+            } else {
+                statusText.innerText = 'LISTO';
+            }
+        }
+    };
+
+    window.onerror = function(event) {
+        statusText.innerText = 'ERROR AL CARGAR EL JUEGO';
+        console.error("Game Error: ", event);
+    };
+</script>
+
+{{{ SCRIPT }}}
+
+</body>
+</html>

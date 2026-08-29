@@ -1,0 +1,73 @@
+name: Build and Deploy Web Game
+
+on:
+  push:
+    branches:
+      - arpg-game
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Emscripten
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 3.1.58
+
+      - name: Verify Emscripten
+        run: emcc --version
+
+      - name: Configure CMake
+        run: |
+          emcmake cmake -B build_web \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build WebAssembly Project
+        run: |
+          cmake --build build_web --config Release -- -j2
+
+      - name: Prepare Web Distribution
+        run: |
+          mkdir -p dist_web
+          # Find output files and copy to dist_web
+          find build_web -name "index.html" -exec cp {} dist_web/ \;
+          find build_web -name "index.js" -exec cp {} dist_web/ \;
+          find build_web -name "index.wasm" -exec cp {} dist_web/ \;
+          find build_web -name "index.data" -exec cp {} dist_web/ \; || true
+          ls -la dist_web/
+
+      - name: Upload Web Build Artifact (for itch.io / Netlify zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: horror-game-web-build
+          path: dist_web/
+
+      - name: Setup GitHub Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload artifact for GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist_web/
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

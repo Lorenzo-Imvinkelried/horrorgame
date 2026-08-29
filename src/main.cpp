@@ -1,8 +1,16 @@
 #include <glad/glad.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#include <emscripten/html5.h>
+#include <GLFW/glfw3.h>
+#include <functional>
+#else
 #include <SFML/Window.hpp>
 #include <SFML/OpenGL.hpp>
-#include <glm/glm.hpp>
 #include <SFML/Window/Mouse.hpp>
+#endif
+#include <glm/glm.hpp>
+#include "core/PlatformInput.h"
 #include "WeaponSystem.h"
 #include "ParticleSystem.h"
 #include "ScentSystem.h"
@@ -60,6 +68,23 @@ GLuint LoadShader(const char* vertPath, const char* fragPath) {
 
     std::string vStr = loadFile(vertPath);
     std::string fStr = loadFile(fragPath);
+
+#ifdef __EMSCRIPTEN__
+    auto adaptForWebGL2 = [](std::string& src, bool isFragment) {
+        size_t pos = src.find("#version 330 core");
+        if (pos != std::string::npos) {
+            std::string header = "#version 300 es\n";
+            if (isFragment) {
+                header += "precision highp float;\nprecision highp int;\nprecision mediump sampler2D;\n";
+            } else {
+                header += "precision highp float;\nprecision highp int;\n";
+            }
+            src.replace(pos, 17, header);
+        }
+    };
+    adaptForWebGL2(vStr, false);
+    adaptForWebGL2(fStr, true);
+#endif
 
     if (vStr.empty()) std::cerr << "[Shader] Failed to read vertex shader: " << vertPath << std::endl;
     if (fStr.empty()) std::cerr << "[Shader] Failed to read fragment shader: " << fragPath << std::endl;
@@ -508,10 +533,16 @@ struct CoutRedirector {
 };
 
 int main() {
+#ifndef __EMSCRIPTEN__
     CoutRedirector redirect("log.txt");
+#endif
     GameConfig gameCfg = LoadConfig("config.json");
     glm::vec4 skyColor = gameCfg.isNight ? glm::vec4(0.005f, 0.005f, 0.015f, 1.0f) : glm::vec4(0.4f, 0.6f, 1.0f, 1.0f);
 
+    int windowWidth = 1280;
+    int windowHeight = 720;
+
+#ifndef __EMSCRIPTEN__
     sf::ContextSettings settings;
     settings.depthBits = 24;
     settings.stencilBits = 8;
@@ -525,6 +556,25 @@ int main() {
     sf::Window window(desktop, "GamePS1Horror", sf::Style::None, settings);
     window.setVerticalSyncEnabled(Config::Graphics::VSyncEnabled);
     window.setMouseCursorVisible(true);
+    PlatformInput::Init(&window);
+    windowWidth = desktop.width;
+    windowHeight = desktop.height;
+#else
+    if (!glfwInit()) {
+        std::cerr << "Failed to initialize GLFW" << std::endl;
+        return -1;
+    }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "GamePS1Horror", NULL, NULL);
+    if (!window) {
+        std::cerr << "Failed to create GLFW window" << std::endl;
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+    PlatformInput::Init(window);
+#endif
 
     if (!gladLoadGL()) {
         std::cerr << "Failed to initialize GLAD" << std::endl;
@@ -532,8 +582,8 @@ int main() {
     }
 
     glEnable(GL_DEPTH_TEST);
-    glViewport(0, 0, desktop.width, desktop.height);
-    float aspect = (float)desktop.width / (float)desktop.height;
+    glViewport(0, 0, windowWidth, windowHeight);
+    float aspect = (float)windowWidth / (float)windowHeight;
 
     GLuint shaderProgram = LoadShader("assets/shaders/ps1.vert", "assets/shaders/ps1.frag");
     GLuint uiProgram = LoadShader("assets/shaders/ui.vert", "assets/shaders/ui.frag");
@@ -884,12 +934,194 @@ int main() {
     WeatherSystem weatherSystem;
     StructureSystem structureSystem;
 
+    auto handleKeyAction = [&](int key) {
+#ifndef __EMSCRIPTEN__
+        if (key == sf::Keyboard::Escape) window.close();
+        if (key == sf::Keyboard::R) weapon.Reload();
+        if (key == sf::Keyboard::F) {
+            gameCfg.flashlightEnabled = !gameCfg.flashlightEnabled;
+            std::cout << "F Key Pressed! Flashlight: " << (gameCfg.flashlightEnabled ? "ON" : "OFF") << std::endl;
+        }
+        if (key == sf::Keyboard::F3) debugCam = !debugCam;
+        if (debugCam && key == sf::Keyboard::G) showSpawnArea = !showSpawnArea;
+        if (key == sf::Keyboard::H) {
+            showHitboxes = !showHitboxes;
+            std::cout << "H Key Pressed! Toggle: " << (showHitboxes ? "ON" : "OFF") << std::endl;
+        }
+        if (key == sf::Keyboard::J) {
+            birds.ToggleDebug();
+            std::cout << "J Key Pressed! Toggled Bird Debug" << std::endl;
+        }
+        if (key == sf::Keyboard::O) {
+            showMonsterMarker = !showMonsterMarker;
+            std::cout << "O Key Pressed! Monster Marker: " << (showMonsterMarker ? "ON" : "OFF") << std::endl;
+        }
+        if (key == sf::Keyboard::V) {
+            player.ToggleCameraMode();
+            std::cout << "V Key Pressed! Camera: " << (player.IsThirdPerson ? "3rd Person" : "1st Person") << std::endl;
+        }
+        if (key == sf::Keyboard::C) {
+            isCharacterPanelOpen = !isCharacterPanelOpen;
+        }
+        if (isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
+            if (key == sf::Keyboard::Num1 || key == sf::Keyboard::Numpad1) {
+                if (player.Stats.AllocateStrength()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.30f, 0.25f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            } else if (key == sf::Keyboard::Num2 || key == sf::Keyboard::Numpad2) {
+                if (player.Stats.AllocateAgility()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.25f, 0.95f, 0.40f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            } else if (key == sf::Keyboard::Num3 || key == sf::Keyboard::Numpad3) {
+                if (player.Stats.AllocateVitality()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.85f, 0.20f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            } else if (key == sf::Keyboard::Num4 || key == sf::Keyboard::Numpad4) {
+                if (player.Stats.AllocateIntelligence()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.35f, 0.65f, 0.95f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            }
+        }
+        if (key == sf::Keyboard::I || key == sf::Keyboard::Tab) {
+            inventory.ToggleOpen();
+        }
+        if (key == sf::Keyboard::Q) {
+            spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
+        }
+        if (key == sf::Keyboard::R) {
+            spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
+        }
+        if (key == sf::Keyboard::G) {
+            skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
+        }
+        if (key == sf::Keyboard::Return || key == sf::Keyboard::Space) {
+            if (fatalError.active) fatalError.active = false;
+        }
+        if (key == sf::Keyboard::E) {
+            if (loreModal.active) {
+                loreModal.active = false;
+            } else if (structureSystem.TryInteract(player.Position, player, inventory, damageNumbers, particles)) {
+                // Opened
+            } else if (!horrorProps.TryLootNearby(player.Position, &player, damageNumbers, loreModal)) {
+                spellSystem.CastShadowAegis(player, particles);
+            }
+        }
+#else
+        if (key == GLFW_KEY_R) weapon.Reload();
+        if (key == GLFW_KEY_F) {
+            gameCfg.flashlightEnabled = !gameCfg.flashlightEnabled;
+            std::cout << "F Key Pressed! Flashlight: " << (gameCfg.flashlightEnabled ? "ON" : "OFF") << std::endl;
+        }
+        if (key == GLFW_KEY_F3) debugCam = !debugCam;
+        if (debugCam && key == GLFW_KEY_G) showSpawnArea = !showSpawnArea;
+        if (key == GLFW_KEY_H) {
+            showHitboxes = !showHitboxes;
+            std::cout << "H Key Pressed! Toggle: " << (showHitboxes ? "ON" : "OFF") << std::endl;
+        }
+        if (key == GLFW_KEY_J) {
+            birds.ToggleDebug();
+            std::cout << "J Key Pressed! Toggled Bird Debug" << std::endl;
+        }
+        if (key == GLFW_KEY_O) {
+            showMonsterMarker = !showMonsterMarker;
+            std::cout << "O Key Pressed! Monster Marker: " << (showMonsterMarker ? "ON" : "OFF") << std::endl;
+        }
+        if (key == GLFW_KEY_V) {
+            player.ToggleCameraMode();
+            std::cout << "V Key Pressed! Camera: " << (player.IsThirdPerson ? "3rd Person" : "1st Person") << std::endl;
+        }
+        if (key == GLFW_KEY_C) {
+            isCharacterPanelOpen = !isCharacterPanelOpen;
+        }
+        if (isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
+            if (key == GLFW_KEY_1 || key == GLFW_KEY_KP_1) {
+                if (player.Stats.AllocateStrength()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.30f, 0.25f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            } else if (key == GLFW_KEY_2 || key == GLFW_KEY_KP_2) {
+                if (player.Stats.AllocateAgility()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.25f, 0.95f, 0.40f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            } else if (key == GLFW_KEY_3 || key == GLFW_KEY_KP_3) {
+                if (player.Stats.AllocateVitality()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.85f, 0.20f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            } else if (key == GLFW_KEY_4 || key == GLFW_KEY_KP_4) {
+                if (player.Stats.AllocateIntelligence()) {
+                    for (int i = 0; i < 18; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
+                        particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.35f, 0.65f, 0.95f, 1.0f), 0.15f, 0.8f, -9.8f);
+                    }
+                }
+            }
+        }
+        if (key == GLFW_KEY_I || key == GLFW_KEY_TAB) {
+            inventory.ToggleOpen();
+        }
+        if (key == GLFW_KEY_Q) {
+            spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
+        }
+        if (key == GLFW_KEY_R) {
+            spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
+        }
+        if (key == GLFW_KEY_G) {
+            skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
+        }
+        if (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE) {
+            if (fatalError.active) fatalError.active = false;
+        }
+        if (key == GLFW_KEY_E) {
+            if (loreModal.active) {
+                loreModal.active = false;
+            } else if (structureSystem.TryInteract(player.Position, player, inventory, damageNumbers, particles)) {
+                // Opened
+            } else if (!horrorProps.TryLootNearby(player.Position, &player, damageNumbers, loreModal)) {
+                spellSystem.CastShadowAegis(player, particles);
+            }
+        }
+#endif
+    };
+
+#ifdef __EMSCRIPTEN__
+    static std::function<void(int)> s_EmscriptenKeyHandler;
+    s_EmscriptenKeyHandler = handleKeyAction;
+    glfwSetKeyCallback(window, [](GLFWwindow*, int key, int scancode, int action, int mods) {
+        if (action == GLFW_PRESS && s_EmscriptenKeyHandler) {
+            s_EmscriptenKeyHandler(key);
+        }
+    });
+#endif
+
+#ifndef __EMSCRIPTEN__
     sf::Clock clock;
     sf::Clock fpsClock;
     int frameCount = 0;
     int currentFPS = 0;
+#endif
 
-    while (window.isOpen()) {
+    auto updateAndRenderFrame = [&]() {
+#ifndef __EMSCRIPTEN__
         float deltaTime = clock.restart().asSeconds();
         if (deltaTime > 0.1f) deltaTime = 0.1f; 
 
@@ -904,154 +1136,44 @@ int main() {
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) window.close();
             if (event.type == sf::Event::KeyPressed) {
-                if (event.key.code == sf::Keyboard::Escape) window.close();
-                
-                if (!debugCam) {
-                    // ...
-                } else {
-                     // Debug Camera Movement
-                }
-                
-                // Manual Wind Control (Arrow Keys - Rotation)
-                // Use isKeyPressed for smooth holding
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
-                    // Rotate Counter-Clockwise
-                    float angle = -2.0f * deltaTime; // Speed
-                    glm::vec2 current = windSystem.GetDirection();
-                    float c = cos(angle); float s = sin(angle);
-                    float nx = current.x * c - current.y * s;
-                    float ny = current.x * s + current.y * c;
-                    windSystem.SetDirection(nx, ny);
-                }
-                if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
-                    // Rotate Clockwise
-                    float angle = 2.0f * deltaTime;
-                    glm::vec2 current = windSystem.GetDirection();
-                    float c = cos(angle); float s = sin(angle);
-                    float nx = current.x * c - current.y * s;
-                    float ny = current.x * s + current.y * c;
-                    windSystem.SetDirection(nx, ny);
-                }
-                
-                // Weapon Reload (R Key)
-                if (event.key.code == sf::Keyboard::R) {
-                    weapon.Reload();
-                }
-
-                // Flashlight Toggle (F Key)
-                if (event.key.code == sf::Keyboard::F) {
-                    gameCfg.flashlightEnabled = !gameCfg.flashlightEnabled;
-                    std::cout << "F Key Pressed! Flashlight: " << (gameCfg.flashlightEnabled ? "ON" : "OFF") << std::endl;
-                }
-
-                // Debug Camera Toggle
-                if (event.key.code == sf::Keyboard::F3) debugCam = !debugCam;
-                
-                // Spawn Area Toggle (Only in F3)
-                if (debugCam && event.key.code == sf::Keyboard::G) showSpawnArea = !showSpawnArea;
-
-                // Hitbox Toggle (H key)
-                if (event.key.code == sf::Keyboard::H) {
-                    showHitboxes = !showHitboxes;
-                    std::cout << "H Key Pressed! Toggle: " << (showHitboxes ? "ON" : "OFF") << std::endl;
-                }
-                
-                // Bird Debug Toggle (J key)
-                if (event.key.code == sf::Keyboard::J) {
-                    birds.ToggleDebug();
-                    std::cout << "J Key Pressed! Toggled Bird Debug" << std::endl;
-                }
-                
-                // Toggle Monster Marker (O key)
-                if (event.key.code == sf::Keyboard::O) {
-                    showMonsterMarker = !showMonsterMarker;
-                    std::cout << "O Key Pressed! Monster Marker: " << (showMonsterMarker ? "ON" : "OFF") << std::endl;
-                }
-
-                // Toggle Camera Mode (V key: 3rd Person / 1st Person)
-                if (event.key.code == sf::Keyboard::V) {
-                    player.ToggleCameraMode();
-                    std::cout << "V Key Pressed! Camera: " << (player.IsThirdPerson ? "3rd Person" : "1st Person") << std::endl;
-                }
-
-                // Toggle Character Stats Panel (C key)
-                if (event.key.code == sf::Keyboard::C) {
-                    isCharacterPanelOpen = !isCharacterPanelOpen;
-                }
-
-                // Allocate Stat Points (1: STR, 2: AGI, 3: VIT, 4: INT)
-                if (isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
-                    if (event.key.code == sf::Keyboard::Num1 || event.key.code == sf::Keyboard::Numpad1) {
-                        if (player.Stats.AllocateStrength()) {
-                            for (int i = 0; i < 18; ++i) {
-                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
-                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.30f, 0.25f, 1.0f), 0.15f, 0.8f, -9.8f);
-                            }
-                        }
-                    }
-                    else if (event.key.code == sf::Keyboard::Num2 || event.key.code == sf::Keyboard::Numpad2) {
-                        if (player.Stats.AllocateAgility()) {
-                            for (int i = 0; i < 18; ++i) {
-                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
-                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.25f, 0.95f, 0.40f, 1.0f), 0.15f, 0.8f, -9.8f);
-                            }
-                        }
-                    }
-                    else if (event.key.code == sf::Keyboard::Num3 || event.key.code == sf::Keyboard::Numpad3) {
-                        if (player.Stats.AllocateVitality()) {
-                            for (int i = 0; i < 18; ++i) {
-                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
-                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.85f, 0.20f, 1.0f), 0.15f, 0.8f, -9.8f);
-                            }
-                        }
-                    }
-                    else if (event.key.code == sf::Keyboard::Num4 || event.key.code == sf::Keyboard::Numpad4) {
-                        if (player.Stats.AllocateIntelligence()) {
-                            for (int i = 0; i < 18; ++i) {
-                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
-                                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.35f, 0.65f, 0.95f, 1.0f), 0.15f, 0.8f, -9.8f);
-                            }
-                        }
-                    }
-                }
-
-                // Toggle Inventory Window (I or Tab)
-                if (event.key.code == sf::Keyboard::I || event.key.code == sf::Keyboard::Tab) {
-                    inventory.ToggleOpen();
-                }
-
-                // Spell [Q] - Blood Burst
-                if (event.key.code == sf::Keyboard::Q) {
-                    spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
-                }
-
-                // Spell [R] - Arcane Beam
-                if (event.key.code == sf::Keyboard::R) {
-                    spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
-                }
-
-                // Skinning [G] - Skin Animal Corpse
-                if (event.key.code == sf::Keyboard::G) {
-                    skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
-                }
-
-                // Dismiss Fatal Error Popup (Enter / Space)
-                if (event.key.code == sf::Keyboard::Return || event.key.code == sf::Keyboard::Space) {
-                    if (fatalError.active) fatalError.active = false;
-                }
-
-                // Multi-functional Interaction & Spell (E key)
-                if (event.key.code == sf::Keyboard::E) {
-                    if (loreModal.active) {
-                        loreModal.active = false;
-                    } else if (structureSystem.TryInteract(player.Position, player, inventory, damageNumbers, particles)) {
-                        // Successfully opened ancient chest or performed blood sacrifice!
-                    } else if (!horrorProps.TryLootNearby(player.Position, &player, damageNumbers, loreModal)) {
-                        // If no prop or structure nearby -> Cast [E] Shadow Aegis
-                        spellSystem.CastShadowAegis(player, particles);
-                    }
-                }
+                handleKeyAction(event.key.code);
             }
+        }
+#else
+        static double lastFrameTime = emscripten_get_now() / 1000.0;
+        static double lastFpsTime = lastFrameTime;
+        static int frameCount = 0;
+        static int currentFPS = 0;
+        double currentNow = emscripten_get_now() / 1000.0;
+        float deltaTime = (float)(currentNow - lastFrameTime);
+        if (deltaTime > 0.1f) deltaTime = 0.1f;
+        lastFrameTime = currentNow;
+
+        frameCount++;
+        if (currentNow - lastFpsTime >= 1.0) {
+            currentFPS = frameCount;
+            frameCount = 0;
+            lastFpsTime = currentNow;
+        }
+
+        glfwPollEvents();
+#endif
+
+        if (PlatformInput::IsKeyPressed(PlatformInput::Left)) {
+            float angle = -2.0f * deltaTime;
+            glm::vec2 current = windSystem.GetDirection();
+            float c = cos(angle); float s = sin(angle);
+            float nx = current.x * c - current.y * s;
+            float ny = current.x * s + current.y * c;
+            windSystem.SetDirection(nx, ny);
+        }
+        if (PlatformInput::IsKeyPressed(PlatformInput::Right)) {
+            float angle = 2.0f * deltaTime;
+            glm::vec2 current = windSystem.GetDirection();
+            float c = cos(angle); float s = sin(angle);
+            float nx = current.x * c - current.y * s;
+            float ny = current.x * s + current.y * c;
+            windSystem.SetDirection(nx, ny);
         }
 
         chunkManager.Update(player.Position);
@@ -1125,7 +1247,9 @@ int main() {
         if (isGameOver) {
             gameOverTimer -= deltaTime;
             if (gameOverTimer <= 0.0f) {
+#ifndef __EMSCRIPTEN__
                 window.close();
+#endif
             }
         } else {
             if (player.Stats.CurrentHP <= 0) {
@@ -1151,35 +1275,58 @@ int main() {
         } else {
             // Free Cam Movement
             float camSpeed = Config::Gameplay::DebugCamSpeed * deltaTime;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::W)) freeCamPos += freeCamFront * camSpeed;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) freeCamPos -= freeCamFront * camSpeed;
+            if (PlatformInput::IsKeyPressed(PlatformInput::W)) freeCamPos += freeCamFront * camSpeed;
+            if (PlatformInput::IsKeyPressed(PlatformInput::S)) freeCamPos -= freeCamFront * camSpeed;
             glm::vec3 camRight = glm::normalize(glm::cross(freeCamFront, glm::vec3(0,1,0)));
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::A)) freeCamPos -= camRight * camSpeed;
-            if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) freeCamPos += camRight * camSpeed;
+            if (PlatformInput::IsKeyPressed(PlatformInput::A)) freeCamPos -= camRight * camSpeed;
+            if (PlatformInput::IsKeyPressed(PlatformInput::D)) freeCamPos += camRight * camSpeed;
         }
 
         float mouseNdcX = -999.0f;
         float mouseNdcY = -999.0f;
 
-        if (window.hasFocus()) {
+#ifndef __EMSCRIPTEN__
+        bool hasFocus = window.hasFocus();
+        sf::Vector2u winSize = window.getSize();
+        int screenW = (int)winSize.x;
+        int screenH = (int)winSize.y;
+        sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+        float curMouseX = (float)mousePos.x;
+        float curMouseY = (float)mousePos.y;
+        bool rightIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Right);
+        bool leftIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Left);
+#else
+        bool hasFocus = true;
+        int screenW = 1280, screenH = 720;
+        glfwGetFramebufferSize(window, &screenW, &screenH);
+        if (screenW <= 0) screenW = 1280;
+        if (screenH <= 0) screenH = 720;
+        double mx = 0, my = 0;
+        glfwGetCursorPos(window, &mx, &my);
+        float curMouseX = (float)mx;
+        float curMouseY = (float)my;
+        bool rightIsPressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
+        bool leftIsPressed = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
+#endif
+
+        if (hasFocus) {
             static bool firstMouse = true;
-            static sf::Vector2i lastMousePos = sf::Mouse::getPosition(window);
-            sf::Vector2i mousePos = sf::Mouse::getPosition(window);
+            static float lastMouseX = curMouseX;
+            static float lastMouseY = curMouseY;
             
             if (firstMouse) {
-                lastMousePos = mousePos;
+                lastMouseX = curMouseX;
+                lastMouseY = curMouseY;
                 firstMouse = false;
             }
 
-            float xoff = (float)(mousePos.x - lastMousePos.x);
-            float yoff = (float)(lastMousePos.y - mousePos.y);
-            lastMousePos = mousePos;
+            float xoff = curMouseX - lastMouseX;
+            float yoff = lastMouseY - curMouseY;
+            lastMouseX = curMouseX;
+            lastMouseY = curMouseY;
 
-            bool rightIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Right);
-
-            sf::Vector2u winSize = window.getSize();
-            mouseNdcX = ((float)mousePos.x / (float)winSize.x) * 2.0f - 1.0f;
-            mouseNdcY = 1.0f - ((float)mousePos.y / (float)winSize.y) * 2.0f;
+            mouseNdcX = (curMouseX / (float)screenW) * 2.0f - 1.0f;
+            mouseNdcY = 1.0f - (curMouseY / (float)screenH) * 2.0f;
 
             bool isUiModalActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen();
 
@@ -1358,8 +1505,8 @@ int main() {
         }
 
         // Check manual input to cancel auto-approach
-        bool isMovingManual = sf::Keyboard::isKeyPressed(sf::Keyboard::W) || sf::Keyboard::isKeyPressed(sf::Keyboard::A) ||
-                              sf::Keyboard::isKeyPressed(sf::Keyboard::S) || sf::Keyboard::isKeyPressed(sf::Keyboard::D);
+        bool isMovingManual = PlatformInput::IsKeyPressed(PlatformInput::W) || PlatformInput::IsKeyPressed(PlatformInput::A) ||
+                              PlatformInput::IsKeyPressed(PlatformInput::S) || PlatformInput::IsKeyPressed(PlatformInput::D);
         targeting.Update(deltaTime, player.Position, isMovingManual);
 
         // Handle Auto-Approach Movement toward selected target
@@ -2140,7 +2287,7 @@ int main() {
         // PASS 2: UPSCALE TO SCREEN
         // =================================================================================
         glBindFramebuffer(GL_FRAMEBUFFER, 0); // Back to default
-        glViewport(0, 0, desktop.width, desktop.height); 
+        glViewport(0, 0, screenW, screenH); 
         
         // Debug: Clear to BLACK to distinguish "Quad Failed" (Black) from "FBO Empty" (Sky Blue)
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f); 
@@ -2163,8 +2310,24 @@ int main() {
         glClearColor(skyColor.r, skyColor.g, skyColor.b, skyColor.a);
         glEnable(GL_DEPTH_TEST);
 
+#ifndef __EMSCRIPTEN__
         window.display();
+#else
+        glfwSwapBuffers(window);
+#endif
+    };
+
+#ifdef __EMSCRIPTEN__
+    static std::function<void()> s_EmscriptenMainLoop;
+    s_EmscriptenMainLoop = updateAndRenderFrame;
+    emscripten_set_main_loop([]() {
+        s_EmscriptenMainLoop();
+    }, 0, 1);
+#else
+    while (window.isOpen()) {
+        updateAndRenderFrame();
     }
+#endif
 
     return 0;
 }
