@@ -44,11 +44,14 @@ jobs:
       - name: Prepare Web Distribution
         run: |
           mkdir -p dist_web
-          find build_web -name "index.html" -exec cp {} dist_web/ \;
-          find build_web -name "index.js" -exec cp {} dist_web/ \;
-          find build_web -name "index.wasm" -exec cp {} dist_web/ \;
-          find build_web -name "index.data" -exec cp {} dist_web/ \; || true
+          if [ -f "build_web/bin/index.html" ]; then
+            cp -v build_web/bin/index.* dist_web/
+          elif [ -f "build_web/index.html" ]; then
+            cp -v build_web/index.* dist_web/
+          fi
+          echo "=== Contenido desplegado ==="
           ls -la dist_web/
+          head -n 15 dist_web/index.html
 
       - name: Upload Web Build Zip (for itch.io / Netlify)
         uses: actions/upload-artifact@v4
