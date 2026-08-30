@@ -37,6 +37,9 @@ public:
     // Collision support
     void GetTreesInRange(glm::vec3 pos, float range, std::vector<glm::vec4>& outTrees);
 
+    // Dynamic Terrain Destruction & Construction (Smooth Deformation)
+    bool ModifyTerrain(float worldX, float worldZ, float radius, float deltaHeight, class ParticleSystem* particles = nullptr);
+
     // Batched Rendering Support
     struct RenderBatch {
         int bx, bz;

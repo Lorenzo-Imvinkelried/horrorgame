@@ -1,4 +1,6 @@
 #include "ChunkManager.h"
+#include "TerrainDeformation.h"
+#include "ParticleSystem.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <algorithm>
@@ -21,6 +23,61 @@ ChunkManager::~ChunkManager() {
     for (auto& pair : m_batches) {
         pair.second.Cleanup();
     }
+}
+
+static inline int GetBatchCoord(int c) {
+    if (c >= 0) return c / Config::World::RenderBatchSize;
+    return (c - Config::World::RenderBatchSize + 1) / Config::World::RenderBatchSize;
+}
+
+bool ChunkManager::ModifyTerrain(float worldX, float worldZ, float radius, float deltaHeight, ParticleSystem* particles) {
+    bool modified = TerrainDeformation::Deform(worldX, worldZ, radius, deltaHeight);
+    if (!modified) return false;
+
+    float chunkWorldSize = (float)m_chunkSize * m_scale;
+    int minCX = (int)std::floor((worldX - radius - m_scale) / chunkWorldSize);
+    int maxCX = (int)std::floor((worldX + radius + m_scale) / chunkWorldSize);
+    int minCZ = (int)std::floor((worldZ - radius - m_scale) / chunkWorldSize);
+    int maxCZ = (int)std::floor((worldZ + radius + m_scale) / chunkWorldSize);
+
+    // Mark affected batches dirty and invalidate cached bounds
+    for (int cz = minCZ; cz <= maxCZ; ++cz) {
+        for (int cx = minCX; cx <= maxCX; ++cx) {
+            MarkBatchDirty(cx, cz);
+            int bx = GetBatchCoord(cx);
+            int bz = GetBatchCoord(cz);
+            m_batchBoundsCache.erase({bx, bz});
+        }
+    }
+
+    // Rebuild immediately all dirty batches
+    for (auto& pair : m_batches) {
+        if (pair.second.dirty) {
+            RebuildBatch(pair.second);
+        }
+    }
+
+    // Spawn earth / rock debris particles
+    if (particles != nullptr) {
+        float groundY = WorldGenerator::GetHeight(worldX, worldZ);
+        int pCount = std::min(35, (int)(radius * 12.0f));
+        for (int i = 0; i < pCount; ++i) {
+            float pAngle = ((float)rand() / (float)RAND_MAX) * 6.28318f;
+            float pDist = ((float)rand() / (float)RAND_MAX) * radius * 0.75f;
+            glm::vec3 pPos = glm::vec3(worldX + cos(pAngle) * pDist, groundY + 0.35f, worldZ + sin(pAngle) * pDist);
+            
+            float upSpeed = (deltaHeight > 0.0f) ? (3.5f + (rand() % 100 / 40.0f)) : (2.2f + (rand() % 100 / 50.0f));
+            glm::vec3 pVel = glm::vec3((rand() % 100 / 50.0f - 1.0f) * 2.6f, upSpeed, (rand() % 100 / 50.0f - 1.0f) * 2.6f);
+            
+            glm::vec4 pCol = (deltaHeight < 0.0f) 
+                ? glm::vec4(0.24f + (rand() % 20 / 200.0f), 0.17f + (rand() % 20 / 200.0f), 0.11f, 1.0f) // Moist dark dirt
+                : glm::vec4(0.35f + (rand() % 20 / 200.0f), 0.30f + (rand() % 20 / 200.0f), 0.22f, 1.0f); // Earthen mound
+            
+            particles->SpawnParticle(pPos, pVel, pCol, 0.14f, 0.8f, -9.8f);
+        }
+    }
+
+    return true;
 }
 
 void ChunkManager::LoadWorld() {
@@ -166,11 +223,6 @@ void ChunkManager::UpdateVisibility(const glm::mat4& viewProj) {
     std::sort(m_visibleBatches.begin(), m_visibleBatches.end(), [](RenderBatch* a, RenderBatch* b) {
         return a->distFromCam < b->distFromCam;
     });
-}
-
-int GetBatchCoord(int c) {
-    if (c >= 0) return c / Config::World::RenderBatchSize;
-    return (c - Config::World::RenderBatchSize + 1) / Config::World::RenderBatchSize;
 }
 
 void ChunkManager::MarkBatchDirty(int cx, int cz) {

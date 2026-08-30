@@ -1,4 +1,5 @@
 #include "WorldGenerator.h"
+#include "TerrainDeformation.h"
 #include <cstdlib>
 #include <cmath>
 #include "Config.h"
@@ -41,33 +42,33 @@ float WorldGenerator::GetMountainFactor(float x, float z) {
     return glm::smoothstep(0.60f, 0.82f, mNoise);
 }
 
-float WorldGenerator::GetHeight(float x, float z) {
+float WorldGenerator::GetBaseHeight(float x, float z) {
     // Apply Random Offset for Per-Run Variety
-    x += OffsetX;
-    z += OffsetZ;
+    float noiseX = x + OffsetX;
+    float noiseZ = z + OffsetZ;
 
     float y = 0.0f;
     
     // Octave 1: Base Hills (Valleys & Foothills)
-    y += SmoothNoise(x * Config::Terrain::BaseFreqX, z * Config::Terrain::BaseFreqZ) * Config::Terrain::BaseAmplitude;
+    y += SmoothNoise(noiseX * Config::Terrain::BaseFreqX, noiseZ * Config::Terrain::BaseFreqZ) * Config::Terrain::BaseAmplitude;
     
     // Octave 2: Detail (Roughness)
-    y += SmoothNoise(x * Config::Terrain::DetailFreqX, z * Config::Terrain::DetailFreqZ) * Config::Terrain::DetailAmplitude;
+    y += SmoothNoise(noiseX * Config::Terrain::DetailFreqX, noiseZ * Config::Terrain::DetailFreqZ) * Config::Terrain::DetailAmplitude;
     
     // --- PROCEDURAL MOUNTAIN RANGES (Ridged Multifractal) ---
-    float mFactor = GetMountainFactor(x, z);
+    float mFactor = GetMountainFactor(noiseX, noiseZ);
     if (mFactor > 0.001f) {
         // Octave 1: Main sharp ridges & knife-edge peaks
-        float r1 = SmoothNoise(x * 0.012f + 50.0f, z * 0.012f + 50.0f);
+        float r1 = SmoothNoise(noiseX * 0.012f + 50.0f, noiseZ * 0.012f + 50.0f);
         float ridge1 = 1.0f - std::abs(2.0f * r1 - 1.0f);
         ridge1 = ridge1 * ridge1; // Sharpen peaks
 
         // Octave 2: Secondary jagged crags
-        float r2 = SmoothNoise(x * 0.035f, z * 0.035f);
+        float r2 = SmoothNoise(noiseX * 0.035f, noiseZ * 0.035f);
         float ridge2 = 1.0f - std::abs(2.0f * r2 - 1.0f);
 
         // Octave 3: High frequency rock ruggedness
-        float r3 = SmoothNoise(x * 0.12f, z * 0.12f);
+        float r3 = SmoothNoise(noiseX * 0.12f, noiseZ * 0.12f);
 
         float mountainElevation = (ridge1 * 44.0f) + (ridge2 * 14.0f) + (r3 * 3.5f);
         y += mountainElevation * mFactor;
@@ -75,7 +76,7 @@ float WorldGenerator::GetHeight(float x, float z) {
 
     // --- LAGOON CARVING (Only in Lowland Valleys) ---
     if (mFactor < 0.35f) {
-        float moisture = GetMoisture(x, z);
+        float moisture = GetMoisture(noiseX, noiseZ);
         if (moisture > (1.0f - Config::Water::Chance)) {
             float factor = (moisture - (1.0f - Config::Water::Chance)) / Config::Water::Chance;
             factor = factor * factor * (3.0f - 2.0f * factor);
@@ -85,6 +86,10 @@ float WorldGenerator::GetHeight(float x, float z) {
     }
 
     return y;
+}
+
+float WorldGenerator::GetHeight(float x, float z) {
+    return GetBaseHeight(x, z) + TerrainDeformation::GetDeformation(x, z);
 }
 
 float WorldGenerator::GetVisualHeight(float x, float z) {
@@ -175,6 +180,14 @@ glm::vec3 WorldGenerator::GetTerrainColor(float x, float z, float y, const glm::
          float tone = n1; 
          baseColor = glm::mix(glm::vec3(0.10f, 0.24f, 0.10f), glm::vec3(0.14f, 0.32f, 0.13f), tone);
          baseColor += glm::vec3(0.03f, 0.05f, 0.02f) * (n3 - 0.5f);
+    }
+
+    // Dynamic excavation / terraforming tint
+    float deform = TerrainDeformation::GetDeformation(x, z);
+    if (std::abs(deform) > 0.15f) {
+        float deformFactor = glm::clamp(std::abs(deform) / 2.5f, 0.0f, 1.0f);
+        glm::vec3 excavatedSoil = (deform < 0.0f) ? glm::vec3(0.24f, 0.18f, 0.12f) : glm::vec3(0.33f, 0.28f, 0.20f);
+        baseColor = glm::mix(baseColor, excavatedSoil, deformFactor * 0.85f);
     }
 
     // Height darkening for valley depth

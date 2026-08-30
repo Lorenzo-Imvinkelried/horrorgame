@@ -352,8 +352,8 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     if (expPct > 0.002f) {
         drawColoredQuad(uiProgram, uiVAO, uiVBO, -0.698f, -0.980f, 1.646f * expPct, 0.020f, glm::vec3(0.06f, 0.14f, 0.48f));
     }
-    std::string taskbarText = "PROGRESO_EXP.SYS";
-    DrawString(taskbarText, -0.97f, -0.980f, 0.024f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
+    std::string taskbarText = "PROGRESO_EXP.SYS | [G] CAVAR  [H] ELEVAR  [I] INV";
+    DrawString(taskbarText, -0.97f, -0.980f, 0.022f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
 
     // =========================================================================
     // 3. TARGET FRAME (Top-Center in NDC)

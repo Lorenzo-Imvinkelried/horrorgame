@@ -1554,6 +1554,38 @@ int main() {
             }
         }
 
+        // --- DYNAMIC TERRAIN DEFORMATION (DESTRUCTION & CONSTRUCTION) ---
+        bool isDigging = PlatformInput::IsKeyPressed(PlatformInput::G) || PlatformInput::IsKeyPressed(PlatformInput::Num3);
+        bool isBuilding = PlatformInput::IsKeyPressed(PlatformInput::H) || PlatformInput::IsKeyPressed(PlatformInput::Num4);
+
+        glm::vec3 terraRayOrigin = player.GetCameraPosition();
+        glm::vec3 terraRayDir = player.Front;
+        glm::vec3 terraTarget(0.0f);
+        bool hasTerraTarget = false;
+
+        for (float rDist = 0.5f; rDist < 20.0f; rDist += 0.35f) {
+            glm::vec3 p = terraRayOrigin + terraRayDir * rDist;
+            float groundY = WorldGenerator::GetHeight(p.x, p.z);
+            if (p.y <= groundY + 0.15f) {
+                terraTarget = glm::vec3(p.x, groundY, p.z);
+                hasTerraTarget = true;
+                break;
+            }
+        }
+        if (!hasTerraTarget) {
+            glm::vec3 fwd = player.Front;
+            float tx = player.Position.x + fwd.x * 4.5f;
+            float tz = player.Position.z + fwd.z * 4.5f;
+            terraTarget = glm::vec3(tx, WorldGenerator::GetHeight(tx, tz), tz);
+            hasTerraTarget = true;
+        }
+
+        if (isDigging || isBuilding) {
+            float deformRadius = 3.6f;
+            float deltaH = (isBuilding ? +1.0f : -1.0f) * 3.8f * deltaTime;
+            chunkManager.ModifyTerrain(terraTarget.x, terraTarget.z, deformRadius, deltaH, &particles);
+        }
+
         // 1. Advance Day/Night Cycle Progression & Dynamic Weather / Spells
         spellSystem.Update(deltaTime, player, particles);
         weatherSystem.Update(deltaTime, dayCycleTime, player.Position, glm::vec3(windDir.x, 0, windDir.y), particles);
@@ -2112,6 +2144,24 @@ int main() {
             }
             
             glEnable(GL_DEPTH_TEST); // Restore depth test
+        }
+
+        // Terraforming Reticle & Deform Ring Indicator
+        if (hasTerraTarget && (isDigging || isBuilding || glm::distance(player.Position, terraTarget) < 18.0f)) {
+            glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+            glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+            glUniform1i(glGetUniformLocation(shaderProgram, "u_Texture"), 0);
+            glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_Model"), 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+            glBindTexture(GL_TEXTURE_2D, whiteTexID);
+
+            glm::vec3 ringColor = glm::vec3(0.35f, 0.90f, 0.40f); // Soft green reticle
+            if (isDigging) {
+                ringColor = glm::vec3(0.95f, 0.30f, 0.15f); // Deep orange/red excavation
+            } else if (isBuilding) {
+                ringColor = glm::vec3(0.25f, 0.80f, 1.0f); // Bright blue construction
+            }
+
+            DrawDonut(terraTarget.x, terraTarget.y + 0.08f, terraTarget.z, 3.3f, 3.6f, ringColor, debugVAO, debugVBO);
         }
 
         // 6. DEBUG HITBOXES

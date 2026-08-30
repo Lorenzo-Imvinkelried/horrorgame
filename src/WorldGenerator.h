@@ -61,8 +61,11 @@ public:
     // Helper: Returns mountain factor (0..1) for biome/ridge logic
     static float GetMountainFactor(float x, float z);
 
-    // Calculates SMOOTH height at a given (x, z) for physics/collision
+    // Calculates SMOOTH height at a given (x, z) including dynamic terrain deformation
     static float GetHeight(float x, float z);
+
+    // Calculates untouched procedural base height without deformation
+    static float GetBaseHeight(float x, float z);
 
     // Helper: Returns moisture value (0..1) for biome/lagoon logic
     static float GetMoisture(float x, float z);
