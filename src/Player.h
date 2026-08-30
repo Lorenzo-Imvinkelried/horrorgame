@@ -26,12 +26,18 @@ public:
     void Update(float deltaTime); // Physics update
     void Render(GLuint shaderProgram);
     void RenderFirstPersonSword(GLuint shaderProgram);
+    void RenderFirstPersonTorch(GLuint shaderProgram);
     void RenderDebug(GLuint shaderProgram);
 
     glm::mat4 GetViewMatrix();
     glm::vec3 GetCameraPosition();
     glm::vec3 GetWeaponOffset(); // For rendering the weapon
+    glm::vec3 GetTorchPosition() const;
     void ToggleCameraMode() { IsThirdPerson = !IsThirdPerson; }
+    void ToggleTorch() { HasTorchActive = !HasTorchActive; }
+
+    // Torch State (Off-hand left hand)
+    bool HasTorchActive = true;
 
     // Camera Attributes
     glm::vec3 Position;

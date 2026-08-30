@@ -352,8 +352,8 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     if (expPct > 0.002f) {
         drawColoredQuad(uiProgram, uiVAO, uiVBO, -0.698f, -0.980f, 1.646f * expPct, 0.020f, glm::vec3(0.06f, 0.14f, 0.48f));
     }
-    std::string taskbarText = "PROGRESO_EXP.SYS | [G] CAVAR  [H] ELEVAR  [I] INV";
-    DrawString(taskbarText, -0.97f, -0.980f, 0.022f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
+    std::string taskbarText = "PROGRESO_EXP.SYS | [F] ANTORCHA  [B] CONSTRUIR  [G/H] TIERRA  [I] INV";
+    DrawString(taskbarText, -0.97f, -0.980f, 0.021f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
 
     // =========================================================================
     // 3. TARGET FRAME (Top-Center in NDC)
@@ -729,3 +729,22 @@ void UIRenderer::RenderCursor(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, floa
 
     glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), 1.0f, 1.0f, 1.0f);
 }
+
+void UIRenderer::RenderBuildingHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, int currentType, float currentYaw) {
+    float w = 1.32f, h = 0.16f;
+    float x = -w * 0.5f, y = -0.74f;
+
+    std::string title = "[ MODO CONSTRUCCION Y REFUGIO - ARPG ]";
+    DrawWin98Window(uiProgram, uiVAO, uiVBO, x, y, w, h, title, false);
+
+    std::string typeName = (currentType == 0) ? "[1] PARED (ACTIVA)" : "[1] PARED";
+    std::string roofName = (currentType == 1) ? "[2] TECHO/BOVEDA (ACTIVA)" : "[2] TECHO/BOVEDA";
+    std::string torchName = (currentType == 2) ? "[3] ANTORCHA (ACTIVA)" : "[3] ANTORCHA";
+
+    std::string row1 = typeName + "  " + roofName + "  " + torchName;
+    std::string row2 = "[R] ROTAR (" + std::to_string((int)currentYaw) + " DEG) | [CLICK IZQ] COLOCAR | [B] SALIR";
+
+    DrawString(row1, x + 0.025f, y + 0.062f, 0.023f, glm::vec3(0.12f, 0.12f, 0.18f), uiProgram, uiVAO, uiVBO);
+    DrawString(row2, x + 0.025f, y + 0.020f, 0.021f, glm::vec3(0.15f, 0.45f, 0.15f), uiProgram, uiVAO, uiVBO);
+}
+

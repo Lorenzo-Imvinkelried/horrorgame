@@ -54,6 +54,8 @@ public:
     void RenderInteractionPrompt(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, 
                                  const std::string& prompt);
 
+    void RenderBuildingHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, int currentType, float currentYaw);
+
     void RenderStunWarning(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float stunTimer);
 
     // Mouse Click Handlers

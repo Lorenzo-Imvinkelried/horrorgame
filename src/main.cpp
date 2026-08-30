@@ -48,6 +48,7 @@
 #include "world/SkinningSystem.h"
 #include "world/WeatherSystem.h"
 #include "world/StructureSystem.h"
+#include "world/BuildingSystem.h"
 
 // Shader loader helper
 GLuint LoadShader(const char* vertPath, const char* fragPath) {
@@ -933,14 +934,35 @@ int main() {
     SkinningSystem skinningSystem;
     WeatherSystem weatherSystem;
     StructureSystem structureSystem;
+    BuildingSystem buildingSystem;
+    buildingSystem.Init();
+
+    bool isBuildMode = false;
+    BuildingType currentBuildType = BuildingType::WALL;
+    float currentBuildYaw = 0.0f;
 
     auto handleKeyAction = [&](int key) {
 #ifndef __EMSCRIPTEN__
         if (key == sf::Keyboard::Escape) window.close();
-        if (key == sf::Keyboard::R) weapon.Reload();
+        if (key == sf::Keyboard::R) {
+            if (isBuildMode) {
+                currentBuildYaw = fmod(currentBuildYaw + 90.0f, 360.0f);
+            } else {
+                spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
+            }
+        }
         if (key == sf::Keyboard::F) {
-            gameCfg.flashlightEnabled = !gameCfg.flashlightEnabled;
-            std::cout << "F Key Pressed! Flashlight: " << (gameCfg.flashlightEnabled ? "ON" : "OFF") << std::endl;
+            player.ToggleTorch();
+            std::cout << "[Antorcha] Estado: " << (player.HasTorchActive ? "ENCENDIDA (Mano Izquierda)" : "GUARDADA") << std::endl;
+        }
+        if (key == sf::Keyboard::B) {
+            isBuildMode = !isBuildMode;
+            std::cout << "[Construcción] Modo: " << (isBuildMode ? "ACTIVADO" : "DESACTIVADO") << std::endl;
+        }
+        if (isBuildMode) {
+            if (key == sf::Keyboard::Num1 || key == sf::Keyboard::Numpad1) currentBuildType = BuildingType::WALL;
+            if (key == sf::Keyboard::Num2 || key == sf::Keyboard::Numpad2) currentBuildType = BuildingType::ROOF;
+            if (key == sf::Keyboard::Num3 || key == sf::Keyboard::Numpad3) currentBuildType = BuildingType::TORCH;
         }
         if (key == sf::Keyboard::F3) debugCam = !debugCam;
         if (debugCam && key == sf::Keyboard::G) showSpawnArea = !showSpawnArea;
@@ -963,7 +985,7 @@ int main() {
         if (key == sf::Keyboard::C) {
             isCharacterPanelOpen = !isCharacterPanelOpen;
         }
-        if (isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
+        if (!isBuildMode && isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
             if (key == sf::Keyboard::Num1 || key == sf::Keyboard::Numpad1) {
                 if (player.Stats.AllocateStrength()) {
                     for (int i = 0; i < 18; ++i) {
@@ -1000,10 +1022,7 @@ int main() {
         if (key == sf::Keyboard::Q) {
             spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
         }
-        if (key == sf::Keyboard::R) {
-            spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
-        }
-        if (key == sf::Keyboard::G) {
+        if (key == sf::Keyboard::G && !isBuildMode) {
             skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
         }
         if (key == sf::Keyboard::Return || key == sf::Keyboard::Space) {
@@ -1019,10 +1038,25 @@ int main() {
             }
         }
 #else
-        if (key == GLFW_KEY_R) weapon.Reload();
+        if (key == GLFW_KEY_R) {
+            if (isBuildMode) {
+                currentBuildYaw = fmod(currentBuildYaw + 90.0f, 360.0f);
+            } else {
+                spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
+            }
+        }
         if (key == GLFW_KEY_F) {
-            gameCfg.flashlightEnabled = !gameCfg.flashlightEnabled;
-            std::cout << "F Key Pressed! Flashlight: " << (gameCfg.flashlightEnabled ? "ON" : "OFF") << std::endl;
+            player.ToggleTorch();
+            std::cout << "[Antorcha] Estado: " << (player.HasTorchActive ? "ENCENDIDA (Mano Izquierda)" : "GUARDADA") << std::endl;
+        }
+        if (key == GLFW_KEY_B) {
+            isBuildMode = !isBuildMode;
+            std::cout << "[Construcción] Modo: " << (isBuildMode ? "ACTIVADO" : "DESACTIVADO") << std::endl;
+        }
+        if (isBuildMode) {
+            if (key == GLFW_KEY_1 || key == GLFW_KEY_KP_1) currentBuildType = BuildingType::WALL;
+            if (key == GLFW_KEY_2 || key == GLFW_KEY_KP_2) currentBuildType = BuildingType::ROOF;
+            if (key == GLFW_KEY_3 || key == GLFW_KEY_KP_3) currentBuildType = BuildingType::TORCH;
         }
         if (key == GLFW_KEY_F3) debugCam = !debugCam;
         if (debugCam && key == GLFW_KEY_G) showSpawnArea = !showSpawnArea;
@@ -1045,7 +1079,7 @@ int main() {
         if (key == GLFW_KEY_C) {
             isCharacterPanelOpen = !isCharacterPanelOpen;
         }
-        if (isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
+        if (!isBuildMode && isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
             if (key == GLFW_KEY_1 || key == GLFW_KEY_KP_1) {
                 if (player.Stats.AllocateStrength()) {
                     for (int i = 0; i < 18; ++i) {
@@ -1082,10 +1116,7 @@ int main() {
         if (key == GLFW_KEY_Q) {
             spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
         }
-        if (key == GLFW_KEY_R) {
-            spellSystem.CastArcaneBeam(player, targeting, projectiles, particles);
-        }
-        if (key == GLFW_KEY_G) {
+        if (key == GLFW_KEY_G && !isBuildMode) {
             skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
         }
         if (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE) {
@@ -1285,11 +1316,27 @@ int main() {
         float mouseNdcX = -999.0f;
         float mouseNdcY = -999.0f;
 
+        // Compute Building Target Position in World
+        glm::vec3 buildFwd = player.Front;
+        buildFwd.y = 0.0f;
+        if (glm::length(buildFwd) > 0.001f) buildFwd = glm::normalize(buildFwd);
+        float buildDist = 4.2f;
+        glm::vec3 buildPos(0.0f);
+        buildPos.x = std::round((player.Position.x + buildFwd.x * buildDist) / 0.5f) * 0.5f;
+        buildPos.z = std::round((player.Position.z + buildFwd.z * buildDist) / 0.5f) * 0.5f;
+        float bGroundY = WorldGenerator::GetHeight(buildPos.x, buildPos.z);
+        buildPos.y = bGroundY;
+        if (currentBuildType == BuildingType::ROOF) {
+            buildPos.y = bGroundY + 2.8f;
+        }
+
 #ifndef __EMSCRIPTEN__
         bool hasFocus = window.hasFocus();
+        int screenW = 1280;
+        int screenH = 720;
         sf::Vector2u winSize = window.getSize();
-        int screenW = (int)winSize.x;
-        int screenH = (int)winSize.y;
+        screenW = (int)winSize.x;
+        screenH = (int)winSize.y;
         sf::Vector2i mousePos = sf::Mouse::getPosition(window);
         float curMouseX = (float)mousePos.x;
         float curMouseY = (float)mousePos.y;
@@ -1372,9 +1419,16 @@ int main() {
                 }
             }
 
-            // Left Click: UI Button Clicks, Target Selection & Sword Attack
+            // Left Click: UI Button Clicks, Target Selection & Sword Attack / Build
             static bool leftWasPressed = false;
             if (leftIsPressed && !leftWasPressed) {
+                // 0. Build Mode Placement
+                if (isBuildMode) {
+                    buildingSystem.PlacePiece(currentBuildType, buildPos, currentBuildYaw, &particles);
+                    leftWasPressed = leftIsPressed;
+                    goto skipWorldTargeting;
+                }
+
                 // 1. Check UI Modals First
                 if (inventory.IsOpen()) {
                     bool closeReq = false;
@@ -1585,6 +1639,11 @@ int main() {
             float deltaH = (isBuilding ? +1.0f : -1.0f) * 3.8f * deltaTime;
             chunkManager.ModifyTerrain(terraTarget.x, terraTarget.z, deformRadius, deltaH, &particles);
         }
+
+        // Building System Update (Torch particles) & Solid Collision
+        buildingSystem.Update(deltaTime, player.Position, particles);
+        glm::vec3 bPush(0.0f);
+        buildingSystem.CheckCollision(player.Position, player.PlayerRadius, player.PlayerHeight, bPush);
 
         // 1. Advance Day/Night Cycle Progression & Dynamic Weather / Spells
         spellSystem.Update(deltaTime, player, particles);
@@ -1936,10 +1995,19 @@ int main() {
         glUniform1f(glGetUniformLocation(shaderProgram, "u_FogStart"), Config::World::FogDistStart);
         glUniform1f(glGetUniformLocation(shaderProgram, "u_FogEnd"), Config::World::FogDistEnd);
         
-        // DAY/NIGHT & FLASHLIGHT CONFIGURATION
+        // DAY/NIGHT & TORCH FIRE LIGHTING
         glUniform1i(glGetUniformLocation(shaderProgram, "u_IsNight"), isNightTime ? 1 : 0);
         glUniform1f(glGetUniformLocation(shaderProgram, "u_Darkness"), nightFactor * 0.95f);
-        glUniform1i(glGetUniformLocation(shaderProgram, "u_FlashlightEnabled"), nightFactor > 0.35f ? 1 : 0);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_TorchActive"), player.HasTorchActive ? 1 : 0);
+        glm::vec3 playerTorchPos = player.GetTorchPosition();
+        glUniform3f(glGetUniformLocation(shaderProgram, "u_TorchPos"), playerTorchPos.x, playerTorchPos.y, playerTorchPos.z);
+
+        std::vector<glm::vec4> worldTorches = buildingSystem.GetClosestTorches(player.Position, 8);
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_NumWorldTorches"), (int)worldTorches.size());
+        if (!worldTorches.empty()) {
+            glUniform4fv(glGetUniformLocation(shaderProgram, "u_WorldTorches"), (GLsizei)worldTorches.size(), glm::value_ptr(worldTorches[0]));
+        }
+
         glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerPos"), player.Position.x, player.Position.y, player.Position.z);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_PlayerFront"), player.Front.x, player.Front.y, player.Front.z);
         glUniform3f(glGetUniformLocation(shaderProgram, "u_FogColor"), fogCol.r, fogCol.g, fogCol.b);
@@ -2091,6 +2159,15 @@ int main() {
 
         // Render Procedural World Structures (Ancient Ruin Pillars, Loot Chests, Sacrifice Altars)
         structureSystem.Render(shaderProgram, activeCamPos);
+
+        // Render Placed Modular Buildings (Walls, Cave Ceilings, Placed Torches)
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        buildingSystem.Render(shaderProgram, activeCamPos);
+
+        // Render Building Ghost Preview (If in Build Mode)
+        if (isBuildMode) {
+            buildingSystem.RenderGhost(shaderProgram, currentBuildType, buildPos, currentBuildYaw, true, whiteTexID);
+        }
         
         // --- SAFETY RESET (Fix for State Leakage) ---
         glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
@@ -2255,9 +2332,12 @@ int main() {
             glm::mat4 viewIdentity = glm::mat4(1.0f);
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(viewIdentity));
             
-            // Render 1st Person Sword
+            // Render 1st Person Sword (Right Hand)
             glBindTexture(GL_TEXTURE_2D, textureID);
             player.RenderFirstPersonSword(shaderProgram);
+
+            // Render 1st Person Torch (Left Hand)
+            player.RenderFirstPersonTorch(shaderProgram);
 
             // (Shotgun deactivated for ARPG mode):
             // weapon.Render(shaderProgram, isGameOver, gameOverTimer);
@@ -2317,8 +2397,13 @@ int main() {
         std::string prompt = structureSystem.GetPrompt(player.Position);
         if (prompt.empty()) prompt = skinningSystem.GetPrompt(player.Position, passiveMobs);
         if (prompt.empty()) prompt = horrorProps.GetNearbyPrompt(player.Position);
-        if (!prompt.empty() && !loreModal.active) {
+        if (!prompt.empty() && !loreModal.active && !isBuildMode) {
             uiRenderer.RenderInteractionPrompt(uiProgram, uiVAO, uiVBO, prompt);
+        }
+
+        // Building Mode Interface
+        if (isBuildMode) {
+            uiRenderer.RenderBuildingHUD(uiProgram, uiVAO, uiVBO, (int)currentBuildType, currentBuildYaw);
         }
 
         // Spell Hotbar HUD ([Q], [E], [R])

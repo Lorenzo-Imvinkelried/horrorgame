@@ -312,15 +312,15 @@ void Player::updateModelMesh() {
     R_Arm = glm::rotate(R_Arm, rightArmRotY, glm::vec3(0, 1, 0));
     R_Arm = glm::rotate(R_Arm, rightArmRotX, glm::vec3(1, 0, 0));
 
-    // Build rotation matrix for left arm
-    float leftArmRotX = m_isBlocking ? -0.30f : -armSwing;
-    float leftArmRotZ = m_isBlocking ? 0.40f : 0.0f;
+    // Build rotation matrix for left arm (Holds torch upright when active)
+    float leftArmRotX = HasTorchActive ? 0.72f : (m_isBlocking ? -0.30f : -armSwing);
+    float leftArmRotZ = HasTorchActive ? -0.15f : (m_isBlocking ? 0.40f : 0.0f);
     glm::mat4 L_Arm = glm::mat4(1.0f);
     L_Arm = glm::rotate(L_Arm, leftArmRotZ, glm::vec3(0, 0, 1));
     L_Arm = glm::rotate(L_Arm, leftArmRotX, glm::vec3(1, 0, 0));
 
     std::vector<TransformedBox> transformedBoxes;
-    transformedBoxes.reserve(m_baseBoxes.size());
+    transformedBoxes.reserve(m_baseBoxes.size() + 4);
 
     for (const auto& box : m_baseBoxes) {
         // Base Box Model Matrix
@@ -365,6 +365,20 @@ void Player::updateModelMesh() {
         else {
             transformedBoxes.push_back({M, box.Color});
         }
+    }
+
+    // Attach 3D Torch Model to Left Hand in 3rd Person
+    if (HasTorchActive) {
+        glm::mat4 torchBase = glm::translate(glm::mat4(1.0f), shoulderPivotL) * L_Arm * glm::translate(glm::mat4(1.0f), -shoulderPivotL);
+        // Handle
+        glm::mat4 handleM = torchBase * glm::translate(glm::mat4(1.0f), glm::vec3(-0.28f, 0.95f, 0.28f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.08f, 0.55f, 0.08f));
+        transformedBoxes.push_back({handleM, glm::vec3(0.28f, 0.18f, 0.10f)});
+        // Ring
+        glm::mat4 ringM = torchBase * glm::translate(glm::mat4(1.0f), glm::vec3(-0.28f, 1.20f, 0.28f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.14f, 0.08f, 0.14f));
+        transformedBoxes.push_back({ringM, glm::vec3(0.22f, 0.22f, 0.24f)});
+        // Flame
+        glm::mat4 flameM = torchBase * glm::translate(glm::mat4(1.0f), glm::vec3(-0.28f, 1.30f, 0.28f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.12f, 0.16f, 0.12f));
+        transformedBoxes.push_back({flameM, glm::vec3(0.98f, 0.70f, 0.15f)});
     }
 
     std::vector<float> rawVertices;
@@ -472,6 +486,111 @@ void Player::RenderFirstPersonSword(GLuint shaderProgram) {
     glBindVertexArray(fpVAO);
     glDrawArrays(GL_TRIANGLES, 0, (GLsizei)fpVertexCount);
     glBindVertexArray(0);
+}
+
+void Player::RenderFirstPersonTorch(GLuint shaderProgram) {
+    if (!HasTorchActive) return;
+
+    static GLuint torchFpVAO = 0, torchFpVBO = 0;
+    static size_t torchFpVertexCount = 0;
+
+    if (torchFpVAO == 0) {
+        std::vector<BoxDef> torchBoxes;
+        
+        // Left arm / sleeve
+        BoxDef armL;
+        armL.Name = "FP_ARM_L";
+        armL.Pos = glm::vec3(-0.02f, -0.32f, 0.05f);
+        armL.Scale = glm::vec3(0.14f, 0.42f, 0.14f);
+        armL.Color = glm::vec3(0.55f, 0.40f, 0.28f);
+        torchBoxes.push_back(armL);
+
+        // Left hand
+        BoxDef handL;
+        handL.Name = "FP_HAND_L";
+        handL.Pos = glm::vec3(0.0f, -0.05f, 0.08f);
+        handL.Scale = glm::vec3(0.12f, 0.14f, 0.12f);
+        handL.Color = glm::vec3(0.68f, 0.52f, 0.40f);
+        torchBoxes.push_back(handL);
+
+        // Torch Handle
+        BoxDef torchHandle;
+        torchHandle.Name = "FP_TORCH_HANDLE";
+        torchHandle.Pos = glm::vec3(0.0f, 0.12f, 0.08f);
+        torchHandle.Scale = glm::vec3(0.08f, 0.65f, 0.08f);
+        torchHandle.Color = glm::vec3(0.28f, 0.18f, 0.10f);
+        torchBoxes.push_back(torchHandle);
+
+        // Iron Ring
+        BoxDef ironRing;
+        ironRing.Name = "FP_TORCH_RING";
+        ironRing.Pos = glm::vec3(0.0f, 0.38f, 0.08f);
+        ironRing.Scale = glm::vec3(0.15f, 0.09f, 0.15f);
+        ironRing.Color = glm::vec3(0.22f, 0.22f, 0.24f);
+        torchBoxes.push_back(ironRing);
+
+        // Flame Core
+        BoxDef flameCore;
+        flameCore.Name = "FP_TORCH_FLAME";
+        flameCore.Pos = glm::vec3(0.0f, 0.48f, 0.08f);
+        flameCore.Scale = glm::vec3(0.12f, 0.18f, 0.12f);
+        flameCore.Color = glm::vec3(0.98f, 0.70f, 0.15f);
+        torchBoxes.push_back(flameCore);
+
+        std::vector<float> rawVertices;
+        ModelLoader::GenerateMesh(torchBoxes, rawVertices);
+        torchFpVertexCount = rawVertices.size() / 11;
+
+        glGenVertexArrays(1, &torchFpVAO);
+        glGenBuffers(1, &torchFpVBO);
+        glBindVertexArray(torchFpVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, torchFpVBO);
+        glBufferData(GL_ARRAY_BUFFER, rawVertices.size() * sizeof(float), rawVertices.data(), GL_STATIC_DRAW);
+
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+        glEnableVertexAttribArray(3);
+        glBindVertexArray(0);
+    }
+
+    GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
+    glm::mat4 model = glm::mat4(1.0f);
+
+    // Position torch in lower-left of screen
+    glm::vec3 viewPos(-0.26f, -0.26f, 0.44f);
+    viewPos.x -= WeaponSwayPos.x * 0.7f;
+    viewPos.y += WeaponSwayPos.y * 0.7f;
+    if (IsGrounded) {
+        if (HeadBobTimer > 0.001f) viewPos.y += sin(HeadBobTimer + 1.57f) * 0.018f;
+        else viewPos.y += sin(BreathTimer + 1.57f) * 0.008f;
+    }
+    model = glm::translate(model, viewPos);
+    model = glm::rotate(model, glm::radians(8.0f), glm::vec3(0, 0, 1));
+    model = glm::rotate(model, glm::radians(-12.0f), glm::vec3(1, 0, 0));
+
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
+
+    glBindVertexArray(torchFpVAO);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)torchFpVertexCount);
+    glBindVertexArray(0);
+}
+
+glm::vec3 Player::GetTorchPosition() const {
+    if (!IsThirdPerson) {
+        return Position + glm::vec3(0.0f, PlayerHeight * 0.85f, 0.0f) + (-Right * 0.35f) + (Front * 0.45f);
+    }
+    float rad = glm::radians(-ModelYaw);
+    glm::vec3 leftOffset = glm::vec3(-cos(rad) * 0.45f - sin(rad) * 0.25f, 1.35f, -sin(rad) * 0.45f + cos(rad) * 0.25f);
+    return Position + leftOffset;
 }
 
 void Player::ProcessMouseMovement(float xoffset, float yoffset) {

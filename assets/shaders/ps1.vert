@@ -144,26 +144,34 @@ void main()
         float diff = max(dot(aNormal, lightDir), 0.0);
         vec3 light = vec3(ambientStrength + diff * diffFactor);
         
-        // Add Flashlight spotlight effect at night
-        if (u_IsNight && u_FlashlightEnabled) {
-            vec3 flashPos = u_PlayerPos + vec3(0.0, 1.2, 0.0); // flash source below eye line
-            vec3 toVertex = worldPos - flashPos;
-            float dist = length(toVertex);
-            
-            if (dist < 40.0) {
-                vec3 lightVec = normalize(toVertex);
-                float spotDot = dot(lightVec, u_PlayerFront);
-                
-                // Spotlight cone: active if spotDot > 0.84 (approx 30 deg half-angle)
-                if (spotDot > 0.84) {
-                    float attenuation = clamp(1.0 - (dist / 40.0), 0.0, 1.0);
-                    float spotIntensity = smoothstep(0.84, 0.90, spotDot);
-                    float flashlightPower = spotIntensity * attenuation * 0.95;
-                    
-                    // Diffuse lighting for flashlight
-                    float flashDiff = max(dot(aNormal, -lightVec), 0.0);
-                    light += vec3(flashlightPower * (0.3 + flashDiff * 0.7));
-                }
+        // --- TORCH FIRE LIGHTING (Warm Amber Glow & Flicker) ---
+        vec3 fireColor = vec3(1.0, 0.74, 0.38); // Warm fire amber
+        float flameFlicker = 0.88 + 0.12 * sin(u_Time * 14.0 + sin(u_Time * 32.0));
+
+        // 1. Player Hand Torch (Omnidirectional Point Light)
+        if (u_TorchActive) {
+            vec3 toTorch = u_TorchPos - worldPos;
+            float dist = length(toTorch);
+            if (dist < 24.0) {
+                vec3 lightVec = normalize(toTorch);
+                float att = clamp(1.0 - (dist / 24.0), 0.0, 1.0);
+                att = att * att;
+                float torchDiff = max(dot(aNormal, lightVec), 0.0);
+                light += fireColor * (att * flameFlicker * (0.35 + torchDiff * 0.75));
+            }
+        }
+
+        // 2. Placed World Torches
+        for (int i = 0; i < 8; ++i) {
+            if (i >= u_NumWorldTorches) break;
+            vec3 toT = u_WorldTorches[i].xyz - worldPos;
+            float dist = length(toT);
+            if (dist < 20.0) {
+                vec3 lightVec = normalize(toT);
+                float att = clamp(1.0 - (dist / 20.0), 0.0, 1.0);
+                att = att * att;
+                float tDiff = max(dot(aNormal, lightVec), lightVec.y > 0.0 ? lightVec.y : 0.0);
+                light += fireColor * (att * flameFlicker * u_WorldTorches[i].w * (0.32 + tDiff * 0.72));
             }
         }
         
