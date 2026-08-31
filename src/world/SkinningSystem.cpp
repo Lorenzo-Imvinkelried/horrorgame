@@ -2,6 +2,7 @@
 #include "PassiveMob.h"
 #include "inventory/InventorySystem.h"
 #include "inventory/LootManager.h"
+#include "world/ItemDropSystem.h"
 #include "combat/DamageNumberSystem.h"
 #include "ParticleSystem.h"
 #include "ScentSystem.h"
@@ -26,6 +27,7 @@ std::string SkinningSystem::GetPrompt(glm::vec3 playerPos, const std::vector<std
 bool SkinningSystem::TrySkin(glm::vec3 playerPos, 
                              std::vector<std::unique_ptr<PassiveMob>>& passiveMobs,
                              InventorySystem& inventory,
+                             ItemDropSystem& itemDropSystem,
                              Player& player,
                              DamageNumberSystem& damageNumbers,
                              ParticleSystem& particles,
@@ -37,12 +39,10 @@ bool SkinningSystem::TrySkin(glm::vec3 playerPos,
             if (dist < 2.8f) {
                 deer->SetSkinned(true);
 
-                // Add data-driven loot items to inventory
+                // Spawn physical item drop pouches in the world
                 LootTable lootTable = LootManager::GetDeerLoot(deer->GetDeerSize());
                 std::vector<ItemInstance> drops = lootTable.GenerateLoot(1.0f);
-                for (const auto& drop : drops) {
-                    inventory.GetInventory().AddInstance(drop);
-                }
+                itemDropSystem.SpawnDrops(drops, deer->GetPosition() + glm::vec3(0, 0.3f, 0));
 
                 // Experience reward
                 bool lvlUp = false;

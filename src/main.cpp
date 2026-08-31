@@ -1027,7 +1027,7 @@ int main() {
             spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers, &dragon);
         }
         if (key == sf::Keyboard::G && !isBuildMode && !isShovelMode) {
-            skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
+            skinningSystem.TrySkin(player.Position, passiveMobs, inventory, itemDropSystem, player, damageNumbers, particles, scentSystem);
         }
         if (key == sf::Keyboard::Return || key == sf::Keyboard::Space) {
             if (fatalError.active) fatalError.active = false;
@@ -1035,7 +1035,7 @@ int main() {
         if (key == sf::Keyboard::E) {
             if (loreModal.active) {
                 loreModal.active = false;
-            } else if (structureSystem.TryInteract(player.Position, player, inventory, damageNumbers, particles)) {
+            } else if (structureSystem.TryInteract(player.Position, player, inventory, itemDropSystem, damageNumbers, particles)) {
                 // Opened
             } else if (!horrorProps.TryLootNearby(player.Position, &player, damageNumbers, loreModal)) {
                 spellSystem.CastShadowAegis(player, particles);
@@ -1154,7 +1154,7 @@ int main() {
             spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers, &dragon);
         }
         if (key == GLFW_KEY_G && !isBuildMode) {
-            skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
+            skinningSystem.TrySkin(player.Position, passiveMobs, inventory, itemDropSystem, player, damageNumbers, particles, scentSystem);
         }
         if (key == GLFW_KEY_ENTER || key == GLFW_KEY_SPACE) {
             if (fatalError.active) fatalError.active = false;
@@ -1162,7 +1162,7 @@ int main() {
         if (key == GLFW_KEY_E) {
             if (loreModal.active) {
                 loreModal.active = false;
-            } else if (structureSystem.TryInteract(player.Position, player, inventory, damageNumbers, particles)) {
+            } else if (structureSystem.TryInteract(player.Position, player, inventory, itemDropSystem, damageNumbers, particles)) {
                 // Opened
             } else if (!horrorProps.TryLootNearby(player.Position, &player, damageNumbers, loreModal)) {
                 spellSystem.CastShadowAegis(player, particles);
@@ -1496,6 +1496,10 @@ int main() {
             mouseNdcY = 1.0f - (curMouseY / (float)screenH) * 2.0f;
 #endif
 
+            if (inventory.IsOpen()) {
+                inventory.UpdateDrag(mouseNdcX, mouseNdcY, leftIsPressed);
+            }
+
             bool isUiModalActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen();
 
             // In 3rd Person or when UI is open: ONLY rotate camera when Right Click is held down (WoW style)
@@ -1729,7 +1733,7 @@ int main() {
                                 ? glm::vec4(1.0f, 0.45f, 0.1f, 1.0f)
                                 : glm::vec4(0.95f, 0.88f, 0.55f, 1.0f);
 
-                            projectiles.Spawn(spawnPos, aimTarget, 38.0f, shotDmg, arrowCol, true);
+                            projectiles.Spawn(spawnPos, aimTarget, 38.0f, shotDmg, arrowCol, true, ProjectileType::ARROW);
 
                             for (int i = 0; i < 10; ++i) {
                                 glm::vec3 pVel((rand()%100/50.0f - 1.0f)*1.2f, (rand()%100/50.0f + 0.2f)*1.5f, (rand()%100/50.0f - 1.0f)*1.2f);
@@ -1778,7 +1782,7 @@ int main() {
                         ? glm::vec4(1.0f, 0.45f, 0.1f, 1.0f)
                         : glm::vec4(0.95f, 0.88f, 0.55f, 1.0f);
 
-                    projectiles.Spawn(spawnPos, aimTarget, 38.0f, shotDmg, arrowCol, true);
+                    projectiles.Spawn(spawnPos, aimTarget, 38.0f, shotDmg, arrowCol, true, ProjectileType::ARROW);
                 }
             } else {
                 if (player.TryAttack()) {

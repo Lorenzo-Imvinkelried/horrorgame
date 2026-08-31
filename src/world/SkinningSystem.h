@@ -7,6 +7,7 @@
 
 class PassiveMob;
 class InventorySystem;
+class ItemDropSystem;
 class DamageNumberSystem;
 class ParticleSystem;
 class ScentSystem;
@@ -22,6 +23,7 @@ public:
     bool TrySkin(glm::vec3 playerPos, 
                  std::vector<std::unique_ptr<PassiveMob>>& passiveMobs,
                  InventorySystem& inventory,
+                 ItemDropSystem& itemDropSystem,
                  Player& player,
                  DamageNumberSystem& damageNumbers,
                  ParticleSystem& particles,

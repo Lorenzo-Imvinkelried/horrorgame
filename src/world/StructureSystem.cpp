@@ -179,9 +179,12 @@ std::string StructureSystem::GetPrompt(glm::vec3 playerPos) {
     return "";
 }
 
+#include "world/ItemDropSystem.h"
+
 bool StructureSystem::TryInteract(glm::vec3 playerPos, 
                                   Player& player, 
                                   InventorySystem& inventory, 
+                                  ItemDropSystem& itemDropSystem,
                                   DamageNumberSystem& damageNumbers, 
                                   ParticleSystem& particles) 
 {
@@ -193,12 +196,10 @@ bool StructureSystem::TryInteract(glm::vec3 playerPos,
             s.looted = true;
 
             if (s.type == StructureType::ANCIENT_RUINS_CHEST) {
-                // Chest Loot basado en datos y ruleta ponderada
+                // Chest Loot basado en datos y ruleta ponderada - se dropea como bolsas de botín
                 LootTable chestLoot = LootManager::GetChestLoot(1);
                 std::vector<ItemInstance> drops = chestLoot.GenerateLoot(1.0f, 1);
-                for (const auto& drop : drops) {
-                    inventory.GetInventory().AddInstance(drop);
-                }
+                itemDropSystem.SpawnDrops(drops, s.pos + glm::vec3(0.0f, 0.6f, 0.0f));
 
                 bool lvlUp = false;
                 player.Stats.AddExp(80, lvlUp);

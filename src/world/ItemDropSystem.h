@@ -17,6 +17,7 @@ struct WorldItemDrop {
     float rotationYaw = 0.0f;
     float bobTimer = 0.0f;
     float lifetime = 0.0f;
+    float pickupDelay = 0.0f;
     bool isCollected = false;
 };
 
@@ -29,8 +30,8 @@ public:
     ItemDropSystem();
     ~ItemDropSystem();
 
-    void SpawnDrop(const ItemInstance& item, glm::vec3 pos, glm::vec3 initialVelocity = glm::vec3(0.0f));
-    void SpawnDrops(const std::vector<ItemInstance>& items, glm::vec3 pos);
+    void SpawnDrop(const ItemInstance& item, glm::vec3 pos, glm::vec3 initialVelocity = glm::vec3(0.0f), float pickupDelay = 0.0f);
+    void SpawnDrops(const std::vector<ItemInstance>& items, glm::vec3 pos, float pickupDelay = 0.0f);
 
     void Update(float deltaTime, glm::vec3 playerPos, InventorySystem& inventory, 
                 DamageNumberSystem& damageNumbers, ParticleSystem& particles);

@@ -171,7 +171,7 @@ void EnemyMob::updateArcherAI(float deltaTime, glm::vec3 playerPos, ParticleSyst
             glm::vec3 playerChest = playerPos + glm::vec3(0.0f, 1.0f, 0.0f);
 
             int archerDmg = (int)(18 * (1.0f + (m_nightLevel - 1) * 0.25f));
-            projectiles.Spawn(bowPos, playerChest, 24.0f, archerDmg, glm::vec4(0.9f, 0.85f, 0.2f, 1.0f));
+            projectiles.Spawn(bowPos, playerChest, 28.0f, archerDmg, glm::vec4(0.9f, 0.85f, 0.2f, 1.0f), false, ProjectileType::ARROW);
 
             for (int i = 0; i < 8; ++i) {
                 glm::vec3 pVel((rand()%100/50.0f - 1.0f)*1.5f, (rand()%100/50.0f + 0.2f)*2.0f, (rand()%100/50.0f - 1.0f)*1.5f);

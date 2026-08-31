@@ -28,14 +28,16 @@ ItemDropSystem::~ItemDropSystem() {
 void ItemDropSystem::initMesh() {
     // Generar un modelo 3D estilizado de bolsa de botín / gema para los objetos arrojados
     std::vector<BoxDef> boxes;
-    // Base de la bolsa de botín
-    boxes.push_back({ glm::vec3(0.0f, 0.20f, 0.0f), glm::vec3(0.40f, 0.35f, 0.40f), glm::vec3(0.0f), glm::vec3(0.75f, 0.65f, 0.30f), "LootPouch" });
-    // Cuello de amarre
-    boxes.push_back({ glm::vec3(0.0f, 0.42f, 0.0f), glm::vec3(0.24f, 0.12f, 0.24f), glm::vec3(0.0f), glm::vec3(0.35f, 0.20f, 0.10f), "TieRope" });
-    // Cima de la bolsa
-    boxes.push_back({ glm::vec3(0.0f, 0.52f, 0.0f), glm::vec3(0.30f, 0.10f, 0.30f), glm::vec3(0.0f), glm::vec3(0.70f, 0.60f, 0.25f), "PouchTop" });
-    // Gema mágica brillante en el centro
-    boxes.push_back({ glm::vec3(0.0f, 0.24f, 0.21f), glm::vec3(0.12f, 0.12f, 0.06f), glm::vec3(0.0f), glm::vec3(0.20f, 0.85f, 0.95f), "GemLock" });
+    // Base de la bolsa de botín (cuero marrón enriquecido)
+    boxes.push_back({ glm::vec3(0.0f, 0.22f, 0.0f), glm::vec3(0.46f, 0.38f, 0.46f), glm::vec3(0.0f), glm::vec3(0.68f, 0.42f, 0.18f), "LootPouchBase" });
+    // Refuerzo inferior de la bolsa
+    boxes.push_back({ glm::vec3(0.0f, 0.06f, 0.0f), glm::vec3(0.38f, 0.12f, 0.38f), glm::vec3(0.0f), glm::vec3(0.45f, 0.25f, 0.10f), "LootPouchBottom" });
+    // Cuello de amarre con cuerda dorada
+    boxes.push_back({ glm::vec3(0.0f, 0.45f, 0.0f), glm::vec3(0.28f, 0.12f, 0.28f), glm::vec3(0.0f), glm::vec3(0.95f, 0.80f, 0.25f), "TieRope" });
+    // Cima plisada de la bolsa
+    boxes.push_back({ glm::vec3(0.0f, 0.56f, 0.0f), glm::vec3(0.36f, 0.12f, 0.36f), glm::vec3(0.0f), glm::vec3(0.62f, 0.38f, 0.15f), "PouchTop" });
+    // Broche / gema mística central reflectante
+    boxes.push_back({ glm::vec3(0.0f, 0.26f, 0.24f), glm::vec3(0.14f, 0.14f, 0.08f), glm::vec3(0.0f), glm::vec3(0.95f, 0.85f, 0.20f), "GemLock" });
 
     std::vector<float> verts;
     ModelLoader::GenerateMesh(boxes, verts);
@@ -60,7 +62,7 @@ void ItemDropSystem::initMesh() {
     glBindVertexArray(0);
 }
 
-void ItemDropSystem::SpawnDrop(const ItemInstance& item, glm::vec3 pos, glm::vec3 initialVelocity) {
+void ItemDropSystem::SpawnDrop(const ItemInstance& item, glm::vec3 pos, glm::vec3 initialVelocity, float pickupDelay) {
     if (!item.IsValid()) return;
 
     WorldItemDrop drop;
@@ -79,14 +81,15 @@ void ItemDropSystem::SpawnDrop(const ItemInstance& item, glm::vec3 pos, glm::vec
     drop.rotationYaw = static_cast<float>(rand() % 360);
     drop.bobTimer = (rand() % 100 / 100.0f) * 6.28f;
     drop.lifetime = 0.0f;
+    drop.pickupDelay = pickupDelay;
     drop.isCollected = false;
 
     m_drops.push_back(drop);
 }
 
-void ItemDropSystem::SpawnDrops(const std::vector<ItemInstance>& items, glm::vec3 pos) {
+void ItemDropSystem::SpawnDrops(const std::vector<ItemInstance>& items, glm::vec3 pos, float pickupDelay) {
     for (const auto& item : items) {
-        SpawnDrop(item, pos);
+        SpawnDrop(item, pos, glm::vec3(0.0f), pickupDelay);
     }
 }
 
@@ -97,6 +100,9 @@ void ItemDropSystem::Update(float deltaTime, glm::vec3 playerPos, InventorySyste
         it->lifetime += deltaTime;
         it->rotationYaw += 80.0f * deltaTime;
         it->bobTimer += deltaTime * 3.5f;
+        if (it->pickupDelay > 0.0f) {
+            it->pickupDelay -= deltaTime;
+        }
 
         // Físicas de caída parabólica
         if (glm::length(it->velocity) > 0.05f) {
@@ -112,9 +118,9 @@ void ItemDropSystem::Update(float deltaTime, glm::vec3 playerPos, InventorySyste
             }
         }
 
-        // Atracción magnética si el jugador está muy cerca (< 1.6m)
+        // Atracción magnética si el jugador está muy cerca (< 1.8m) y ya pasó el pickupDelay
         float distToPlayer = glm::distance(playerPos + glm::vec3(0, 0.8f, 0), it->position);
-        if (distToPlayer < 1.6f) {
+        if (distToPlayer < 1.8f && it->pickupDelay <= 0.0f) {
             // Recogida automática magnética
             int remaining = 0;
             bool added = inventory.GetInventory().AddInstance(it->instance, &remaining);

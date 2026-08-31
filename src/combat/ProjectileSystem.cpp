@@ -16,13 +16,19 @@ ProjectileSystem::ProjectileSystem()
     : m_VAO(0)
     , m_VBO(0)
     , m_vertexCount(0)
+    , m_arrowVAO(0)
+    , m_arrowVBO(0)
+    , m_arrowVertexCount(0)
 {
     initMesh();
+    initArrowMesh();
 }
 
 ProjectileSystem::~ProjectileSystem() {
     if (m_VAO) glDeleteVertexArrays(1, &m_VAO);
     if (m_VBO) glDeleteBuffers(1, &m_VBO);
+    if (m_arrowVAO) glDeleteVertexArrays(1, &m_arrowVAO);
+    if (m_arrowVBO) glDeleteBuffers(1, &m_arrowVBO);
 }
 
 void ProjectileSystem::initMesh() {
@@ -53,7 +59,39 @@ void ProjectileSystem::initMesh() {
     glBindVertexArray(0);
 }
 
-void ProjectileSystem::Spawn(glm::vec3 startPos, glm::vec3 targetPos, float speed, int damage, glm::vec4 color, bool isFromPlayer) {
+void ProjectileSystem::initArrowMesh() {
+    std::vector<BoxDef> arrowBoxes;
+    // Wooden Shaft (cuerpo alargado de madera de cedro)
+    arrowBoxes.push_back({ glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.045f, 0.045f, 0.95f), glm::vec3(0.0f), glm::vec3(0.65f, 0.44f, 0.22f), "Shaft" });
+    // Steel Arrowhead (punta afilada de hierro forjado al frente +Z)
+    arrowBoxes.push_back({ glm::vec3(0.0f, 0.0f, 0.52f), glm::vec3(0.10f, 0.04f, 0.18f), glm::vec3(0.0f), glm::vec3(0.85f, 0.85f, 0.90f), "ArrowHead" });
+    arrowBoxes.push_back({ glm::vec3(0.0f, 0.0f, 0.58f), glm::vec3(0.04f, 0.04f, 0.12f), glm::vec3(0.0f), glm::vec3(0.95f, 0.95f, 1.00f), "ArrowTip" });
+    // Fletching Feathers (plumas de estabilización rojas/blancas en la cola -Z)
+    arrowBoxes.push_back({ glm::vec3(0.0f, 0.0f, -0.36f), glm::vec3(0.02f, 0.15f, 0.20f), glm::vec3(0.0f), glm::vec3(0.90f, 0.22f, 0.20f), "FeatherV" });
+    arrowBoxes.push_back({ glm::vec3(0.0f, 0.0f, -0.36f), glm::vec3(0.15f, 0.02f, 0.20f), glm::vec3(0.0f), glm::vec3(0.90f, 0.22f, 0.20f), "FeatherH" });
+
+    std::vector<float> rawMesh;
+    ModelLoader::GenerateMesh(arrowBoxes, rawMesh);
+    m_arrowVertexCount = static_cast<int>(rawMesh.size() / 11);
+
+    glGenVertexArrays(1, &m_arrowVAO);
+    glGenBuffers(1, &m_arrowVBO);
+    glBindVertexArray(m_arrowVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_arrowVBO);
+    glBufferData(GL_ARRAY_BUFFER, rawMesh.size() * sizeof(float), rawMesh.data(), GL_STATIC_DRAW);
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glBindVertexArray(0);
+}
+
+void ProjectileSystem::Spawn(glm::vec3 startPos, glm::vec3 targetPos, float speed, int damage, glm::vec4 color, bool isFromPlayer, ProjectileType type) {
     glm::vec3 toTarget = targetPos - startPos;
     float dist = glm::length(toTarget);
     if (dist < 0.001f) return;
@@ -66,9 +104,10 @@ void ProjectileSystem::Spawn(glm::vec3 startPos, glm::vec3 targetPos, float spee
     p.color = color;
     p.lifeTimer = 0.0f;
     p.maxLife = 5.0f;
-    p.radius = isFromPlayer ? 0.85f : 0.45f;
+    p.radius = (type == ProjectileType::ARROW) ? 0.40f : (isFromPlayer ? 0.85f : 0.45f);
     p.active = true;
     p.isFromPlayer = isFromPlayer;
+    p.type = type;
 
     m_projectiles.push_back(p);
 }
@@ -251,7 +290,7 @@ void ProjectileSystem::Update(float deltaTime, Player* player, ParticleSystem& p
 }
 
 void ProjectileSystem::Render(GLuint shaderProgram) {
-    if (m_projectiles.empty() || m_VAO == 0) return;
+    if (m_projectiles.empty()) return;
 
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
 
@@ -259,21 +298,45 @@ void ProjectileSystem::Render(GLuint shaderProgram) {
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
-    glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 1); // Full emissive brightness
 
-    glBindVertexArray(m_VAO);
+    // 1. Render Magic Orbs (Spinning Emissive)
+    if (m_VAO != 0) {
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 1);
+        glBindVertexArray(m_VAO);
+        for (const auto& p : m_projectiles) {
+            if (!p.active || p.type == ProjectileType::ARROW) continue;
 
-    for (const auto& p : m_projectiles) {
-        if (!p.active) continue;
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, p.pos);
+            model = glm::rotate(model, p.lifeTimer * 6.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+            model = glm::rotate(model, p.lifeTimer * 4.0f, glm::vec3(1.0f, 0.0f, 0.0f));
+            model = glm::scale(model, glm::vec3(p.type == ProjectileType::FIREBALL ? 1.8f : 1.0f));
 
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, p.pos);
-        model = glm::rotate(model, p.lifeTimer * 6.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::rotate(model, p.lifeTimer * 4.0f, glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(1.0f));
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertexCount);
+        }
+    }
 
-        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_vertexCount);
+    // 2. Render Arrows (Directionally Aligned Flying Mesh)
+    if (m_arrowVAO != 0) {
+        glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 0);
+        glBindVertexArray(m_arrowVAO);
+        for (const auto& p : m_projectiles) {
+            if (!p.active || p.type != ProjectileType::ARROW) continue;
+
+            glm::vec3 vDir = glm::normalize(p.vel);
+            float yaw = atan2(vDir.x, vDir.z);
+            float pitch = -asin(std::clamp(vDir.y, -0.999f, 0.999f));
+
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, p.pos);
+            model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
+            model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
+            model = glm::scale(model, glm::vec3(1.4f));
+
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
+            glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_arrowVertexCount);
+        }
     }
 
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 0);

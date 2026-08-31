@@ -50,6 +50,7 @@ public:
     // --- Renderizado e Interacción con UI (Inventario + Equipamiento) ---
     void RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY, const PlayerStats* playerStats = nullptr);
     bool HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, ItemDropSystem* itemDropSystem, bool& closeRequested);
+    void UpdateDrag(float mouseNdcX, float mouseNdcY, bool isLeftMouseDown);
 
     bool IsOpen() const noexcept { return m_isOpen; }
     void ToggleOpen() noexcept { m_isOpen = !m_isOpen; }
@@ -71,4 +72,11 @@ private:
     int m_selectedSlot = -1;
     Inventory m_inventory;  // Contenedor de 16 slots
     Equipment m_equipment;  // Gestor de equipo
+
+    // Posición arrastrable de la ventana (Estilo Windows 98)
+    float m_winX = -0.81f;
+    float m_winY = -0.74f;
+    bool m_isDragging = false;
+    float m_dragOffsetX = 0.0f;
+    float m_dragOffsetY = 0.0f;
 };

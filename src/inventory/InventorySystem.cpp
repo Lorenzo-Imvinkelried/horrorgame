@@ -110,9 +110,16 @@ bool InventorySystem::DropSlot(int slotIndex, Player* player, ItemDropSystem* it
     toDrop.quantity = 1;
 
     if (m_inventory.RemoveItemAt(slotIndex, 1)) {
-        glm::vec3 dropPos = player->Position + glm::vec3(sin(glm::radians(player->ModelYaw)), 0.0f, cos(glm::radians(player->ModelYaw))) * 1.5f + glm::vec3(0, 0.4f, 0);
+        glm::vec3 throwFwd = glm::vec3(sin(glm::radians(player->ModelYaw)), 0.0f, cos(glm::radians(player->ModelYaw)));
+        if (glm::length(throwFwd) < 0.01f) throwFwd = player->Front;
+        throwFwd.y = 0.0f;
+        if (glm::length(throwFwd) > 0.01f) throwFwd = glm::normalize(throwFwd);
+
+        glm::vec3 dropPos = player->Position + throwFwd * 1.6f + glm::vec3(0.0f, 0.8f, 0.0f);
+        glm::vec3 throwVel = throwFwd * 4.5f + glm::vec3(0.0f, 3.6f, 0.0f);
+
         if (itemDropSystem != nullptr) {
-            itemDropSystem->SpawnDrop(toDrop, dropPos);
+            itemDropSystem->SpawnDrop(toDrop, dropPos, throwVel, 2.0f);
         }
         if (particles != nullptr) {
             for (int i = 0; i < 16; ++i) {
@@ -128,11 +135,50 @@ bool InventorySystem::DropSlot(int slotIndex, Player* player, ItemDropSystem* it
     return false;
 }
 
+void InventorySystem::UpdateDrag(float mouseNdcX, float mouseNdcY, bool isLeftMouseDown) {
+    if (!m_isOpen) {
+        m_isDragging = false;
+        return;
+    }
+
+    float pW = 1.62f, pH = 1.48f;
+
+    if (!isLeftMouseDown) {
+        m_isDragging = false;
+        return;
+    }
+
+    if (m_isDragging) {
+        m_winX = mouseNdcX - m_dragOffsetX;
+        m_winY = mouseNdcY - m_dragOffsetY;
+
+        // Limitar dentro de la pantalla
+        float minX = -1.0f;
+        float maxX = 1.0f - pW;
+        float minY = -1.0f;
+        float maxY = 1.0f - pH;
+        m_winX = std::clamp(m_winX, minX, maxX);
+        m_winY = std::clamp(m_winY, minY, maxY);
+    } else {
+        // Verificar si el clic comenzó en la barra de título superior
+        float tbX = m_winX;
+        float tbY = m_winY + pH - 0.075f;
+        float tbW = pW - 0.065f; // excluir botón [X]
+        float tbH = 0.075f;
+
+        if (mouseNdcX >= tbX && mouseNdcX <= tbX + tbW && mouseNdcY >= tbY && mouseNdcY <= tbY + tbH) {
+            m_isDragging = true;
+            m_dragOffsetX = mouseNdcX - m_winX;
+            m_dragOffsetY = mouseNdcY - m_winY;
+        }
+    }
+}
+
 void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY, const PlayerStats* playerStats) {
     if (!m_isOpen) return;
 
     float pW = 1.62f, pH = 1.48f;
-    float pX = -pW * 0.5f, pY = -pH * 0.5f;
+    float pX = m_winX, pY = m_winY;
 
     UIRenderer::DrawWin98Window(uiProgram, uiVAO, uiVBO, pX, pY, pW, pH, "INVENTARIO Y EQUIPO - ARPG FAT16.EXE", true);
 
@@ -300,7 +346,7 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
     if (!m_isOpen || player == nullptr) return false;
 
     float pW = 1.62f, pH = 1.48f;
-    float pX = -pW * 0.5f, pY = -pH * 0.5f;
+    float pX = m_winX, pY = m_winY;
 
     // Botón de Cerrar [X] en barra de título
     float xBtnW = 0.045f, xBtnH = 0.045f;

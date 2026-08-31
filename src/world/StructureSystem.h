@@ -6,6 +6,7 @@
 
 class Player;
 class InventorySystem;
+class ItemDropSystem;
 class DamageNumberSystem;
 class ParticleSystem;
 
@@ -34,6 +35,7 @@ public:
     bool TryInteract(glm::vec3 playerPos, 
                      Player& player, 
                      InventorySystem& inventory, 
+                     ItemDropSystem& itemDropSystem,
                      DamageNumberSystem& damageNumbers, 
                      ParticleSystem& particles);
 
