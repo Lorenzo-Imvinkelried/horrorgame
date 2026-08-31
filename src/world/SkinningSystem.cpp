@@ -1,6 +1,7 @@
 #include "SkinningSystem.h"
 #include "PassiveMob.h"
 #include "inventory/InventorySystem.h"
+#include "inventory/LootManager.h"
 #include "combat/DamageNumberSystem.h"
 #include "ParticleSystem.h"
 #include "ScentSystem.h"
@@ -36,10 +37,12 @@ bool SkinningSystem::TrySkin(glm::vec3 playerPos,
             if (dist < 2.8f) {
                 deer->SetSkinned(true);
 
-                // Add loot items to inventory
-                inventory.AddItem(ItemType::BEAST_PELT, 1);
-                inventory.AddItem(ItemType::RAW_MEAT, 2);
-                inventory.AddItem(ItemType::BLOOD_VIAL, 1);
+                // Add data-driven loot items to inventory
+                LootTable lootTable = LootManager::GetDeerLoot(deer->GetDeerSize());
+                std::vector<ItemInstance> drops = lootTable.GenerateLoot(1.0f);
+                for (const auto& drop : drops) {
+                    inventory.GetInventory().AddInstance(drop);
+                }
 
                 // Experience reward
                 bool lvlUp = false;

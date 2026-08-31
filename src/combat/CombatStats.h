@@ -4,6 +4,8 @@
 #include <cmath>
 #include <iostream>
 
+#include "inventory/ItemTypes.h"
+
 struct PlayerStats {
     // Progression
     int Level = 1;
@@ -29,14 +31,17 @@ struct PlayerStats {
     float CritChance = 12.0f; // Percent
     float CritMultiplier = 1.85f;
 
-    void RecalculateStats() {
-        MaxHP = 70 + Vitality * 5 + Strength * 2;
-        MaxMP = 20 + Intelligence * 5;
-        Attack = 25 + Strength * 2 + (int)(Agility * 0.8f);
-        Defense = 4 + (int)(Vitality * 0.5f) + (int)(Strength * 0.3f);
-        Evasion = 5 + (int)(Agility * 0.7f);
+    void RecalculateStats(const EquipmentStats& equipBonus = EquipmentStats()) {
+        MaxHP = 70 + Vitality * 5 + Strength * 2 + equipBonus.maxHpBonus;
+        MaxMP = 20 + Intelligence * 5 + equipBonus.maxMpBonus;
+        Attack = 25 + Strength * 2 + (int)(Agility * 0.8f) + equipBonus.attackPower;
+        Defense = 4 + (int)(Vitality * 0.5f) + (int)(Strength * 0.3f) + equipBonus.defense;
+        Evasion = 5 + (int)(Agility * 0.7f) + equipBonus.evasion;
         Accuracy = 80 + (int)(Agility * 0.5f);
-        CritChance = 5.0f + Agility * 0.7f;
+        CritChance = 5.0f + Agility * 0.7f + static_cast<float>(equipBonus.critChance);
+
+        CurrentHP = std::clamp(CurrentHP, 0, MaxHP);
+        CurrentMP = std::clamp(CurrentMP, 0, MaxMP);
     }
 
     float GetAttackSpeedMultiplier() const {

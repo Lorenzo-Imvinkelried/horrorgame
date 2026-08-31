@@ -38,10 +38,13 @@ public:
     bool IsAlive() const { return m_state != PassiveMobState::DEAD; }
     bool IsRemovable() const { return m_state == PassiveMobState::DEAD && m_deathTimer > 5.0f; }
     glm::vec3 GetPosition() const { return m_pos; }
+    glm::vec3& GetPositionRef() { return m_pos; }
+    void SetPosition(const glm::vec3& p) { m_pos = p; }
     float GetRadius() const { return 0.85f * m_scale; }
     int GetCurrentHP() const { return m_currentHp; }
     int GetMaxHP() const { return m_maxHp; }
     DeerSize GetDeerSize() const { return m_size; }
+    DeerSize GetSize() const { return m_size; }
     std::string GetName() const;
     int GetLevel() const;
     int GetExpReward() const;

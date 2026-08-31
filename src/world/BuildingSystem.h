@@ -42,6 +42,9 @@ public:
     // Comprobación de colisiones contra el jugador o monstruos (retorna vector de empuje)
     bool CheckCollision(glm::vec3& entityPos, float radius, float height, glm::vec3& outPush);
 
+    // Obtener la altura efectiva del piso si está sobre un techo construido
+    float GetFloorHeight(float x, float z, float currentFeetY, float defaultTerrainY) const;
+
     // Obtener las antorchas activas más cercanas para iluminación
     std::vector<glm::vec4> GetClosestTorches(glm::vec3 playerPos, int maxTorches = 8);
 

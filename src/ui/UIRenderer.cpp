@@ -1,4 +1,5 @@
 #include "UIRenderer.h"
+#include "FontRenderer.h"
 #include <cmath>
 #include <algorithm>
 
@@ -6,25 +7,28 @@ UIRenderer::UIRenderer() {}
 UIRenderer::~UIRenderer() {}
 
 void UIRenderer::pushQuad(std::vector<float>& data, float x, float y, float w, float h) {
-    data.push_back(x);     data.push_back(y);     data.push_back(0.0f);
-    data.push_back(x);     data.push_back(y + h); data.push_back(0.0f);
-    data.push_back(x + w); data.push_back(y);     data.push_back(0.0f);
+    // Formato unificado de 5 floats: (x, y, z, u, v)
+    data.push_back(x);     data.push_back(y);     data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x);     data.push_back(y + h); data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x + w); data.push_back(y);     data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
 
-    data.push_back(x + w); data.push_back(y);     data.push_back(0.0f);
-    data.push_back(x);     data.push_back(y + h); data.push_back(0.0f);
-    data.push_back(x + w); data.push_back(y + h); data.push_back(0.0f);
+    data.push_back(x + w); data.push_back(y);     data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x);     data.push_back(y + h); data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x + w); data.push_back(y + h); data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
 }
 
 void UIRenderer::drawColoredQuad(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float x, float y, float w, float h, glm::vec3 color) {
     std::vector<float> data;
     pushQuad(data, x, y, w, h);
 
+    glUniform1i(glGetUniformLocation(uiProgram, "u_UseTexture"), 0);
     glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), color.r, color.g, color.b);
 
     glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
     glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
     glBindVertexArray(uiVAO);
     glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
 }
 
 void UIRenderer::DrawWin98Window(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, 
@@ -50,7 +54,7 @@ void UIRenderer::DrawWin98Window(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     float titleY = y + h - titleH - 0.008f;
     drawColoredQuad(uiProgram, uiVAO, uiVBO, x + 0.008f, titleY, w - 0.016f, titleH, glm::vec3(0.06f, 0.14f, 0.48f));
 
-    // Title Text
+    // Title Text (Symtext.ttf)
     DrawString(title, x + 0.020f, titleY + 0.018f, 0.028f, glm::vec3(1.0f, 1.0f, 1.0f), uiProgram, uiVAO, uiVBO);
 
     // Close Button [X]
@@ -86,131 +90,27 @@ void UIRenderer::DrawWin98Button(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     drawColoredQuad(uiProgram, uiVAO, uiVBO, x, y, w, 0.004f, glm::vec3(0.35f, 0.35f, 0.38f));
     drawColoredQuad(uiProgram, uiVAO, uiVBO, x + w - 0.003f, y, 0.003f, h, glm::vec3(0.35f, 0.35f, 0.38f));
 
-    // Center Text
-    float charW = (textSize / 5.0f) * 0.5625f * 3.8f;
-    float textW = (float)text.length() * charW;
+    // Center Text con métricas de Symtext
+    float textW = FontRenderer::GetTextWidth(text, textSize);
     float textX = x + std::max(0.008f, (w - textW) * 0.5f);
-    float textY = y + (h - textSize) * 0.5f;
+    float textY = y + (h - textSize) * 0.5f + 0.005f;
 
     glm::vec3 textCol = isHovered ? glm::vec3(0.06f, 0.14f, 0.48f) : glm::vec3(0.08f, 0.08f, 0.12f);
     DrawString(text, textX, textY, textSize, textCol, uiProgram, uiVAO, uiVBO);
 }
 
-void UIRenderer::drawGlyph(char c, float x, float y, float size, glm::vec3 color, GLuint uiProgram, GLuint uiVAO, GLuint uiVBO) {
-    if (c >= 'a' && c <= 'z') c = c - 'a' + 'A';
-
-    int pattern = 0;
-    switch (c) {
-        // Letters (A-Z) - 15-bit binary: 5 rows of 3 columns from top to bottom
-        case 'A': pattern = 0b111'101'111'101'101; break;
-        case 'B': pattern = 0b110'101'110'101'110; break;
-        case 'C': pattern = 0b111'100'100'100'111; break;
-        case 'D': pattern = 0b110'101'101'101'110; break;
-        case 'E': pattern = 0b111'100'111'100'111; break;
-        case 'F': pattern = 0b111'100'110'100'100; break;
-        case 'G': pattern = 0b111'100'101'101'111; break;
-        case 'H': pattern = 0b101'101'111'101'101; break;
-        case 'I': pattern = 0b111'010'010'010'111; break;
-        case 'J': pattern = 0b001'001'001'101'111; break;
-        case 'K': pattern = 0b101'110'100'110'101; break;
-        case 'L': pattern = 0b100'100'100'100'111; break;
-        case 'M': pattern = 0b101'111'101'101'101; break;
-        case 'N': pattern = 0b110'101'101'101'101; break;
-        case 'O': pattern = 0b111'101'101'101'111; break;
-        case 'P': pattern = 0b111'101'111'100'100; break;
-        case 'Q': pattern = 0b111'101'101'111'001; break;
-        case 'R': pattern = 0b110'101'110'101'101; break;
-        case 'S': pattern = 0b111'100'111'001'111; break;
-        case 'T': pattern = 0b111'010'010'010'010; break;
-        case 'U': pattern = 0b101'101'101'101'111; break;
-        case 'V': pattern = 0b101'101'101'101'010; break;
-        case 'W': pattern = 0b101'101'101'111'101; break;
-        case 'X': pattern = 0b101'101'010'101'101; break;
-        case 'Y': pattern = 0b101'101'111'010'010; break;
-        case 'Z': pattern = 0b111'001'010'100'111; break;
-
-        // Digits (0-9)
-        case '0': pattern = 0b111'101'101'101'111; break;
-        case '1': pattern = 0b010'110'010'010'111; break;
-        case '2': pattern = 0b111'001'111'100'111; break;
-        case '3': pattern = 0b111'001'111'001'111; break;
-        case '4': pattern = 0b101'101'111'001'001; break;
-        case '5': pattern = 0b111'100'111'001'111; break;
-        case '6': pattern = 0b111'100'111'101'111; break;
-        case '7': pattern = 0b111'001'001'001'001; break;
-        case '8': pattern = 0b111'101'111'101'111; break;
-        case '9': pattern = 0b111'101'111'001'111; break;
-
-        // Punctuation & Symbols
-        case ':': pattern = 0b000'010'000'010'000; break;
-        case '+': pattern = 0b000'010'111'010'000; break;
-        case '-': pattern = 0b000'000'111'000'000; break;
-        case '/': pattern = 0b001'001'010'100'100; break;
-        case '%': pattern = 0b101'001'010'100'101; break;
-        case '[': pattern = 0b110'100'100'100'110; break;
-        case ']': pattern = 0b011'001'001'001'011; break;
-        case '(': pattern = 0b010'100'100'100'010; break;
-        case ')': pattern = 0b010'001'001'001'010; break;
-        case '.': pattern = 0b000'000'000'000'010; break;
-        case '!': pattern = 0b010'010'010'000'010; break;
-        case '_': pattern = 0b000'000'000'000'111; break;
-        case '#': pattern = 0b101'111'101'111'101; break;
-        case '|': pattern = 0b010'010'010'010'010; break;
-        default: pattern = 0; break;
-    }
-
-    if (pattern == 0) return;
-
-    std::vector<float> data;
-    // Mathematical 1:1 Pixel Aspect Ratio on 16:9 Screen (1080 / 1920 = 0.5625)
-    float cellH = size / 5.0f;
-    float cellW = cellH * 0.5625f;
-
-    for (int r = 0; r < 5; ++r) {
-        for (int c = 0; c < 3; ++c) {
-            int bitIdx = 14 - (r * 3 + c);
-            if ((pattern >> bitIdx) & 1) {
-                float px = x + (float)c * cellW;
-                float py = y + (float)(4 - r) * cellH;
-                // Contiguous solid pixels without cut seams
-                pushQuad(data, px, py, cellW, cellH);
-            }
-        }
-    }
-
-    if (data.empty()) return;
-
-    glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), color.r, color.g, color.b);
-
-    glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
-    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
-    glBindVertexArray(uiVAO);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size() / 3));
-}
-
 void UIRenderer::DrawString(const std::string& text, float x, float y, float size, glm::vec3 color, GLuint uiProgram, GLuint uiVAO, GLuint uiVBO) {
-    float curX = x;
-    float cellH = size / 5.0f;
-    float cellW = cellH * 0.5625f;
-    float spacing = cellW * 3.8f; // Proportional letter spacing
-
-    for (char c : text) {
-        if (c != ' ') {
-            drawGlyph(c, curX, y, size, color, uiProgram, uiVAO, uiVBO);
-        }
-        curX += spacing;
-    }
+    FontRenderer::DrawString(text, x, y, size, color, uiProgram, uiVAO, uiVBO);
 }
 
 void UIRenderer::drawDigit(int d, float x, float y, float size, glm::vec3 color, GLuint uiProgram, GLuint uiVAO, GLuint uiVBO) {
     if (d >= 0 && d <= 9) {
-        drawGlyph('0' + d, x, y, size, color, uiProgram, uiVAO, uiVBO);
+        DrawString(std::to_string(d), x, y, size, color, uiProgram, uiVAO, uiVBO);
     }
 }
 
 void UIRenderer::drawNumber(int num, float x, float y, float size, glm::vec3 color, GLuint uiProgram, GLuint uiVAO, GLuint uiVBO) {
-    std::string str = std::to_string(num);
-    DrawString(str, x, y, size, color, uiProgram, uiVAO, uiVBO);
+    DrawString(std::to_string(num), x, y, size, color, uiProgram, uiVAO, uiVBO);
 }
 
 void UIRenderer::drawECGWave(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, 
@@ -278,11 +178,13 @@ void UIRenderer::drawECGWave(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     }
 
     if (!waveData.empty()) {
+        glUniform1i(glGetUniformLocation(uiProgram, "u_UseTexture"), 0);
         glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), phosphorCol.r, phosphorCol.g, phosphorCol.b);
         glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
         glBufferData(GL_ARRAY_BUFFER, waveData.size() * sizeof(float), waveData.data(), GL_DYNAMIC_DRAW);
         glBindVertexArray(uiVAO);
-        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(waveData.size() / 3));
+        glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(waveData.size() / 5));
+        glBindVertexArray(0);
     }
 
     // BPM & Status Overlay
@@ -352,7 +254,7 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     if (expPct > 0.002f) {
         drawColoredQuad(uiProgram, uiVAO, uiVBO, -0.698f, -0.980f, 1.646f * expPct, 0.020f, glm::vec3(0.06f, 0.14f, 0.48f));
     }
-    std::string taskbarText = "PROGRESO_EXP.SYS | [F] ANTORCHA  [B] CONSTRUIR  [G/H] TIERRA  [I] INV";
+    std::string taskbarText = "PROGRESO_EXP.SYS | [Q] ATACAR  [F] ANTORCHA  [B] CONSTRUIR  [P] PALA  [I] INV";
     DrawString(taskbarText, -0.97f, -0.980f, 0.021f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
 
     // =========================================================================

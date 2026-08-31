@@ -5,10 +5,18 @@ in vec2 vTexCoord;
 
 uniform sampler2D u_Texture;
 uniform vec3 u_Color;
+uniform int u_UseTexture; // 0 = Solido, 1 = Fuente Pixel Art Symtext
 
 void main()
 {
-    // Sample texture but multiply by color (u_Color allows tinting or white)
-    vec4 texColor = texture(u_Texture, vTexCoord);
-    FragColor = texColor * vec4(u_Color, 1.0);
+    if (u_UseTexture == 1) {
+        float alpha = texture(u_Texture, vTexCoord).a;
+        // Binarizacion nitida para fuentes pixel art: elimina cualquier desenfoque o halo
+        if (alpha < 0.35) {
+            discard;
+        }
+        FragColor = vec4(u_Color, 1.0);
+    } else {
+        FragColor = vec4(u_Color, 1.0);
+    }
 }

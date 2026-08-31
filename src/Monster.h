@@ -43,6 +43,8 @@ public:
     bool IntersectRay(glm::vec3 origin, glm::vec3 dir, float& dist, bool& isHeadshot);
     bool IsDead() const { return m_isDead; }
     float GetHealth() const { return m_health; }
+    bool HasDroppedLoot() const { return m_lootDropped; }
+    void SetLootDropped(bool d) { m_lootDropped = d; }
     
     glm::vec3 GetPosition() const { return m_pos; }
     MonsterAction GetAction() const { return m_action; }
@@ -79,6 +81,7 @@ private:
     MonsterAction m_action;
     float m_health;
     bool m_isDead;
+    bool m_lootDropped = false;
     float m_speed;
     
     // Scent Pathfinding State

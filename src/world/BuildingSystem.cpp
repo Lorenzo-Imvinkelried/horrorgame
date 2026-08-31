@@ -227,7 +227,12 @@ void BuildingSystem::Update(float deltaTime, glm::vec3 playerPos, ParticleSystem
 void BuildingSystem::Render(GLuint shaderProgram, glm::vec3 playerPos) {
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f); // 100% rígido, sin deformación por viento
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_UseBirdAttribs"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 0);
 
     for (const auto& piece : m_pieces) {
         int typeIdx = (int)piece.type;
@@ -250,8 +255,11 @@ void BuildingSystem::RenderGhost(GLuint shaderProgram, BuildingType type, glm::v
 
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f); // Sin viento
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
-    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 3); // Tint mode
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_UseBirdAttribs"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 0.75f);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 3); // Tint mode preview
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -266,6 +274,7 @@ void BuildingSystem::RenderGhost(GLuint shaderProgram, BuildingType type, glm::v
     glBindVertexArray(0);
 
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
     glDisable(GL_BLEND);
 }
 
@@ -273,39 +282,46 @@ bool BuildingSystem::CheckCollision(glm::vec3& entityPos, float radius, float he
     outPush = glm::vec3(0.0f);
     bool collided = false;
 
+    float entityFeetY = entityPos.y - height;
+    float entityHeadY = entityPos.y + 0.2f;
+
     for (const auto& piece : m_pieces) {
-        if (piece.type == BuildingType::TORCH) continue; // Antorchas no bloquean movimiento
+        if (piece.type == BuildingType::TORCH) continue; // Antorchas son transitables
 
-        // Pared
+        // 1. Paredes sólidas
         if (piece.type == BuildingType::WALL) {
-            float rad = glm::radians(-piece.yaw);
-            glm::vec3 localPos = entityPos - piece.pos;
-            float cosY = cos(rad);
-            float sinY = sin(rad);
-            glm::vec3 rotatedLocal(
-                localPos.x * cosY - localPos.z * sinY,
-                localPos.y,
-                localPos.x * sinY + localPos.z * cosY
-            );
+            float wallBottom = piece.pos.y - 0.4f;
+            float wallTop = piece.pos.y + piece.halfExtents.y * 2.0f + 0.35f;
 
-            float halfW = piece.halfExtents.x;
-            float halfH = piece.halfExtents.y * 2.0f;
-            float halfD = piece.halfExtents.z;
+            // Verificación vertical de solapamiento
+            if (entityHeadY >= wallBottom && entityFeetY <= wallTop) {
+                float rad = glm::radians(-piece.yaw);
+                glm::vec3 localPos = entityPos - piece.pos;
+                float cosY = cos(rad);
+                float sinY = sin(rad);
+                glm::vec3 rotatedLocal(
+                    localPos.x * cosY - localPos.z * sinY,
+                    localPos.y,
+                    localPos.x * sinY + localPos.z * cosY
+                );
 
-            if (rotatedLocal.y >= 0.0f && rotatedLocal.y <= halfH) {
-                if (std::abs(rotatedLocal.x) < halfW + radius && std::abs(rotatedLocal.z) < halfD + radius) {
-                    float overlapX = (halfW + radius) - std::abs(rotatedLocal.x);
-                    float overlapZ = (halfD + radius) - std::abs(rotatedLocal.z);
+                float halfW = piece.halfExtents.x;
+                float halfD = piece.halfExtents.z;
+
+                float boundX = halfW + radius;
+                float boundZ = halfD + radius;
+
+                if (std::abs(rotatedLocal.x) < boundX && std::abs(rotatedLocal.z) < boundZ) {
+                    float overlapX = boundX - std::abs(rotatedLocal.x);
+                    float overlapZ = boundZ - std::abs(rotatedLocal.z);
 
                     if (overlapZ < overlapX) {
-                        float signZ = (rotatedLocal.z > 0.0f) ? 1.0f : -1.0f;
-                        rotatedLocal.z += signZ * overlapZ;
+                        rotatedLocal.z = (rotatedLocal.z >= 0.0f) ? (boundZ + 0.02f) : (-boundZ - 0.02f);
                     } else {
-                        float signX = (rotatedLocal.x > 0.0f) ? 1.0f : -1.0f;
-                        rotatedLocal.x += signX * overlapX;
+                        rotatedLocal.x = (rotatedLocal.x >= 0.0f) ? (boundX + 0.02f) : (-boundX - 0.02f);
                     }
 
-                    // Rotar de regreso a coordenadas globales
+                    // Rotar de vuelta a coordenadas globales
                     float invRad = glm::radians(piece.yaw);
                     float cInv = cos(invRad);
                     float sInv = sin(invRad);
@@ -315,17 +331,24 @@ bool BuildingSystem::CheckCollision(glm::vec3& entityPos, float radius, float he
                 }
             }
         }
-        // Techo / Bóveda
+        // 2. Techos / Bóvedas sólidas
         else if (piece.type == BuildingType::ROOF) {
             float halfW = piece.halfExtents.x;
             float halfL = piece.halfExtents.z;
-            float topY = piece.pos.y + piece.halfExtents.y * 2.0f;
-            float botY = piece.pos.y;
+            float roofBottom = piece.pos.y - 0.10f;
+            float roofTop = piece.pos.y + piece.halfExtents.y * 2.0f;
 
-            if (std::abs(entityPos.x - piece.pos.x) < halfW && std::abs(entityPos.z - piece.pos.z) < halfL) {
-                // Parado encima del techo
-                if (entityPos.y >= botY - 0.2f && entityPos.y <= topY + 0.8f) {
-                    entityPos.y = topY;
+            if (std::abs(entityPos.x - piece.pos.x) <= halfW + radius * 0.4f &&
+                std::abs(entityPos.z - piece.pos.z) <= halfL + radius * 0.4f) {
+                
+                // Si el jugador/mob está parado o cayendo encima del techo
+                if (entityFeetY >= roofBottom - 0.35f && entityFeetY <= roofTop + 0.7f) {
+                    entityPos.y = roofTop + height;
+                    collided = true;
+                }
+                // Si el jugador/mob está saltando debajo del techo (techo/cueva sólida)
+                else if (entityHeadY >= roofBottom && entityFeetY < roofBottom) {
+                    entityPos.y = roofBottom - 0.25f;
                     collided = true;
                 }
             }
@@ -333,6 +356,25 @@ bool BuildingSystem::CheckCollision(glm::vec3& entityPos, float radius, float he
     }
 
     return collided;
+}
+
+float BuildingSystem::GetFloorHeight(float x, float z, float currentFeetY, float defaultTerrainY) const {
+    float bestY = defaultTerrainY;
+    for (const auto& piece : m_pieces) {
+        if (piece.type == BuildingType::ROOF) {
+            float halfW = piece.halfExtents.x + 0.15f;
+            float halfL = piece.halfExtents.z + 0.15f;
+            if (std::abs(x - piece.pos.x) <= halfW && std::abs(z - piece.pos.z) <= halfL) {
+                float roofTop = piece.pos.y + piece.halfExtents.y * 2.0f;
+                if (currentFeetY >= piece.pos.y - 0.4f) {
+                    if (roofTop > bestY) {
+                        bestY = roofTop;
+                    }
+                }
+            }
+        }
+    }
+    return bestY;
 }
 
 std::vector<glm::vec4> BuildingSystem::GetClosestTorches(glm::vec3 playerPos, int maxTorches) {

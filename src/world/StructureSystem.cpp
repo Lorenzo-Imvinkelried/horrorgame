@@ -1,6 +1,7 @@
 #include "StructureSystem.h"
 #include "Player.h"
 #include "inventory/InventorySystem.h"
+#include "inventory/LootManager.h"
 #include "combat/DamageNumberSystem.h"
 #include "ParticleSystem.h"
 #include "ModelLoader.h"
@@ -192,10 +193,12 @@ bool StructureSystem::TryInteract(glm::vec3 playerPos,
             s.looted = true;
 
             if (s.type == StructureType::ANCIENT_RUINS_CHEST) {
-                // Chest Loot
-                inventory.AddItem(ItemType::CURSED_SWORD, 1);
-                inventory.AddItem(ItemType::POTION_HEALTH, 2);
-                inventory.AddItem(ItemType::POTION_MANA, 2);
+                // Chest Loot basado en datos y ruleta ponderada
+                LootTable chestLoot = LootManager::GetChestLoot(1);
+                std::vector<ItemInstance> drops = chestLoot.GenerateLoot(1.0f, 1);
+                for (const auto& drop : drops) {
+                    inventory.GetInventory().AddInstance(drop);
+                }
 
                 bool lvlUp = false;
                 player.Stats.AddExp(80, lvlUp);

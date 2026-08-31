@@ -672,11 +672,11 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
         
         float climbSpeed = 5.0f;
         bool isMoving = false;
-        if (PlatformInput::IsKeyPressed(PlatformInput::W)) {
+        if (PlatformInput::IsKeyPressed(PlatformInput::W) || PlatformInput::IsKeyPressed(PlatformInput::Up)) {
             Position.y += climbSpeed * deltaTime;
             isMoving = true;
         }
-        if (PlatformInput::IsKeyPressed(PlatformInput::S)) {
+        if (PlatformInput::IsKeyPressed(PlatformInput::S) || PlatformInput::IsKeyPressed(PlatformInput::Down)) {
             Position.y -= climbSpeed * deltaTime;
             isMoving = true;
         }
@@ -714,10 +714,10 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
         spaceWasPressed = spaceIsPressed;
         
     } else {
-        if (PlatformInput::IsKeyPressed(PlatformInput::W)) { moveDir += flatFront; }
-        if (PlatformInput::IsKeyPressed(PlatformInput::S)) { moveDir -= flatFront; }
-        if (PlatformInput::IsKeyPressed(PlatformInput::A)) { moveDir -= flatRight; }
-        if (PlatformInput::IsKeyPressed(PlatformInput::D)) { moveDir += flatRight; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::W) || PlatformInput::IsKeyPressed(PlatformInput::Up)) { moveDir += flatFront; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::S) || PlatformInput::IsKeyPressed(PlatformInput::Down)) { moveDir -= flatFront; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::A) || PlatformInput::IsKeyPressed(PlatformInput::Left)) { moveDir -= flatRight; }
+        if (PlatformInput::IsKeyPressed(PlatformInput::D) || PlatformInput::IsKeyPressed(PlatformInput::Right)) { moveDir += flatRight; }
 
         if (PlatformInput::IsKeyPressed(PlatformInput::Space)) {
             if (treeNear) {

@@ -21,6 +21,9 @@
 #include "combat/TargetingSystem.h"
 #include "combat/DamageNumberSystem.h"
 #include "ui/UIRenderer.h"
+#include "ui/FontRenderer.h"
+#include "world/ItemDropSystem.h"
+#include "inventory/LootManager.h"
 #include <ctime>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -49,6 +52,7 @@
 #include "world/WeatherSystem.h"
 #include "world/StructureSystem.h"
 #include "world/BuildingSystem.h"
+#include "entities/Dragon.h"
 
 // Shader loader helper
 GLuint LoadShader(const char* vertPath, const char* fragPath) {
@@ -131,79 +135,29 @@ GLuint LoadShader(const char* vertPath, const char* fragPath) {
 
 // Helper to push a quad (2 triangles) to a buffer
 void PushQuad(std::vector<float>& data, float x, float y, float w, float h) {
+    // Formato 5 floats: (x, y, z, u, v)
     // Triangle 1
-    data.push_back(x);     data.push_back(y);     data.push_back(0);
-    data.push_back(x);     data.push_back(y+h);   data.push_back(0);
-    data.push_back(x+w);   data.push_back(y);     data.push_back(0);
+    data.push_back(x);     data.push_back(y);     data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x);     data.push_back(y+h);   data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x+w);   data.push_back(y);     data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
     // Triangle 2
-    data.push_back(x+w);   data.push_back(y);     data.push_back(0);
-    data.push_back(x);     data.push_back(y+h);   data.push_back(0);
-    data.push_back(x+w);   data.push_back(y+h);   data.push_back(0);
+    data.push_back(x+w);   data.push_back(y);     data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x);     data.push_back(y+h);   data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
+    data.push_back(x+w);   data.push_back(y+h);   data.push_back(0.0f); data.push_back(0.0f); data.push_back(0.0f);
 }
 
-// Helper to draw a single digit using THICK QUADS (0-9)
-void DrawDigitSolid(int d, float x, float y, float size, GLuint vao, GLuint vbo) {
-    // Segments are now rectangles with width/thickness
-    struct Seg { float x, y, w, h; };
-    float t = 0.2f; // Thickness relative to size (0..1)
-    
-    // 7-segment layout (Horizontal: w=1, h=t. Vertical: w=t, h=0.5)
-    //   0
-    // 1   2
-    //   3
-    // 4   5
-    //   6
-    static const Seg segments[] = {
-        {0,1-t, 1,t},    // 0 (Top)
-        {0,0.5f, t,0.5f},// 1 (Top-Left)
-        {1-t,0.5f, t,0.5f},// 2 (Top-Right)
-        {0,0.5f-t/2, 1,t},// 3 (Middle)
-        {0,0, t,0.5f},   // 4 (Bot-Left)
-        {1-t,0, t,0.5f}, // 5 (Bot-Right)
-        {0,0, 1,t}       // 6 (Bottom)
-    };
-    
-    static const int digits[10][7] = {
-        {1,1,1,0,1,1,1}, // 0
-        {0,0,1,0,0,1,0}, // 1
-        {1,0,1,1,1,0,1}, // 2
-        {1,0,1,1,0,1,1}, // 3
-        {0,1,1,1,0,1,0}, // 4
-        {1,1,0,1,0,1,1}, // 5
-        {1,1,0,1,1,1,1}, // 6
-        {1,0,1,0,0,1,0}, // 7
-        {1,1,1,1,1,1,1}, // 8
-        {1,1,1,1,0,1,0}  // 9
-    };
-
-    std::vector<float> data;
-    for(int i=0; i<7; i++) {
-        if(digits[d][i]) {
-            PushQuad(data, x + segments[i].x * size, y + segments[i].y * size, segments[i].w * size, segments[i].h * size);
-        }
-    }
-    
-    glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
-    glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size()/3));
-}
-
-// Helper to draw a rotating arrow
 // Helper to draw a rotating arrow
 void DrawArrow(float x, float y, float size, float angle, GLuint vao, GLuint vbo) {
-    // Arrow shape pointing Right (0 radians)
-    // Triangle Head: (0.5, 0), (-0.2, 0.3), (-0.2, -0.3)
-    // Shaft: (-0.5, 0.1), (-0.2, 0.1), (-0.2, -0.1), (-0.5, -0.1)
-    
     std::vector<float> data;
     auto pushRotated = [&](float lx, float ly) {
         // Rotate
         float rx = lx * cos(angle) - ly * sin(angle);
         float ry = lx * sin(angle) + ly * cos(angle);
-        // Translate & Scale
+        // Translate & Scale (5 floats: x, y, z, u, v)
         data.push_back(x + rx * size);
         data.push_back(y + ry * size); 
+        data.push_back(0.0f);
+        data.push_back(0.0f);
         data.push_back(0.0f);
     };
 
@@ -220,7 +174,8 @@ void DrawArrow(float x, float y, float size, float angle, GLuint vao, GLuint vbo
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, data.size() * sizeof(float), data.data(), GL_DYNAMIC_DRAW);
     glBindVertexArray(vao);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size()/3));
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(data.size()/5));
+    glBindVertexArray(0);
 }
 
 // 3D Arrow (XZ Plane) for Wind Debug
@@ -724,14 +679,22 @@ int main() {
     glVertexAttribPointer(4, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
     glVertexAttribDivisor(4, 1); 
 
-    // UI Setup
+    // UI Setup con soporte para texturas y Symtext.ttf
     GLuint uiVAO, uiVBO;
     glGenVertexArrays(1, &uiVAO);
     glGenBuffers(1, &uiVBO);
     glBindVertexArray(uiVAO);
     glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    // Attribute 0: Posición vec3
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
     glEnableVertexAttribArray(0);
+    // Attribute 2: Coordenadas UV vec2
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glBindVertexArray(0);
+
+    // Carga de la fuente auténtica Symtext.ttf
+    FontRenderer::Init("assets/fonts/Symtext.ttf");
 
     // -- RETRO RESOLUTION SETUP --
     // Increased to 640x480 (VGA) for less extreme pixelation, while keeping fixed retro aspect
@@ -884,7 +847,7 @@ int main() {
     std::vector<std::unique_ptr<PassiveMob>> passiveMobs;
     for (int i = 0; i < 8; ++i) {
         float angle = (float)(rand() % 360) * 0.01745f;
-        float dist = 14.0f + (rand() % 45);
+        float dist = 20.0f + (rand() % 50);
         float dx = player.Position.x + cos(angle) * dist;
         float dz = player.Position.z + sin(angle) * dist;
         float dy = WorldGenerator::GetHeight(dx, dz);
@@ -892,23 +855,27 @@ int main() {
         passiveMobs.push_back(std::make_unique<PassiveMob>(glm::vec3(dx, dy, dz), size));
     }
 
-    // Humanoid & Mythic Enemy Mobs (Living Treants, Blood Vampires, Corrupted Warriors, Neutral Giants, Dark Mages)
+    // Humanoid & Mythic Enemy Mobs (Living Treants, Blood Vampires, Corrupted Warriors, Berserkers, Death Knights, Shadow Assassins, Skeleton Archers, Giants, Mages)
     std::vector<std::unique_ptr<EnemyMob>> enemyMobs;
-    for (int i = 0; i < 7; ++i) {
+    EnemyType initialTypes[] = {
+        EnemyType::BERSERKER_WARRIOR,
+        EnemyType::DEATH_KNIGHT,
+        EnemyType::SHADOW_ASSASSIN,
+        EnemyType::SKELETON_ARCHER,
+        EnemyType::CORRUPTED_WARRIOR,
+        EnemyType::DARK_MAGE,
+        EnemyType::VAMPIRE,
+        EnemyType::TREANT,
+        EnemyType::NEUTRAL_GIANT
+    };
+    for (int i = 0; i < 9; ++i) {
         float angle = (float)(rand() % 360) * 0.01745f;
-        float dist = 22.0f + (rand() % 50);
+        float dist = 45.0f + (rand() % 50); // Safe initial distance
         float ex = player.Position.x + cos(angle) * dist;
         float ez = player.Position.z + sin(angle) * dist;
         float ey = WorldGenerator::GetHeight(ex, ez);
         if (ey > 1.5f) {
-            EnemyType type;
-            if (i % 5 == 0) type = EnemyType::TREANT;
-            else if (i % 5 == 1) type = EnemyType::CORRUPTED_WARRIOR;
-            else if (i % 5 == 2) type = EnemyType::DARK_MAGE;
-            else if (i % 5 == 3) type = EnemyType::NEUTRAL_GIANT;
-            else type = EnemyType::VAMPIRE;
-
-            enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(ex, ey, ez), type, 1));
+            enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(ex, ey, ez), initialTypes[i % 9], 1));
         }
     }
 
@@ -930,6 +897,7 @@ int main() {
     LoreDocumentModal loreModal;
 
     InventorySystem inventory;
+    ItemDropSystem itemDropSystem;
     SpellSystem spellSystem;
     SkinningSystem skinningSystem;
     WeatherSystem weatherSystem;
@@ -937,9 +905,13 @@ int main() {
     BuildingSystem buildingSystem;
     buildingSystem.Init();
 
+    Dragon dragon(player.Position + glm::vec3(45.0f, 44.0f, 45.0f));
+
     bool isBuildMode = false;
     BuildingType currentBuildType = BuildingType::WALL;
     float currentBuildYaw = 0.0f;
+
+    bool isShovelMode = false;
 
     auto handleKeyAction = [&](int key) {
 #ifndef __EMSCRIPTEN__
@@ -952,12 +924,20 @@ int main() {
             }
         }
         if (key == sf::Keyboard::F) {
-            player.ToggleTorch();
-            std::cout << "[Antorcha] Estado: " << (player.HasTorchActive ? "ENCENDIDA (Mano Izquierda)" : "GUARDADA") << std::endl;
+            if (!itemDropSystem.TryCollectNearby(player.Position, inventory, damageNumbers, particles)) {
+                player.ToggleTorch();
+                std::cout << "[Antorcha] Estado: " << (player.HasTorchActive ? "ENCENDIDA (Mano Izquierda)" : "GUARDADA") << std::endl;
+            }
         }
         if (key == sf::Keyboard::B) {
             isBuildMode = !isBuildMode;
+            if (isBuildMode) isShovelMode = false;
             std::cout << "[Construcción] Modo: " << (isBuildMode ? "ACTIVADO" : "DESACTIVADO") << std::endl;
+        }
+        if (key == sf::Keyboard::P) {
+            isShovelMode = !isShovelMode;
+            if (isShovelMode) isBuildMode = false;
+            std::cout << "[Pala] Modo: " << (isShovelMode ? "ACTIVADO" : "DESACTIVADO") << std::endl;
         }
         if (isBuildMode) {
             if (key == sf::Keyboard::Num1 || key == sf::Keyboard::Numpad1) currentBuildType = BuildingType::WALL;
@@ -1019,10 +999,10 @@ int main() {
         if (key == sf::Keyboard::I || key == sf::Keyboard::Tab) {
             inventory.ToggleOpen();
         }
-        if (key == sf::Keyboard::Q) {
+        if (key == sf::Keyboard::T) {
             spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
         }
-        if (key == sf::Keyboard::G && !isBuildMode) {
+        if (key == sf::Keyboard::G && !isBuildMode && !isShovelMode) {
             skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
         }
         if (key == sf::Keyboard::Return || key == sf::Keyboard::Space) {
@@ -1046,12 +1026,20 @@ int main() {
             }
         }
         if (key == GLFW_KEY_F) {
-            player.ToggleTorch();
-            std::cout << "[Antorcha] Estado: " << (player.HasTorchActive ? "ENCENDIDA (Mano Izquierda)" : "GUARDADA") << std::endl;
+            if (!itemDropSystem.TryCollectNearby(player.Position, inventory, damageNumbers, particles)) {
+                player.ToggleTorch();
+                std::cout << "[Antorcha] Estado: " << (player.HasTorchActive ? "ENCENDIDA (Mano Izquierda)" : "GUARDADA") << std::endl;
+            }
         }
         if (key == GLFW_KEY_B) {
             isBuildMode = !isBuildMode;
+            if (isBuildMode) isShovelMode = false;
             std::cout << "[Construcción] Modo: " << (isBuildMode ? "ACTIVADO" : "DESACTIVADO") << std::endl;
+        }
+        if (key == GLFW_KEY_P) {
+            isShovelMode = !isShovelMode;
+            if (isShovelMode) isBuildMode = false;
+            std::cout << "[Pala] Modo: " << (isShovelMode ? "ACTIVADO" : "DESACTIVADO") << std::endl;
         }
         if (isBuildMode) {
             if (key == GLFW_KEY_1 || key == GLFW_KEY_KP_1) currentBuildType = BuildingType::WALL;
@@ -1113,7 +1101,7 @@ int main() {
         if (key == GLFW_KEY_I || key == GLFW_KEY_TAB) {
             inventory.ToggleOpen();
         }
-        if (key == GLFW_KEY_Q) {
+        if (key == GLFW_KEY_T) {
             spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
         }
         if (key == GLFW_KEY_G && !isBuildMode) {
@@ -1302,7 +1290,22 @@ int main() {
             if (!isGameOver) {
                 player.ProcessKeyboard(0, deltaTime, chunkManager, footprints);
             }
+            // Colisión sólida con paredes y techos construidos
+            glm::vec3 bPush(0.0f);
+            buildingSystem.CheckCollision(player.Position, player.PlayerRadius, player.PlayerHeight, bPush);
+
+            // Permitir pararse y caminar sobre techos construidos
+            float feetY = player.Position.y - player.PlayerHeight;
+            float defaultGroundY = WorldGenerator::GetHeight(player.Position.x, player.Position.z);
+            float floorY = buildingSystem.GetFloorHeight(player.Position.x, player.Position.z, feetY, defaultGroundY);
+
             player.Update(deltaTime);
+
+            if (player.Position.y < floorY + player.PlayerHeight) {
+                player.Position.y = floorY + player.PlayerHeight;
+                player.Velocity.y = 0.0f;
+                player.IsGrounded = true;
+            }
         } else {
             // Free Cam Movement
             float camSpeed = Config::Gameplay::DebugCamSpeed * deltaTime;
@@ -1328,6 +1331,29 @@ int main() {
         buildPos.y = bGroundY;
         if (currentBuildType == BuildingType::ROOF) {
             buildPos.y = bGroundY + 2.8f;
+        }
+
+        // Compute Shovel Target Position in World (Only when in Shovel Mode [P])
+        glm::vec3 terraTarget(0.0f);
+        bool hasTerraTarget = false;
+        if (isShovelMode) {
+            glm::vec3 terraRayOrigin = player.GetCameraPosition();
+            glm::vec3 terraRayDir = player.Front;
+            for (float rDist = 0.5f; rDist < 20.0f; rDist += 0.35f) {
+                glm::vec3 p = terraRayOrigin + terraRayDir * rDist;
+                float groundY = WorldGenerator::GetHeight(p.x, p.z);
+                if (p.y <= groundY + 0.15f) {
+                    terraTarget = glm::vec3(p.x, groundY, p.z);
+                    hasTerraTarget = true;
+                    break;
+                }
+            }
+            if (!hasTerraTarget) {
+                float tx = player.Position.x + player.Front.x * 4.5f;
+                float tz = player.Position.z + player.Front.z * 4.5f;
+                terraTarget = glm::vec3(tx, WorldGenerator::GetHeight(tx, tz), tz);
+                hasTerraTarget = true;
+            }
         }
 
 #ifndef __EMSCRIPTEN__
@@ -1419,7 +1445,7 @@ int main() {
                 }
             }
 
-            // Left Click: UI Button Clicks, Target Selection & Sword Attack / Build
+            // Left Click: UI Button Clicks, Target Selection & Sword Attack / Build / Dig
             static bool leftWasPressed = false;
             if (leftIsPressed && !leftWasPressed) {
                 // 0. Build Mode Placement
@@ -1429,10 +1455,17 @@ int main() {
                     goto skipWorldTargeting;
                 }
 
+                // 0.1 Shovel Mode Cavar
+                if (isShovelMode && hasTerraTarget) {
+                    chunkManager.ModifyTerrain(terraTarget.x, terraTarget.z, 3.6f, -1.2f, &particles);
+                    leftWasPressed = leftIsPressed;
+                    goto skipWorldTargeting;
+                }
+
                 // 1. Check UI Modals First
                 if (inventory.IsOpen()) {
                     bool closeReq = false;
-                    if (inventory.HandleMouseClick(mouseNdcX, mouseNdcY, player.Stats, closeReq)) {
+                    if (inventory.HandleMouseClick(mouseNdcX, mouseNdcY, &player, &particles, &damageNumbers, closeReq)) {
                         if (closeReq) inventory.SetOpen(false);
                         leftWasPressed = leftIsPressed;
                         goto skipWorldTargeting;
@@ -1554,87 +1587,37 @@ int main() {
 
                 if (bestWater) {
                     targeting.SelectWaterMonster(bestWater);
-                    targeting.SetAutoApproaching(true);
                 } else if (bestEnemy) {
                     targeting.SelectEnemy(bestEnemy);
-                    targeting.SetAutoApproaching(true);
                 } else if (bestDeer) {
                     targeting.SelectPassive(bestDeer);
-                    targeting.SetAutoApproaching(true);
                 } else if (bestMonster) {
                     targeting.SelectMonster(bestMonster);
-                    targeting.SetAutoApproaching(true);
                 }
 
-                // If already within melee range or clicked empty space, swing sword immediately
-                if (closestDist < 3.5f || (!bestDeer && !bestMonster && !bestEnemy && !bestWater)) {
-                    if (player.TryAttack()) {
-                        horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
-                    }
+                // Swing sword immediately on click (even while running/sprinting)
+                if (player.TryAttack()) {
+                    horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
                 }
             }
         skipWorldTargeting:
             leftWasPressed = leftIsPressed;
         }
 
-        // Check manual input to cancel auto-approach
-        bool isMovingManual = PlatformInput::IsKeyPressed(PlatformInput::W) || PlatformInput::IsKeyPressed(PlatformInput::A) ||
-                              PlatformInput::IsKeyPressed(PlatformInput::S) || PlatformInput::IsKeyPressed(PlatformInput::D);
-        targeting.Update(deltaTime, player.Position, isMovingManual);
-
-        // Handle Auto-Approach Movement toward selected target
-        if (targeting.IsAutoApproaching() && targeting.HasTarget() && !isMovingManual) {
-            glm::vec3 tPos = targeting.GetTargetPosition();
-            glm::vec2 toTarget(tPos.x - player.Position.x, tPos.z - player.Position.z);
-            float dist = glm::length(toTarget);
-
-            if (dist > 2.6f) {
-                glm::vec2 moveDir = glm::normalize(toTarget);
-                player.Position.x += moveDir.x * player.WalkSpeed * deltaTime;
-                player.Position.z += moveDir.y * player.WalkSpeed * deltaTime;
-                float groundY = WorldGenerator::GetHeight(player.Position.x, player.Position.z);
-                player.Position.y = groundY + player.PlayerHeight;
-                player.Velocity.x = moveDir.x * player.WalkSpeed;
-                player.Velocity.z = moveDir.y * player.WalkSpeed;
-                player.Velocity.y = 0.0f;
-                player.IsGrounded = true;
-                player.ModelYaw = glm::degrees(atan2(moveDir.x, moveDir.y));
-                player.WalkAnimTimer += deltaTime * 8.0f;
-            } else {
-                targeting.SetAutoApproaching(false);
-                player.Velocity.x = 0.0f;
-                player.Velocity.z = 0.0f;
-                player.TryAttack();
+        // Holding [Q] attacks constantly respecting attack speed / agility multiplier
+        if (PlatformInput::IsKeyPressed(PlatformInput::Q)) {
+            if (player.TryAttack()) {
+                horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
             }
         }
 
-        // --- DYNAMIC TERRAIN DEFORMATION (DESTRUCTION & CONSTRUCTION) ---
-        bool isDigging = PlatformInput::IsKeyPressed(PlatformInput::G) || PlatformInput::IsKeyPressed(PlatformInput::Num3);
-        bool isBuilding = PlatformInput::IsKeyPressed(PlatformInput::H) || PlatformInput::IsKeyPressed(PlatformInput::Num4);
+        targeting.Update(deltaTime, player.Position, false);
 
-        glm::vec3 terraRayOrigin = player.GetCameraPosition();
-        glm::vec3 terraRayDir = player.Front;
-        glm::vec3 terraTarget(0.0f);
-        bool hasTerraTarget = false;
+        // --- DYNAMIC TERRAIN DEFORMATION (PALA [P]: G para Cavar, H o Click Der para Poner Tierra) ---
+        bool isDigging = isShovelMode && (PlatformInput::IsKeyPressed(PlatformInput::G) || PlatformInput::IsKeyPressed(PlatformInput::Num3));
+        bool isBuilding = isShovelMode && (PlatformInput::IsKeyPressed(PlatformInput::H) || PlatformInput::IsKeyPressed(PlatformInput::Num4) || (rightIsPressed && !player.IsThirdPerson));
 
-        for (float rDist = 0.5f; rDist < 20.0f; rDist += 0.35f) {
-            glm::vec3 p = terraRayOrigin + terraRayDir * rDist;
-            float groundY = WorldGenerator::GetHeight(p.x, p.z);
-            if (p.y <= groundY + 0.15f) {
-                terraTarget = glm::vec3(p.x, groundY, p.z);
-                hasTerraTarget = true;
-                break;
-            }
-        }
-        if (!hasTerraTarget) {
-            glm::vec3 fwd = player.Front;
-            float tx = player.Position.x + fwd.x * 4.5f;
-            float tz = player.Position.z + fwd.z * 4.5f;
-            terraTarget = glm::vec3(tx, WorldGenerator::GetHeight(tx, tz), tz);
-            hasTerraTarget = true;
-        }
-
-        if (isDigging || isBuilding) {
+        if (isShovelMode && hasTerraTarget && (isDigging || isBuilding)) {
             float deformRadius = 3.6f;
             float deltaH = (isBuilding ? +1.0f : -1.0f) * 3.8f * deltaTime;
             chunkManager.ModifyTerrain(terraTarget.x, terraTarget.z, deformRadius, deltaH, &particles);
@@ -1741,6 +1724,12 @@ int main() {
                          player.IsClimbing, player.ClimbingTreePos,
                          isNightTime);
 
+            glm::vec3 mPos = mPtr->GetPosition();
+            glm::vec3 mPush(0.0f);
+            if (buildingSystem.CheckCollision(mPos, 1.1f, 2.5f, mPush)) {
+                mPtr->SetPosition(mPos);
+            }
+
             // Monster Melee Attack against Player (Balanced 18-24 damage, NOT 1-hit kill)
             float distToPlayer = glm::distance(player.Position, mPtr->GetPosition());
             if (distToPlayer < 2.3f && monsterAttackCooldown <= 0.0f) {
@@ -1809,6 +1798,31 @@ int main() {
             }
         }
 
+        // ---------------------------------------------------------------------
+        // PHYSICAL ITEM DROPS & LOOT ENGINE
+        // ---------------------------------------------------------------------
+        itemDropSystem.Update(deltaTime, player.Position, inventory, damageNumbers, particles);
+
+        // Generar botín físico cuando muere un enemigo
+        for (auto& enemy : enemyMobs) {
+            if (!enemy->IsAlive() && !enemy->HasDroppedLoot()) {
+                enemy->SetLootDropped(true);
+                LootTable table = LootManager::GetEnemyLoot(enemy->GetType(), enemy->GetNightLevel());
+                std::vector<ItemInstance> drops = table.GenerateLoot(1.0f);
+                itemDropSystem.SpawnDrops(drops, enemy->GetPosition());
+            }
+        }
+
+        // Generar botín físico cuando muere el monstruo acechador
+        for (auto& mPtr : monsters) {
+            if (mPtr->IsDead() && !mPtr->HasDroppedLoot()) {
+                mPtr->SetLootDropped(true);
+                LootTable table = LootManager::GetEnemyLoot(EnemyType::CORRUPTED_WARRIOR, 1);
+                std::vector<ItemInstance> drops = table.GenerateLoot(1.0f);
+                itemDropSystem.SpawnDrops(drops, mPtr->GetPosition());
+            }
+        }
+
         // Dynamic Enemy Mobs Spawning & Cleanup (Corrupted Warriors, Giants, Mages)
         static float enemySpawnTimer = 0.0f;
         enemySpawnTimer += deltaTime;
@@ -1827,9 +1841,9 @@ int main() {
                 }
             }
 
-            if (enemyMobs.size() < 8) {
+            if (enemyMobs.size() < 12) {
                 float angle = (float)(rand() % 360) * 0.01745f;
-                float dist = 45.0f + (rand() % 40);
+                float dist = 42.0f + (rand() % 45);
                 float ex = player.Position.x + cos(angle) * dist;
                 float ez = player.Position.z + sin(angle) * dist;
                 float ey = WorldGenerator::GetHeight(ex, ez);
@@ -1838,15 +1852,20 @@ int main() {
                     int currentNightLevel = weatherSystem.GetNightCount();
                     EnemyType type;
                     if (isNightTime) {
-                        if (roll < 30) type = EnemyType::VAMPIRE;
-                        else if (roll < 55) type = EnemyType::CORRUPTED_WARRIOR;
-                        else if (roll < 72) type = EnemyType::DARK_MAGE;
-                        else if (roll < 88) type = EnemyType::TREANT;
-                        else type = EnemyType::NEUTRAL_GIANT;
+                        if (roll < 16) type = EnemyType::DEATH_KNIGHT;
+                        else if (roll < 32) type = EnemyType::BERSERKER_WARRIOR;
+                        else if (roll < 46) type = EnemyType::SKELETON_ARCHER;
+                        else if (roll < 60) type = EnemyType::SHADOW_ASSASSIN;
+                        else if (roll < 74) type = EnemyType::VAMPIRE;
+                        else if (roll < 88) type = EnemyType::DARK_MAGE;
+                        else type = EnemyType::CORRUPTED_WARRIOR;
                     } else {
-                        if (roll < 35) type = EnemyType::TREANT;
-                        else if (roll < 65) type = EnemyType::CORRUPTED_WARRIOR;
-                        else if (roll < 85) type = EnemyType::DARK_MAGE;
+                        if (roll < 18) type = EnemyType::SKELETON_ARCHER;
+                        else if (roll < 36) type = EnemyType::BERSERKER_WARRIOR;
+                        else if (roll < 52) type = EnemyType::CORRUPTED_WARRIOR;
+                        else if (roll < 66) type = EnemyType::SHADOW_ASSASSIN;
+                        else if (roll < 78) type = EnemyType::TREANT;
+                        else if (roll < 88) type = EnemyType::DARK_MAGE;
                         else type = EnemyType::NEUTRAL_GIANT;
                     }
                     enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(ex, ey, ez), type, currentNightLevel));
@@ -1895,6 +1914,8 @@ int main() {
         // Update Enemy Mobs
         for (auto& enemy : enemyMobs) {
             enemy->Update(deltaTime, player.Position, &player, particles, damageNumbers, projectiles);
+            glm::vec3 ePush(0.0f);
+            buildingSystem.CheckCollision(enemy->GetPositionRef(), enemy->GetRadius(), 2.0f, ePush);
         }
 
         // Update Flying Magic Projectiles
@@ -1903,7 +1924,12 @@ int main() {
         // Update Passive Mobs (Forest Deer: Fawns, Adults, Alphas, Demonic)
         for (auto& deer : passiveMobs) {
             deer->Update(deltaTime, player.Position, &player, particles, damageNumbers);
+            glm::vec3 dPush(0.0f);
+            buildingSystem.CheckCollision(deer->GetPositionRef(), deer->GetRadius(), 1.4f, dPush);
         }
+
+        // Update Flying Dragon
+        dragon.Update(deltaTime, player.Position, particles, damageNumbers);
 
         // Update Floating Combat Numbers (Damage & EXP)
         damageNumbers.Update(deltaTime);
@@ -2145,6 +2171,11 @@ int main() {
             wm->RenderHealthBar(shaderProgram, activeCamPos);
         }
 
+        // Render Flying Dragon (Ancestral Wyvern)
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        dragon.Render(shaderProgram);
+        dragon.RenderHealthBar(shaderProgram, activeCamPos);
+
         // Render Magic Projectiles
         projectiles.Render(shaderProgram);
 
@@ -2159,6 +2190,9 @@ int main() {
 
         // Render Procedural World Structures (Ancient Ruin Pillars, Loot Chests, Sacrifice Altars)
         structureSystem.Render(shaderProgram, activeCamPos);
+
+        // Render Physical 3D Ground Item Drops (Glowing Pouch Mesh)
+        itemDropSystem.Render(shaderProgram, activeCamPos);
 
         // Render Placed Modular Buildings (Walls, Cave Ceilings, Placed Torches)
         glBindTexture(GL_TEXTURE_2D, textureID);
@@ -2223,8 +2257,8 @@ int main() {
             glEnable(GL_DEPTH_TEST); // Restore depth test
         }
 
-        // Terraforming Reticle & Deform Ring Indicator
-        if (hasTerraTarget && (isDigging || isBuilding || glm::distance(player.Position, terraTarget) < 18.0f)) {
+        // Terraforming Reticle & Deform Ring Indicator (ONLY in Shovel Mode [P])
+        if (isShovelMode && hasTerraTarget) {
             glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
             glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
             glUniform1i(glGetUniformLocation(shaderProgram, "u_Texture"), 0);
@@ -2343,25 +2377,47 @@ int main() {
             // weapon.Render(shaderProgram, isGameOver, gameOverTimer);
         }
 
-        // 4. UI Pass (SEPARATE SHADER PASS - IN FBO FOR RETRO LOOK)
-        glDisable(GL_DEPTH_TEST);
-        glDepthRange(0, 0.01); // Force Near
-        glUseProgram(uiProgram); // Switch to specialized UI shader
+        // =================================================================================
+        // PASS 2: UPSCALE RETRO 3D SCENE TO SCREEN FRAMEBUFFER
+        // =================================================================================
+        glBindFramebuffer(GL_FRAMEBUFFER, 0); // Back to default screen framebuffer
+        glViewport(0, 0, screenW, screenH); 
         
-        // NUCLEAR STATE RESET
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f); 
+        glClear(GL_COLOR_BUFFER_BIT); 
+
+        glDisable(GL_DEPTH_TEST); // Disable depth for 2D Quad
+        glUseProgram(screenShader);
+        glBindVertexArray(quadVAO);
+        
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texColorBuffer); 
+        glUniform1i(glGetUniformLocation(screenShader, "u_ScreenTexture"), 0);
+        glUniform1i(glGetUniformLocation(screenShader, "u_IsGameOver"), isGameOver ? 1 : 0);
+        glUniform1f(glGetUniformLocation(screenShader, "u_GameOverTime"), gameOverTimer);
+        glUniform1f(glGetUniformLocation(screenShader, "u_Time"), globalTime);
+        
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        // =================================================================================
+        // PASS 3: NATIVE ULTRA-CRISP HD UI PASS (DIRECTLY ON MONITOR RESOLUTION)
+        // =================================================================================
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glUseProgram(uiProgram);
+        
         glBindBuffer(GL_ARRAY_BUFFER, 0); 
         glBindVertexArray(uiVAO); 
+        glEnableVertexAttribArray(0);
+        glEnableVertexAttribArray(2);
         glDisableVertexAttribArray(1); 
-        glDisableVertexAttribArray(2); 
         glDisableVertexAttribArray(3); 
         glDisableVertexAttribArray(4); 
         
-        // Force safe defaults
-        glVertexAttrib2f(2, 0.0f, 0.0f); 
-        
+        glUniform1i(glGetUniformLocation(uiProgram, "u_UseTexture"), 0);
         glUniform3f(glGetUniformLocation(uiProgram, "u_Color"), 1.0f, 1.0f, 1.0f);
         glUniform1i(glGetUniformLocation(uiProgram, "u_Texture"), 0);
-        glBindTexture(GL_TEXTURE_2D, whiteTexID);
 
         // Crosshair (Visible ONLY in First Person)
         if (!player.IsThirdPerson) {
@@ -2369,32 +2425,28 @@ int main() {
             float chS = 0.03f; float chT = 0.0022f;
             PushQuad(chData, -chS, -chT, chS*2, chT*2); 
             PushQuad(chData, -chT, -chS*INTERNAL_ASPECT, chT*2, chS*INTERNAL_ASPECT*2);  
+            glBindVertexArray(uiVAO);
             glBindBuffer(GL_ARRAY_BUFFER, uiVBO);
             glBufferData(GL_ARRAY_BUFFER, chData.size() * sizeof(float), chData.data(), GL_DYNAMIC_DRAW);
-            glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(chData.size()/3));
+            glDrawArrays(GL_TRIANGLES, 0, (GLsizei)(chData.size()/5));
+            glBindVertexArray(0);
         }
 
-        // FPS Counter
-        std::string fpsStr = std::to_string(currentFPS);
-        float charX = 0.8f; 
-        float charSize = 0.06f; 
-        for(char c : fpsStr) {
-            DrawDigitSolid(c - '0', charX, 0.85f, charSize, uiVAO, uiVBO); 
-            charX += charSize * 1.3f; 
-        }
+        // FPS Counter con Symtext.ttf Ultra Nítido
+        UIRenderer::DrawString("FPS " + std::to_string(currentFPS), 0.78f, 0.88f, 0.026f, glm::vec3(0.15f, 0.95f, 0.25f), uiProgram, uiVAO, uiVBO);
 
         // Wind Arrow
         float windAngle = atan2(windDir.y, windDir.x);
         float playerYawRad = glm::radians(player.Yaw);
-        // Relative Angle: PlayerYaw - WindAngle + 90deg (Offset for Arrow UP)
         float relativeAngle = playerYawRad - windAngle + 1.5708f; 
         DrawArrow(0.9f, 0.1f, 0.05f, relativeAngle, uiVAO, uiVBO); 
 
         // Windows 98 ARPG HUD Pass (SUFFERING_MONITOR.EXE, ECG Oscilloscope, Taskbar, Target Frame & Damage Numbers)
         uiRenderer.RenderHUD(uiProgram, uiVAO, uiVBO, player.Stats, targeting, damageNumbers, projection * view, dangerLevel, globalTime, weatherSystem.GetNightCount(), weatherSystem.IsBloodMoon());
 
-        // Interaction Prompts (Prioritized: Structures > Skinning > Fallen Corpses)
+        // Interaction Prompts (Prioritized: Structures > Item Drops > Skinning > Fallen Corpses)
         std::string prompt = structureSystem.GetPrompt(player.Position);
+        if (prompt.empty()) prompt = itemDropSystem.GetNearbyPrompt(player.Position);
         if (prompt.empty()) prompt = skinningSystem.GetPrompt(player.Position, passiveMobs);
         if (prompt.empty()) prompt = horrorProps.GetNearbyPrompt(player.Position);
         if (!prompt.empty() && !loreModal.active && !isBuildMode) {
@@ -2431,7 +2483,7 @@ int main() {
 
         // Inventory & Equipment Window (I key)
         if (inventory.IsOpen()) {
-            inventory.RenderWindow(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY);
+            inventory.RenderWindow(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY, &player.Stats);
         }
 
         // Render software cursor on top of UI if any modal is active or in 3rd person
@@ -2439,32 +2491,6 @@ int main() {
         if (isUiActive || player.IsThirdPerson) {
             UIRenderer::RenderCursor(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY);
         }
-
-        glEnable(GL_DEPTH_TEST);
-        glDepthRange(0.0f, 1.0f); // Restore Depth
-
-        // =================================================================================
-        // PASS 2: UPSCALE TO SCREEN
-        // =================================================================================
-        glBindFramebuffer(GL_FRAMEBUFFER, 0); // Back to default
-        glViewport(0, 0, screenW, screenH); 
-        
-        // Debug: Clear to BLACK to distinguish "Quad Failed" (Black) from "FBO Empty" (Sky Blue)
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f); 
-        glClear(GL_COLOR_BUFFER_BIT); 
-
-        glDisable(GL_DEPTH_TEST); // IMPORTANT: Disable depth for 2D Quad
-        glUseProgram(screenShader);
-        glBindVertexArray(quadVAO);
-        // Bind FBO texture
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, texColorBuffer); 
-        glUniform1i(glGetUniformLocation(screenShader, "u_ScreenTexture"), 0);
-        glUniform1i(glGetUniformLocation(screenShader, "u_IsGameOver"), isGameOver ? 1 : 0);
-        glUniform1f(glGetUniformLocation(screenShader, "u_GameOverTime"), gameOverTimer);
-        glUniform1f(glGetUniformLocation(screenShader, "u_Time"), globalTime);
-        
-        glDrawArrays(GL_TRIANGLES, 0, 6);
 
         // Restore State for next frame's Pass 1
         glClearColor(skyColor.r, skyColor.g, skyColor.b, skyColor.a);

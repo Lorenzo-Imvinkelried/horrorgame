@@ -1,0 +1,238 @@
+#include "ItemDropSystem.h"
+#include "inventory/InventorySystem.h"
+#include "inventory/ItemRegistry.h"
+#include "combat/DamageNumberSystem.h"
+#include "ParticleSystem.h"
+#include "WorldGenerator.h"
+#include "ModelLoader.h"
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
+#include <iostream>
+
+ItemDropSystem::ItemDropSystem() {
+    initMesh();
+}
+
+ItemDropSystem::~ItemDropSystem() {
+    if (m_itemVAO != 0) {
+        glDeleteVertexArrays(1, &m_itemVAO);
+        m_itemVAO = 0;
+    }
+    if (m_itemVBO != 0) {
+        glDeleteBuffers(1, &m_itemVBO);
+        m_itemVBO = 0;
+    }
+}
+
+void ItemDropSystem::initMesh() {
+    // Generar un modelo 3D estilizado de bolsa de botín / gema para los objetos arrojados
+    std::vector<BoxDef> boxes;
+    // Base de la bolsa de botín
+    boxes.push_back({ glm::vec3(0.0f, 0.20f, 0.0f), glm::vec3(0.40f, 0.35f, 0.40f), glm::vec3(0.0f), glm::vec3(0.75f, 0.65f, 0.30f), "LootPouch" });
+    // Cuello de amarre
+    boxes.push_back({ glm::vec3(0.0f, 0.42f, 0.0f), glm::vec3(0.24f, 0.12f, 0.24f), glm::vec3(0.0f), glm::vec3(0.35f, 0.20f, 0.10f), "TieRope" });
+    // Cima de la bolsa
+    boxes.push_back({ glm::vec3(0.0f, 0.52f, 0.0f), glm::vec3(0.30f, 0.10f, 0.30f), glm::vec3(0.0f), glm::vec3(0.70f, 0.60f, 0.25f), "PouchTop" });
+    // Gema mágica brillante en el centro
+    boxes.push_back({ glm::vec3(0.0f, 0.24f, 0.21f), glm::vec3(0.12f, 0.12f, 0.06f), glm::vec3(0.0f), glm::vec3(0.20f, 0.85f, 0.95f), "GemLock" });
+
+    std::vector<float> verts;
+    ModelLoader::GenerateMesh(boxes, verts);
+    m_itemVertexCount = verts.size() / 11;
+
+    glGenVertexArrays(1, &m_itemVAO);
+    glGenBuffers(1, &m_itemVBO);
+    glBindVertexArray(m_itemVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_itemVBO);
+    glBufferData(GL_ARRAY_BUFFER, verts.size() * sizeof(float), verts.data(), GL_STATIC_DRAW);
+
+    // Formato Vertex: Pos(3), Color(3), UV(2), Normal(3) -> 11 floats
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)(8 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+
+    glBindVertexArray(0);
+}
+
+void ItemDropSystem::SpawnDrop(const ItemInstance& item, glm::vec3 pos, glm::vec3 initialVelocity) {
+    if (!item.IsValid()) return;
+
+    WorldItemDrop drop;
+    drop.instance = item;
+    drop.position = pos + glm::vec3(0.0f, 0.4f, 0.0f);
+    
+    if (glm::length(initialVelocity) > 0.01f) {
+        drop.velocity = initialVelocity;
+    } else {
+        float vx = (rand() % 100 / 50.0f - 1.0f) * 1.8f;
+        float vz = (rand() % 100 / 50.0f - 1.0f) * 1.8f;
+        float vy = 3.2f + (rand() % 50 / 50.0f) * 1.5f;
+        drop.velocity = glm::vec3(vx, vy, vz);
+    }
+    
+    drop.rotationYaw = static_cast<float>(rand() % 360);
+    drop.bobTimer = (rand() % 100 / 100.0f) * 6.28f;
+    drop.lifetime = 0.0f;
+    drop.isCollected = false;
+
+    m_drops.push_back(drop);
+}
+
+void ItemDropSystem::SpawnDrops(const std::vector<ItemInstance>& items, glm::vec3 pos) {
+    for (const auto& item : items) {
+        SpawnDrop(item, pos);
+    }
+}
+
+void ItemDropSystem::Update(float deltaTime, glm::vec3 playerPos, InventorySystem& inventory, 
+                           DamageNumberSystem& damageNumbers, ParticleSystem& particles) 
+{
+    for (auto it = m_drops.begin(); it != m_drops.end();) {
+        it->lifetime += deltaTime;
+        it->rotationYaw += 80.0f * deltaTime;
+        it->bobTimer += deltaTime * 3.5f;
+
+        // Físicas de caída parabólica
+        if (glm::length(it->velocity) > 0.05f) {
+            it->position += it->velocity * deltaTime;
+            it->velocity.y -= 12.0f * deltaTime; // Gravedad
+            it->velocity.x *= (1.0f - 2.0f * deltaTime);
+            it->velocity.z *= (1.0f - 2.0f * deltaTime);
+
+            float groundY = WorldGenerator::GetHeight(it->position.x, it->position.z) + 0.15f;
+            if (it->position.y <= groundY) {
+                it->position.y = groundY;
+                it->velocity = glm::vec3(0.0f);
+            }
+        }
+
+        // Atracción magnética si el jugador está muy cerca (< 1.6m)
+        float distToPlayer = glm::distance(playerPos + glm::vec3(0, 0.8f, 0), it->position);
+        if (distToPlayer < 1.6f) {
+            // Recogida automática magnética
+            int remaining = 0;
+            bool added = inventory.GetInventory().AddInstance(it->instance, &remaining);
+            if (added) {
+                const ItemDefinition& def = ItemRegistry::Get().Get(it->instance.id);
+
+                // Partículas mágicas de recolección
+                glm::vec4 sparkCol = glm::vec4(0.2f, 0.95f, 0.35f, 1.0f);
+                if (def.rarity == ItemRarity::RARE) sparkCol = glm::vec4(0.2f, 0.5f, 1.0f, 1.0f);
+                else if (def.rarity == ItemRarity::EPIC) sparkCol = glm::vec4(0.8f, 0.2f, 0.95f, 1.0f);
+                else if (def.rarity == ItemRarity::LEGENDARY) sparkCol = glm::vec4(1.0f, 0.85f, 0.2f, 1.0f);
+
+                for (int i = 0; i < 16; ++i) {
+                    glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.0f, (rand()%100/50.0f + 0.4f)*2.4f, (rand()%100/50.0f - 1.0f)*2.0f);
+                    particles.SpawnParticle(it->position + glm::vec3(0, 0.3f, 0), pVel, sparkCol, 0.14f, 0.7f, -6.0f);
+                }
+
+                if (remaining > 0) {
+                    it->instance.quantity = static_cast<uint16_t>(remaining);
+                    ++it;
+                    continue;
+                } else {
+                    it = m_drops.erase(it);
+                    continue;
+                }
+            }
+        }
+
+        // Partículas suaves de brillo mientras flota
+        if (rand() % 60 == 0) {
+            const ItemDefinition& def = ItemRegistry::Get().Get(it->instance.id);
+            glm::vec4 sparkCol = (def.rarity >= ItemRarity::RARE) ? glm::vec4(0.9f, 0.8f, 0.2f, 0.8f) : glm::vec4(0.4f, 0.8f, 0.9f, 0.6f);
+            particles.SpawnParticle(it->position + glm::vec3(0, 0.2f, 0), glm::vec3(0, 0.4f, 0), sparkCol, 0.08f, 0.6f, 0.0f);
+        }
+
+        ++it;
+    }
+}
+
+std::string ItemDropSystem::GetNearbyPrompt(glm::vec3 playerPos) const {
+    float closestDist = 2.8f;
+    const WorldItemDrop* bestDrop = nullptr;
+
+    for (const auto& drop : m_drops) {
+        float dist = glm::distance(playerPos, drop.position);
+        if (dist < closestDist) {
+            closestDist = dist;
+            bestDrop = &drop;
+        }
+    }
+
+    if (bestDrop != nullptr) {
+        const ItemDefinition& def = ItemRegistry::Get().Get(bestDrop->instance.id);
+        return "[F] RECOGER " + def.name + " (x" + std::to_string(bestDrop->instance.quantity) + ")";
+    }
+
+    return "";
+}
+
+bool ItemDropSystem::TryCollectNearby(glm::vec3 playerPos, InventorySystem& inventory, 
+                                      DamageNumberSystem& damageNumbers, ParticleSystem& particles) 
+{
+    float closestDist = 3.0f;
+    auto bestIt = m_drops.end();
+
+    for (auto it = m_drops.begin(); it != m_drops.end(); ++it) {
+        float dist = glm::distance(playerPos, it->position);
+        if (dist < closestDist) {
+            closestDist = dist;
+            bestIt = it;
+        }
+    }
+
+    if (bestIt != m_drops.end()) {
+        int remaining = 0;
+        bool added = inventory.GetInventory().AddInstance(bestIt->instance, &remaining);
+        if (added) {
+            const ItemDefinition& def = ItemRegistry::Get().Get(bestIt->instance.id);
+
+            // Partículas de recolección
+            for (int i = 0; i < 20; ++i) {
+                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.4f, (rand()%100/50.0f + 0.5f)*2.8f, (rand()%100/50.0f - 1.0f)*2.4f);
+                particles.SpawnParticle(bestIt->position + glm::vec3(0, 0.3f, 0), pVel, glm::vec4(0.2f, 0.95f, 0.35f, 1.0f), 0.15f, 0.8f, -6.0f);
+            }
+
+            if (remaining > 0) {
+                bestIt->instance.quantity = static_cast<uint16_t>(remaining);
+            } else {
+                m_drops.erase(bestIt);
+            }
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void ItemDropSystem::Render(GLuint shaderProgram, glm::vec3 cameraPos) {
+    if (m_drops.empty() || m_itemVAO == 0) return;
+
+    glBindVertexArray(m_itemVAO);
+
+    for (const auto& drop : m_drops) {
+        float bobOffset = sin(drop.bobTimer) * 0.08f;
+        glm::vec3 renderPos = drop.position + glm::vec3(0.0f, bobOffset, 0.0f);
+
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, renderPos);
+        model = glm::rotate(model, glm::radians(drop.rotationYaw), glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(1.2f));
+
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_itemVertexCount));
+    }
+
+    glBindVertexArray(0);
+}
+
+void ItemDropSystem::Clear() {
+    m_drops.clear();
+}

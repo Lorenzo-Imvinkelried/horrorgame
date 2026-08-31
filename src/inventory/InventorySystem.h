@@ -1,12 +1,19 @@
 #pragma once
+
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <vector>
 #include <string>
-#include "CombatStats.h"
+#include "ItemTypes.h"
+#include "ItemRegistry.h"
+#include "Inventory.h"
+#include "Equipment.h"
+#include "ItemActionSystem.h"
+#include "combat/CombatStats.h"
 
+// Enum de compatibilidad hacia atrás
 enum class ItemType {
-    NONE,
+    NONE = 0,
     POTION_HEALTH,
     POTION_MANA,
     BLOOD_VIAL,
@@ -18,57 +25,44 @@ enum class ItemType {
     ANCIENT_AMULET
 };
 
-enum class EquipSlot {
-    NONE,
-    WEAPON,
-    SHIELD,
-    RING,
-    AMULET
-};
+class Player;
 
-struct InventoryItem {
-    ItemType type = ItemType::NONE;
-    std::string name = "";
-    std::string desc = "";
-    int count = 0;
-    EquipSlot slot = EquipSlot::NONE;
-    int bonusAttack = 0;
-    int bonusDefense = 0;
-    int bonusCrit = 0;
-    int bonusHp = 0;
-    int bonusMp = 0;
-};
-
+/**
+ * @brief InventorySystem: Fachada y gestor de interfaz de usuario para Inventario y Equipamiento.
+ * Conecta el contenedor puro Inventory, el gestor Equipment y el sistema de acciones ItemActionSystem con el renderizado OpenGL.
+ */
 class InventorySystem {
 public:
     InventorySystem();
-    ~InventorySystem();
+    ~InventorySystem() = default;
 
+    // --- Métodos de compatibilidad y conveniencia ---
     bool AddItem(ItemType type, int count = 1);
-    bool UseOrEquipSlot(int slotIndex, PlayerStats& stats);
-    bool UnequipSlot(EquipSlot slot, PlayerStats& stats);
+    bool AddItem(ItemId id, int count = 1);
+    bool AddItemByString(const std::string& stringId, int count = 1);
+
+    bool UseOrEquipSlot(int slotIndex, Player* player, ParticleSystem* particles = nullptr, DamageNumberSystem* damageNumbers = nullptr);
+    bool UnequipSlot(EquipSlot slot, Player* player);
     void RecalculateBonuses(PlayerStats& stats);
 
-    void RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY);
-    bool HandleMouseClick(float mouseNdcX, float mouseNdcY, PlayerStats& stats, bool& closeRequested);
+    // --- Renderizado e Interacción con UI (Inventario + Equipamiento) ---
+    void RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY, const PlayerStats* playerStats = nullptr);
+    bool HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, bool& closeRequested);
 
-    bool IsOpen() const { return m_isOpen; }
-    void ToggleOpen() { m_isOpen = !m_isOpen; }
-    void SetOpen(bool open) { m_isOpen = open; }
+    bool IsOpen() const noexcept { return m_isOpen; }
+    void ToggleOpen() noexcept { m_isOpen = !m_isOpen; }
+    void SetOpen(bool open) noexcept { m_isOpen = open; }
 
-    static InventoryItem CreateItem(ItemType type, int count = 1);
+    Inventory& GetInventory() noexcept { return m_inventory; }
+    const Inventory& GetInventory() const noexcept { return m_inventory; }
+
+    Equipment& GetEquipment() noexcept { return m_equipment; }
+    const Equipment& GetEquipment() const noexcept { return m_equipment; }
 
 private:
-    bool m_isOpen = false;
-    std::vector<InventoryItem> m_slots; // 12 slots (4x3 grid)
-    InventoryItem m_equipWeapon;
-    InventoryItem m_equipShield;
-    InventoryItem m_equipRing;
-    InventoryItem m_equipAmulet;
+    ItemId mapLegacyType(ItemType type) const;
 
-    int m_appliedBonusAttack = 0;
-    int m_appliedBonusDefense = 0;
-    int m_appliedBonusCrit = 0;
-    int m_appliedBonusHp = 0;
-    int m_appliedBonusMp = 0;
+    bool m_isOpen = false;
+    Inventory m_inventory;  // Contenedor de 16 slots
+    Equipment m_equipment;  // Gestor de equipo
 };
