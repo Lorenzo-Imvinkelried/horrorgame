@@ -1,5 +1,7 @@
 #include "InventorySystem.h"
 #include "Player.h"
+#include "ParticleSystem.h"
+#include "world/ItemDropSystem.h"
 #include "ui/UIRenderer.h"
 #include <algorithm>
 #include <iostream>
@@ -96,6 +98,36 @@ void InventorySystem::RecalculateBonuses(PlayerStats& stats) {
     stats.RecalculateStats(m_equipment.CalculateTotalStats());
 }
 
+#include "world/ItemDropSystem.h"
+
+bool InventorySystem::DropSlot(int slotIndex, Player* player, ItemDropSystem* itemDropSystem, ParticleSystem* particles) {
+    if (slotIndex < 0 || slotIndex >= m_inventory.GetSlotCount() || player == nullptr) return false;
+
+    ItemInstance item = m_inventory.GetSlot(slotIndex);
+    if (!item.IsValid()) return false;
+
+    ItemInstance toDrop = item;
+    toDrop.quantity = 1;
+
+    if (m_inventory.RemoveItemAt(slotIndex, 1)) {
+        glm::vec3 dropPos = player->Position + glm::vec3(sin(glm::radians(player->ModelYaw)), 0.0f, cos(glm::radians(player->ModelYaw))) * 1.5f + glm::vec3(0, 0.4f, 0);
+        if (itemDropSystem != nullptr) {
+            itemDropSystem->SpawnDrop(toDrop, dropPos);
+        }
+        if (particles != nullptr) {
+            for (int i = 0; i < 16; ++i) {
+                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*1.8f, (rand()%100/50.0f + 0.5f)*2.0f, (rand()%100/50.0f - 1.0f)*1.8f);
+                particles->SpawnParticle(dropPos, pVel, glm::vec4(0.95f, 0.75f, 0.15f, 1.0f), 0.14f, 0.6f, -9.8f);
+            }
+        }
+        if (!m_inventory.GetSlot(slotIndex).IsValid()) {
+            m_selectedSlot = -1;
+        }
+        return true;
+    }
+    return false;
+}
+
 void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY, const PlayerStats* playerStats) {
     if (!m_isOpen) return;
 
@@ -105,7 +137,7 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     UIRenderer::DrawWin98Window(uiProgram, uiVAO, uiVBO, pX, pY, pW, pH, "INVENTARIO Y EQUIPO - ARPG FAT16.EXE", true);
 
     float fSize = 0.024f;
-    std::string hoveredDesc = "SELECCIONA UN OBJETO O RANURA PARA VER DETALLES";
+    std::string hoveredDesc = "SELECCIONA UN OBJETO O RANURA PARA VER DETALLES / TIRAR AL SUELO";
 
     // -------------------------------------------------------------------------
     // PANEL IZQUIERDO: MOCHILA DE ALMACENAMIENTO (4x4 = 16 Slots)
@@ -128,14 +160,15 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
             float sy = startY - r * (slotH + padY);
 
             bool hovered = (mouseNdcX >= sx && mouseNdcX <= sx + slotW && mouseNdcY >= sy && mouseNdcY <= sy + slotH);
+            bool isSelected = (m_selectedSlot == idx);
             const auto& item = m_inventory.GetSlot(idx);
 
-            UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, sx, sy, slotW, slotH, "", hovered, fSize);
+            UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, sx, sy, slotW, slotH, "", hovered || isSelected, fSize);
 
             if (item.IsValid()) {
                 const ItemDefinition& def = ItemRegistry::Get().Get(item.id);
 
-                if (hovered) {
+                if (hovered || isSelected) {
                     hoveredDesc = def.name + " (" + def.description + ")";
                 }
 
@@ -148,6 +181,10 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
 
                 std::string shortName = def.name.substr(0, 7);
                 UIRenderer::DrawString(shortName, sx + 0.012f, sy + slotH - 0.050f, 0.022f, textCol, uiProgram, uiVAO, uiVBO);
+
+                if (isSelected) {
+                    UIRenderer::DrawString("[SEL]", sx + slotW - 0.065f, sy + slotH - 0.050f, 0.018f, glm::vec3(0.85f, 0.45f, 0.05f), uiProgram, uiVAO, uiVBO);
+                }
 
                 if (item.quantity > 1) {
                     std::string cntStr = "x" + std::to_string(item.quantity);
@@ -233,20 +270,33 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     UIRenderer::DrawString(s3.str(), eqPanelX + 0.015f, statsY + statsH - 0.175f, 0.020f, glm::vec3(0.12f, 0.45f, 0.65f), uiProgram, uiVAO, uiVBO);
 
     // -------------------------------------------------------------------------
-    // BARRA INFERIOR DE INSPECCIÓN Y BOTÓN CERRAR
+    // BARRA INFERIOR DE INSPECCIÓN Y BOTONES DE ACCIÓN
     // -------------------------------------------------------------------------
     float infoY = pY + 0.10f;
     float infoW = pW - 0.07f, infoH = 0.075f;
     UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, pX + 0.035f, infoY, infoW, infoH, "", false, fSize);
     UIRenderer::DrawString(hoveredDesc, pX + 0.05f, infoY + 0.024f, 0.022f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
 
-    float closeW = 0.38f, closeH = 0.065f;
-    float closeX = pX + (pW - closeW) * 0.5f, closeY = pY + 0.020f;
+    // Botón [TIRAR OBJETO (DROP)]
+    float dropW = 0.42f, dropH = 0.065f;
+    float dropX = pX + 0.035f, dropY = pY + 0.020f;
+    bool dropHov = (mouseNdcX >= dropX && mouseNdcX <= dropX + dropW && mouseNdcY >= dropY && mouseNdcY <= dropY + dropH);
+    UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, dropX, dropY, dropW, dropH, "TIRAR OBJETO (DROP)", dropHov, 0.020f);
+
+    // Botón [USAR / EQUIPAR]
+    float useW = 0.52f, useH = 0.065f;
+    float useX = dropX + dropW + 0.035f, useY = pY + 0.020f;
+    bool useHov = (mouseNdcX >= useX && mouseNdcX <= useX + useW && mouseNdcY >= useY && mouseNdcY <= useY + useH);
+    UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, useX, useY, useW, useH, "USAR / EQUIPAR OBJETO", useHov, 0.020f);
+
+    // Botón [CERRAR (I)]
+    float closeW = 0.48f, closeH = 0.065f;
+    float closeX = pX + pW - closeW - 0.035f, closeY = pY + 0.020f;
     bool closeHov = (mouseNdcX >= closeX && mouseNdcX <= closeX + closeW && mouseNdcY >= closeY && mouseNdcY <= closeY + closeH);
-    UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, closeX, closeY, closeW, closeH, "CERRAR (I)", closeHov, 0.022f);
+    UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, closeX, closeY, closeW, closeH, "CERRAR VENTANA (I)", closeHov, 0.020f);
 }
 
-bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, bool& closeRequested) {
+bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, ItemDropSystem* itemDropSystem, bool& closeRequested) {
     if (!m_isOpen || player == nullptr) return false;
 
     float pW = 1.62f, pH = 1.48f;
@@ -261,9 +311,29 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
         return true;
     }
 
-    // Botón inferior [CERRAR (I)]
-    float closeW = 0.38f, closeH = 0.065f;
-    float closeX = pX + (pW - closeW) * 0.5f, closeY = pY + 0.020f;
+    // Botón [TIRAR OBJETO (DROP)]
+    float dropW = 0.42f, dropH = 0.065f;
+    float dropX = pX + 0.035f, dropY = pY + 0.020f;
+    if (mouseNdcX >= dropX && mouseNdcX <= dropX + dropW && mouseNdcY >= dropY && mouseNdcY <= dropY + dropH) {
+        if (m_selectedSlot >= 0 && m_selectedSlot < m_inventory.GetSlotCount()) {
+            DropSlot(m_selectedSlot, player, itemDropSystem, particles);
+            return true;
+        }
+    }
+
+    // Botón [USAR / EQUIPAR OBJETO]
+    float useW = 0.52f, useH = 0.065f;
+    float useX = dropX + dropW + 0.035f, useY = pY + 0.020f;
+    if (mouseNdcX >= useX && mouseNdcX <= useX + useW && mouseNdcY >= useY && mouseNdcY <= useY + useH) {
+        if (m_selectedSlot >= 0 && m_selectedSlot < m_inventory.GetSlotCount()) {
+            UseOrEquipSlot(m_selectedSlot, player, particles, damageNumbers);
+            return true;
+        }
+    }
+
+    // Botón inferior [CERRAR VENTANA (I)]
+    float closeW = 0.48f, closeH = 0.065f;
+    float closeX = pX + pW - closeW - 0.035f, closeY = pY + 0.020f;
     if (mouseNdcX >= closeX && mouseNdcX <= closeX + closeW && mouseNdcY >= closeY && mouseNdcY <= closeY + closeH) {
         closeRequested = true;
         return true;
@@ -283,7 +353,12 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
             float sy = startY - r * (slotH + padY);
 
             if (mouseNdcX >= sx && mouseNdcX <= sx + slotW && mouseNdcY >= sy && mouseNdcY <= sy + slotH) {
-                UseOrEquipSlot(idx, player, particles, damageNumbers);
+                if (m_selectedSlot == idx) {
+                    // Doble clic / re-clic usa o equipa
+                    UseOrEquipSlot(idx, player, particles, damageNumbers);
+                } else {
+                    m_selectedSlot = idx;
+                }
                 return true;
             }
         }

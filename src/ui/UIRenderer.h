@@ -58,10 +58,15 @@ public:
 
     void RenderStunWarning(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float stunTimer);
 
+    void RenderQuickbarHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, const class Inventory& inventory);
+
+    void RenderPauseMenu(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX = -999.0f, float mouseNdcY = -999.0f);
+
     // Mouse Click Handlers
     static bool HandleCharacterPanelClick(float mouseNdcX, float mouseNdcY, PlayerStats& stats, bool& closeRequested);
     static bool HandleFatalErrorClick(float mouseNdcX, float mouseNdcY, FatalErrorPopup& popup);
     static bool HandleLoreModalClick(float mouseNdcX, float mouseNdcY, LoreDocumentModal& modal);
+    static bool HandlePauseMenuClick(float mouseNdcX, float mouseNdcY, bool& resumeRequested);
 
     static void DrawWin98Window(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, 
                                 float x, float y, float w, float h, 

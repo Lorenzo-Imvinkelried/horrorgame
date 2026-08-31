@@ -650,3 +650,86 @@ void UIRenderer::RenderBuildingHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     DrawString(row2, x + 0.025f, y + 0.020f, 0.021f, glm::vec3(0.15f, 0.45f, 0.15f), uiProgram, uiVAO, uiVBO);
 }
 
+#include "inventory/Inventory.h"
+
+void UIRenderer::RenderQuickbarHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, const Inventory& inventory) {
+    float slotW = 0.18f, slotH = 0.115f;
+    float pad = 0.015f;
+    int numSlots = 4;
+    float totalW = numSlots * slotW + (numSlots - 1) * pad;
+    float startX = -totalW * 0.5f;
+    float startY = -0.96f;
+
+    struct QuickSlotDef {
+        std::string keyLabel;
+        std::string nameLabel;
+        std::string itemId;
+        std::string altItemId;
+        glm::vec3 textColor;
+    };
+
+    QuickSlotDef slots[4] = {
+        { "[1]", "SALUD",  "potion_health", "",             glm::vec3(0.85f, 0.15f, 0.15f) },
+        { "[2]", "MANA",   "potion_mana",   "",             glm::vec3(0.15f, 0.45f, 0.90f) },
+        { "[3]", "SANGRE", "blood_vial",    "dragon_heart", glm::vec3(0.70f, 0.12f, 0.65f) },
+        { "[4]", "CARNE",  "raw_meat",      "",             glm::vec3(0.75f, 0.45f, 0.15f) }
+    };
+
+    for (int i = 0; i < numSlots; ++i) {
+        float sx = startX + i * (slotW + pad);
+        DrawWin98Button(uiProgram, uiVAO, uiVBO, sx, startY, slotW, slotH, "", false, 0.022f);
+
+        int count = inventory.CountItemByString(slots[i].itemId);
+        if (!slots[i].altItemId.empty()) {
+            count += inventory.CountItemByString(slots[i].altItemId);
+        }
+
+        // Key label [1]
+        DrawString(slots[i].keyLabel, sx + 0.012f, startY + slotH - 0.040f, 0.022f, glm::vec3(0.10f, 0.12f, 0.20f), uiProgram, uiVAO, uiVBO);
+        // Name label
+        DrawString(slots[i].nameLabel, sx + 0.055f, startY + slotH - 0.040f, 0.019f, slots[i].textColor, uiProgram, uiVAO, uiVBO);
+
+        // Count label
+        std::string cntStr = "x" + std::to_string(count);
+        glm::vec3 cntColor = (count > 0) ? glm::vec3(0.08f, 0.50f, 0.15f) : glm::vec3(0.65f, 0.65f, 0.70f);
+        DrawString(cntStr, sx + 0.035f, startY + 0.018f, 0.022f, cntColor, uiProgram, uiVAO, uiVBO);
+    }
+}
+
+void UIRenderer::RenderPauseMenu(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY) {
+    // Oscurecer fondo translúcido
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, -1.0f, -1.0f, 2.0f, 2.0f, glm::vec3(0.02f, 0.02f, 0.05f));
+
+    float mW = 0.90f, mH = 0.55f;
+    float mX = -mW * 0.5f, mY = -mH * 0.5f;
+
+    DrawWin98Window(uiProgram, uiVAO, uiVBO, mX, mY, mW, mH, "SISTEMA EN PAUSA - FAT16_OS.EXE", false);
+
+    DrawString("PARTIDA EN PAUSA", mX + 0.22f, mY + mH - 0.13f, 0.034f, glm::vec3(0.85f, 0.15f, 0.15f), uiProgram, uiVAO, uiVBO);
+    DrawString("La simulacion del mundo ha sido congelada.", mX + 0.06f, mY + mH - 0.22f, 0.022f, glm::vec3(0.12f, 0.12f, 0.18f), uiProgram, uiVAO, uiVBO);
+    DrawString("Pulsa [ESC] o haz clic en el boton para volver al juego.", mX + 0.06f, mY + mH - 0.28f, 0.021f, glm::vec3(0.35f, 0.35f, 0.40f), uiProgram, uiVAO, uiVBO);
+
+    // Botón [REANUDAR PARTIDA]
+    float btnW = 0.50f, btnH = 0.080f;
+    float btnX = mX + (mW - btnW) * 0.5f;
+    float btnY = mY + 0.040f;
+    bool hovered = (mouseNdcX >= btnX && mouseNdcX <= btnX + btnW && mouseNdcY >= btnY && mouseNdcY <= btnY + btnH);
+
+    DrawWin98Button(uiProgram, uiVAO, uiVBO, btnX, btnY, btnW, btnH, "REANUDAR PARTIDA (ESC)", hovered, 0.024f);
+}
+
+bool UIRenderer::HandlePauseMenuClick(float mouseNdcX, float mouseNdcY, bool& resumeRequested) {
+    float mW = 0.90f, mH = 0.55f;
+    float mX = -mW * 0.5f, mY = -mH * 0.5f;
+
+    float btnW = 0.50f, btnH = 0.080f;
+    float btnX = mX + (mW - btnW) * 0.5f;
+    float btnY = mY + 0.040f;
+
+    if (mouseNdcX >= btnX && mouseNdcX <= btnX + btnW && mouseNdcY >= btnY && mouseNdcY <= btnY + btnH) {
+        resumeRequested = true;
+        return true;
+    }
+    return false;
+}
+

@@ -12,4 +12,5 @@ public:
     static LootTable GetEnemyLoot(EnemyType type, int nightLevel = 1);
     static LootTable GetDeerLoot(DeerSize size);
     static LootTable GetChestLoot(int chestTier = 1);
+    static LootTable GetDragonLoot();
 };

@@ -35,6 +35,44 @@ void EnemyMob::updateModelMesh() {
         hipPivotR = glm::vec3( 0.16f, 0.75f, 0.0f);
     }
 
+    // Cinemática de Ataque Melee (Windup -> Golpe Rasante -> Recuperación)
+    float rightArmRotX = armSwing;
+    float rightArmRotY = 0.0f;
+    float rightArmRotZ = 0.0f;
+
+    float leftArmRotX = -armSwing;
+    float leftArmRotY = 0.0f;
+    float leftArmRotZ = 0.0f;
+
+    if (m_attackAnimProgress > 0.0f) {
+        if (m_attackAnimProgress < 0.35f) {
+            // Fase 1: Cargar arma hacia atrás y elevar el brazo (Windup)
+            float t = m_attackAnimProgress / 0.35f;
+            rightArmRotX = glm::mix(armSwing, -1.65f, t);
+            rightArmRotY = glm::mix(0.0f, 0.50f, t);
+            rightArmRotZ = glm::mix(0.0f, -0.30f, t);
+
+            // Brazo izquierdo se prepara para equilibrar
+            leftArmRotX = glm::mix(-armSwing, 0.65f, t);
+        } else if (m_attackAnimProgress < 0.65f) {
+            // Fase 2: Tajo descendente violento con el arma hacia adelante (Slash / Chop)
+            float t = (m_attackAnimProgress - 0.35f) / 0.30f;
+            rightArmRotX = glm::mix(-1.65f, 1.45f, t);
+            rightArmRotY = glm::mix(0.50f, -0.60f, t);
+            rightArmRotZ = glm::mix(-0.30f, 0.35f, t);
+
+            leftArmRotX = glm::mix(0.65f, -0.85f, t);
+        } else {
+            // Fase 3: Retorno suave a la postura de guardia (Recovery)
+            float t = (m_attackAnimProgress - 0.65f) / 0.35f;
+            rightArmRotX = glm::mix(1.45f, armSwing, t);
+            rightArmRotY = glm::mix(-0.60f, 0.0f, t);
+            rightArmRotZ = glm::mix(0.35f, 0.0f, t);
+
+            leftArmRotX = glm::mix(-0.85f, -armSwing, t);
+        }
+    }
+
     for (const auto& box : m_baseBoxes) {
         glm::mat4 M = glm::mat4(1.0f);
         M = glm::translate(M, box.Pos);
@@ -72,12 +110,14 @@ void EnemyMob::updateModelMesh() {
         }
         // 3. Brazo Izquierdo + Armas de mano izquierda
         else if (box.Name == "ARM_L" || box.Name == "SHIELD" || box.Name == "CLAW_L" || box.Name.find("AXE_L") != std::string::npos || box.Name.find("DAGGER_L") != std::string::npos || box.Name.find("BOW") != std::string::npos) {
-            glm::mat4 armM = glm::translate(glm::mat4(1.0f), shoulderPivotL) * glm::rotate(glm::mat4(1.0f), -armSwing, glm::vec3(1,0,0)) * glm::translate(glm::mat4(1.0f), -shoulderPivotL) * M;
+            glm::mat4 armRot = glm::rotate(glm::mat4(1.0f), leftArmRotZ, glm::vec3(0,0,1)) * glm::rotate(glm::mat4(1.0f), leftArmRotY, glm::vec3(0,1,0)) * glm::rotate(glm::mat4(1.0f), leftArmRotX, glm::vec3(1,0,0));
+            glm::mat4 armM = glm::translate(glm::mat4(1.0f), shoulderPivotL) * armRot * glm::translate(glm::mat4(1.0f), -shoulderPivotL) * M;
             transformedBoxes.push_back({ armM, finalColor });
         }
-        // 4. Brazo Derecho + Armas de mano derecha
+        // 4. Brazo Derecho + Armas de mano derecha (Espadas, Hachas, Mandobles, Garras, Mazas)
         else if (box.Name == "ARM_R" || box.Name.find("SWORD") != std::string::npos || box.Name.find("AXE_R") != std::string::npos || box.Name.find("CLAYMORE") != std::string::npos || box.Name.find("DAGGER_R") != std::string::npos || box.Name.find("ARROW") != std::string::npos || box.Name == "CLUB" || box.Name.find("STAFF") != std::string::npos || box.Name == "ORB" || box.Name == "CLAW_R") {
-            glm::mat4 armM = glm::translate(glm::mat4(1.0f), shoulderPivotR) * glm::rotate(glm::mat4(1.0f), armSwing, glm::vec3(1,0,0)) * glm::translate(glm::mat4(1.0f), -shoulderPivotR) * M;
+            glm::mat4 armRot = glm::rotate(glm::mat4(1.0f), rightArmRotZ, glm::vec3(0,0,1)) * glm::rotate(glm::mat4(1.0f), rightArmRotY, glm::vec3(0,1,0)) * glm::rotate(glm::mat4(1.0f), rightArmRotX, glm::vec3(1,0,0));
+            glm::mat4 armM = glm::translate(glm::mat4(1.0f), shoulderPivotR) * armRot * glm::translate(glm::mat4(1.0f), -shoulderPivotR) * M;
             transformedBoxes.push_back({ armM, finalColor });
         }
         // 5. Capa
@@ -88,7 +128,8 @@ void EnemyMob::updateModelMesh() {
         }
         // 6. Torso / Cabeza con balanceo orgánico
         else {
-            glm::mat4 bodyM = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, torsoBob, 0.0f)) * M;
+            float attackTorsoTwist = (m_attackAnimProgress > 0.0f && m_attackAnimProgress < 0.65f) ? -0.22f : 0.0f;
+            glm::mat4 bodyM = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, torsoBob, 0.0f)) * glm::rotate(glm::mat4(1.0f), attackTorsoTwist, glm::vec3(0,1,0)) * M;
             transformedBoxes.push_back({ bodyM, finalColor });
         }
     }

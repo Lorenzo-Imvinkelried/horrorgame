@@ -1,5 +1,10 @@
 #include "ProjectileSystem.h"
 #include "Player.h"
+#include "Monster.h"
+#include "PassiveMob.h"
+#include "EnemyMob.h"
+#include "WaterMonster.h"
+#include "entities/Dragon.h"
 #include "WorldGenerator.h"
 #include "ModelLoader.h"
 #include <glm/gtc/matrix_transform.hpp>
@@ -48,7 +53,7 @@ void ProjectileSystem::initMesh() {
     glBindVertexArray(0);
 }
 
-void ProjectileSystem::Spawn(glm::vec3 startPos, glm::vec3 targetPos, float speed, int damage, glm::vec4 color) {
+void ProjectileSystem::Spawn(glm::vec3 startPos, glm::vec3 targetPos, float speed, int damage, glm::vec4 color, bool isFromPlayer) {
     glm::vec3 toTarget = targetPos - startPos;
     float dist = glm::length(toTarget);
     if (dist < 0.001f) return;
@@ -61,13 +66,20 @@ void ProjectileSystem::Spawn(glm::vec3 startPos, glm::vec3 targetPos, float spee
     p.color = color;
     p.lifeTimer = 0.0f;
     p.maxLife = 5.0f;
-    p.radius = 0.45f;
+    p.radius = isFromPlayer ? 0.85f : 0.45f;
     p.active = true;
+    p.isFromPlayer = isFromPlayer;
 
     m_projectiles.push_back(p);
 }
 
-void ProjectileSystem::Update(float deltaTime, Player* player, ParticleSystem& particles, DamageNumberSystem& damageNumbers) {
+void ProjectileSystem::Update(float deltaTime, Player* player, ParticleSystem& particles, DamageNumberSystem& damageNumbers,
+                             std::vector<std::unique_ptr<Monster>>* monsters,
+                             std::vector<std::unique_ptr<PassiveMob>>* passiveMobs,
+                             std::vector<std::unique_ptr<EnemyMob>>* enemyMobs,
+                             std::vector<std::unique_ptr<WaterMonster>>* waterMonsters,
+                             Dragon* dragon) 
+{
     for (auto it = m_projectiles.begin(); it != m_projectiles.end();) {
         if (!it->active) {
             it = m_projectiles.erase(it);
@@ -102,25 +114,135 @@ void ProjectileSystem::Update(float deltaTime, Player* player, ParticleSystem& p
             continue;
         }
 
-        // Check collision with Player
-        if (player != nullptr) {
-            glm::vec3 playerCenter = player->Position + glm::vec3(0.0f, 1.0f, 0.0f);
-            float distToPlayer = glm::distance(it->pos, playerCenter);
+        bool hitSomething = false;
 
-            if (distToPlayer < (it->radius + 0.65f)) {
-                // Apply player damage
-                player->TakeDamage(it->damage, damageNumbers);
-
-                // Burst impact particles
-                for (int i = 0; i < 22; ++i) {
-                    glm::vec3 explodeVel((rand()%100/50.0f - 1.0f)*3.5f, (rand()%100/50.0f + 0.2f)*3.5f, (rand()%100/50.0f - 1.0f)*3.5f);
-                    particles.SpawnParticle(it->pos, explodeVel, it->color, 0.16f, 0.75f, -9.8f);
-                    particles.SpawnParticle(it->pos, explodeVel * 0.5f, glm::vec4(1.0f, 0.9f, 0.2f, 1.0f), 0.12f, 0.5f, -4.0f);
+        if (it->isFromPlayer) {
+            // Check collision with Dragon
+            if (dragon != nullptr && dragon->IsAlive() && !dragon->IsDying()) {
+                float dist = glm::distance(it->pos, dragon->GetPosition() + glm::vec3(0, 1.5f, 0));
+                if (dist < (it->radius + dragon->GetRadius())) {
+                    bool killed = dragon->TakeDamage(it->damage, it->pos, particles, damageNumbers, player);
+                    damageNumbers.SpawnDamage(dragon->GetPosition() + glm::vec3(0, 2.0f, 0), it->damage, true);
+                    if (killed && player != nullptr) {
+                        bool lvlUp = false;
+                        player->Stats.AddExp(dragon->GetExpReward(), lvlUp);
+                        damageNumbers.SpawnExp(dragon->GetPosition() + glm::vec3(0, 2.5f, 0), dragon->GetExpReward());
+                        if (lvlUp) damageNumbers.SpawnLevelUp(player->Position);
+                    }
+                    hitSomething = true;
                 }
+            }
 
+            // Check collision with EnemyMobs
+            if (!hitSomething && enemyMobs != nullptr) {
+                for (auto& enemy : *enemyMobs) {
+                    if (!enemy->IsAlive()) continue;
+                    float dist = glm::distance(it->pos, enemy->GetPosition() + glm::vec3(0, 1.2f, 0));
+                    if (dist < (it->radius + enemy->GetRadius())) {
+                        bool killed = enemy->TakeDamage(it->damage, it->pos, particles, player, damageNumbers);
+                        damageNumbers.SpawnDamage(enemy->GetPosition() + glm::vec3(0, 1.6f, 0), it->damage, false);
+                        if (killed && player != nullptr) {
+                            bool lvlUp = false;
+                            player->Stats.AddExp(enemy->GetExpReward(), lvlUp);
+                            damageNumbers.SpawnExp(enemy->GetPosition() + glm::vec3(0, 1.8f, 0), enemy->GetExpReward());
+                            if (lvlUp) damageNumbers.SpawnLevelUp(player->Position);
+                        }
+                        hitSomething = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check collision with Monsters
+            if (!hitSomething && monsters != nullptr) {
+                for (auto& m : *monsters) {
+                    if (m->IsDead()) continue;
+                    float dist = glm::distance(it->pos, m->GetPosition() + glm::vec3(0, 1.4f, 0));
+                    if (dist < (it->radius + 1.8f)) {
+                        m->TakeDamage((float)it->damage, false);
+                        damageNumbers.SpawnDamage(m->GetPosition() + glm::vec3(0, 1.6f, 0), it->damage, false);
+                        if (m->IsDead() && player != nullptr) {
+                            bool lvlUp = false;
+                            player->Stats.AddExp(85, lvlUp);
+                            damageNumbers.SpawnExp(m->GetPosition() + glm::vec3(0, 1.8f, 0), 85);
+                            if (lvlUp) damageNumbers.SpawnLevelUp(player->Position);
+                        }
+                        hitSomething = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check collision with WaterMonsters
+            if (!hitSomething && waterMonsters != nullptr) {
+                for (auto& wm : *waterMonsters) {
+                    if (!wm->IsAlive()) continue;
+                    float dist = glm::distance(it->pos, wm->GetPosition() + glm::vec3(0, 1.0f, 0));
+                    if (dist < (it->radius + wm->GetRadius())) {
+                        bool killed = wm->TakeDamage(it->damage, it->pos, particles, player, damageNumbers);
+                        damageNumbers.SpawnDamage(wm->GetPosition() + glm::vec3(0, 1.5f, 0), it->damage, false);
+                        if (killed && player != nullptr) {
+                            bool lvlUp = false;
+                            player->Stats.AddExp(wm->GetExpReward(), lvlUp);
+                            damageNumbers.SpawnExp(wm->GetPosition() + glm::vec3(0, 1.7f, 0), wm->GetExpReward());
+                            if (lvlUp) damageNumbers.SpawnLevelUp(player->Position);
+                        }
+                        hitSomething = true;
+                        break;
+                    }
+                }
+            }
+
+            // Check collision with PassiveMobs
+            if (!hitSomething && passiveMobs != nullptr) {
+                for (auto& deer : *passiveMobs) {
+                    if (!deer->IsAlive()) continue;
+                    float dist = glm::distance(it->pos, deer->GetPosition() + glm::vec3(0, 1.0f, 0));
+                    if (dist < (it->radius + deer->GetRadius())) {
+                        bool killed = deer->TakeDamage(it->damage, it->pos, particles, player, damageNumbers);
+                        damageNumbers.SpawnDamage(deer->GetPosition() + glm::vec3(0, 1.4f, 0), it->damage, false);
+                        if (killed && player != nullptr) {
+                            bool lvlUp = false;
+                            player->Stats.AddExp(deer->GetExpReward(), lvlUp);
+                            damageNumbers.SpawnExp(deer->GetPosition() + glm::vec3(0, 1.6f, 0), deer->GetExpReward());
+                            if (lvlUp) damageNumbers.SpawnLevelUp(player->Position);
+                        }
+                        hitSomething = true;
+                        break;
+                    }
+                }
+            }
+
+            if (hitSomething) {
+                for (int i = 0; i < 20; ++i) {
+                    glm::vec3 explodeVel((rand()%100/50.0f - 1.0f)*3.2f, (rand()%100/50.0f + 0.3f)*3.4f, (rand()%100/50.0f - 1.0f)*3.2f);
+                    particles.SpawnParticle(it->pos, explodeVel, it->color, 0.16f, 0.7f, -8.0f);
+                }
                 it->active = false;
                 it = m_projectiles.erase(it);
                 continue;
+            }
+        } else {
+            // Check collision with Player
+            if (player != nullptr) {
+                glm::vec3 playerCenter = player->Position + glm::vec3(0.0f, 1.0f, 0.0f);
+                float distToPlayer = glm::distance(it->pos, playerCenter);
+
+                if (distToPlayer < (it->radius + 0.65f)) {
+                    // Apply player damage
+                    player->TakeDamage(it->damage, damageNumbers);
+
+                    // Burst impact particles
+                    for (int i = 0; i < 22; ++i) {
+                        glm::vec3 explodeVel((rand()%100/50.0f - 1.0f)*3.5f, (rand()%100/50.0f + 0.2f)*3.5f, (rand()%100/50.0f - 1.0f)*3.5f);
+                        particles.SpawnParticle(it->pos, explodeVel, it->color, 0.16f, 0.75f, -9.8f);
+                        particles.SpawnParticle(it->pos, explodeVel * 0.5f, glm::vec4(1.0f, 0.9f, 0.2f, 1.0f), 0.12f, 0.5f, -4.0f);
+                    }
+
+                    it->active = false;
+                    it = m_projectiles.erase(it);
+                    continue;
+                }
             }
         }
 

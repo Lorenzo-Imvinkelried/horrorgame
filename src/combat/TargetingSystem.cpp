@@ -3,6 +3,7 @@
 #include "Monster.h"
 #include "EnemyMob.h"
 #include "WaterMonster.h"
+#include "entities/Dragon.h"
 #include "WorldGenerator.h"
 
 void TargetingSystem::initRingMesh() {
@@ -71,6 +72,9 @@ glm::vec3 TargetingSystem::GetTargetPosition() const {
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) {
         return m_waterTarget->GetPosition();
     }
+    if (m_targetType == TargetType::DRAGON && m_dragonTarget) {
+        return m_dragonTarget->GetPosition();
+    }
     return glm::vec3(0.0f);
 }
 
@@ -79,6 +83,7 @@ std::string TargetingSystem::GetTargetName() const {
     if (m_targetType == TargetType::MONSTER) return "Monstruo de las Sombras";
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetName();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetName();
+    if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetName();
     return "";
 }
 
@@ -87,6 +92,7 @@ int TargetingSystem::GetTargetLevel() const {
     if (m_targetType == TargetType::MONSTER) return 3;
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetLevel();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetLevel();
+    if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetLevel();
     return 1;
 }
 
@@ -95,6 +101,7 @@ int TargetingSystem::GetTargetCurrentHP() const {
     if (m_targetType == TargetType::MONSTER && m_monsterTarget) return (int)m_monsterTarget->GetHealth();
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetCurrentHP();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetCurrentHP();
+    if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetCurrentHP();
     return 0;
 }
 
@@ -103,6 +110,7 @@ int TargetingSystem::GetTargetMaxHP() const {
     if (m_targetType == TargetType::MONSTER && m_monsterTarget) return 150;
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetMaxHP();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetMaxHP();
+    if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetMaxHP();
     return 100;
 }
 
@@ -111,6 +119,7 @@ bool TargetingSystem::IsTargetAlive() const {
     if (m_targetType == TargetType::MONSTER && m_monsterTarget) return !m_monsterTarget->IsDead();
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->IsAlive();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->IsAlive();
+    if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->IsAlive();
     return false;
 }
 
@@ -128,7 +137,7 @@ void TargetingSystem::Update(float deltaTime, glm::vec3 playerPos, bool manualIn
         float dist = glm::distance(glm::vec2(playerPos.x, playerPos.z), glm::vec2(tPos.x, tPos.z));
 
         // Leash range
-        if (dist > 85.0f) {
+        if (dist > 180.0f) {
             ClearTarget();
         }
     }
@@ -149,6 +158,8 @@ void TargetingSystem::RenderTargetRing(GLuint shaderProgram) {
         scale = m_passiveTarget->GetRadius();
     } else if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) {
         scale = m_waterTarget->GetRadius();
+    } else if (m_targetType == TargetType::DRAGON && m_dragonTarget) {
+        scale = m_dragonTarget->GetRadius() * 1.5f;
     }
 
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");

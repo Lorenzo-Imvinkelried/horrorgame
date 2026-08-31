@@ -83,8 +83,9 @@ void Player::TakeDamage(int dmg, DamageNumberSystem& damageNumbers, FatalErrorPo
 
 #include "EnemyMob.h"
 #include "WaterMonster.h"
+#include "entities/Dragon.h"
 
-void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers) {
+void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers, Dragon* dragon) {
     if (StunTimer > 0.0f) {
         StunTimer -= deltaTime;
         m_isBlocking = false;
@@ -104,6 +105,27 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
             
             // In 3rd person use character facing, in 1st person use camera Front
             glm::vec3 forwardDir = IsThirdPerson ? glm::vec3(sin(glm::radians(ModelYaw)), 0.0f, cos(glm::radians(ModelYaw))) : Front;
+
+            // 0. Check Dragon
+            if (dragon != nullptr && dragon->IsAlive() && !dragon->IsDying()) {
+                glm::vec3 dPos = dragon->GetPosition();
+                float dist = glm::distance(Position, dPos);
+                if (dist < (4.8f + dragon->GetRadius())) {
+                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 12, 5);
+                    if (dmgResult.IsHit) {
+                        bool killed = dragon->TakeDamage(dmgResult.Damage, Position, particles, damageNumbers, this);
+                        damageNumbers.SpawnDamage(dPos + glm::vec3(0, 2.0f, 0), dmgResult.Damage, dmgResult.IsCrit);
+
+                        if (killed) {
+                            bool leveledUp = false;
+                            int expGain = dragon->GetExpReward();
+                            Stats.AddExp(expGain, leveledUp);
+                            damageNumbers.SpawnExp(dPos + glm::vec3(0, 2.5f, 0), expGain);
+                            if (leveledUp) damageNumbers.SpawnLevelUp(Position);
+                        }
+                    }
+                }
+            }
             
             // 1. Check aggressive shadow monsters
             for (auto& mPtr : monsters) {
@@ -620,6 +642,35 @@ void Player::ProcessMouseMovement(float xoffset, float yoffset) {
     }
 
     updateCameraVectors();
+}
+
+void Player::ProcessMouseScroll(float yoffset) {
+    if (yoffset == 0.0f) return;
+    
+    // Zoom in (yoffset > 0) or Zoom out (yoffset < 0)
+    if (yoffset > 0.0f) {
+        // Zoom in
+        if (!IsThirdPerson) {
+            // Already in closest 1st person view
+            return;
+        }
+        CameraDistance -= yoffset * 0.65f;
+        if (CameraDistance < MinCameraDistance) {
+            CameraDistance = MinCameraDistance;
+            IsThirdPerson = false; // Smooth switch to 1st person when zooming in all the way!
+        }
+    } else {
+        // Zoom out
+        if (!IsThirdPerson) {
+            IsThirdPerson = true;
+            CameraDistance = MinCameraDistance + 0.5f;
+        } else {
+            CameraDistance -= yoffset * 0.65f;
+            if (CameraDistance > MaxCameraDistance) {
+                CameraDistance = MaxCameraDistance;
+            }
+        }
+    }
 }
 
 void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManager, FootprintSystem& footprints) {

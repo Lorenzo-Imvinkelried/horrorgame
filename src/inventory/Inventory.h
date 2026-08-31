@@ -36,6 +36,9 @@ public:
     int FindFirstSlot(ItemId id) const;
     int FindFreeSlot() const;
 
+    int FindItemByString(const std::string& stringId) const;
+    int CountItemByString(const std::string& stringId) const;
+
     const ItemInstance& GetSlot(int index) const;
     ItemInstance& GetSlot(int index);
     const std::vector<ItemInstance>& GetAllSlots() const noexcept { return m_slots; }

@@ -227,6 +227,18 @@ int Inventory::FindFirstSlot(ItemId id) const {
     return -1;
 }
 
+int Inventory::FindItemByString(const std::string& stringId) const {
+    ItemId id = ItemRegistry::Get().FindId(stringId);
+    if (!id.IsValid()) return -1;
+    return FindFirstSlot(id);
+}
+
+int Inventory::CountItemByString(const std::string& stringId) const {
+    ItemId id = ItemRegistry::Get().FindId(stringId);
+    if (!id.IsValid()) return 0;
+    return GetItemCount(id);
+}
+
 int Inventory::FindFreeSlot() const {
     for (int i = 0; i < static_cast<int>(m_slots.size()); ++i) {
         if (m_slots[i].IsEmpty()) return i;

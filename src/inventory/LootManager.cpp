@@ -118,3 +118,21 @@ LootTable LootManager::GetChestLoot(int chestTier) {
 
     return table;
 }
+
+LootTable LootManager::GetDragonLoot() {
+    LootTable table;
+    // Botín Legendario del Dragón:
+    // 100% Corazón de Dragón (x1 - x2) y Escamas de Dragón (x5 - x12)
+    table.AddGuaranteedByString("dragon_heart", 1, 2);
+    table.AddGuaranteedByString("dragon_scale", 5, 12);
+    table.AddGuaranteedByString("potion_health", 3, 5);
+    table.AddGuaranteedByString("potion_mana", 2, 4);
+
+    // Piezas de armadura y armas legendarias con alta probabilidad
+    table.AddIndependentDropByString("dragon_helm", 0.85f, 1, 1);
+    table.AddIndependentDropByString("dragon_chest", 0.75f, 1, 1);
+    table.AddIndependentDropByString("dragon_scale_ring", 0.90f, 1, 1);
+    table.AddIndependentDropByString("dragon_bone_bow", 0.80f, 1, 1);
+
+    return table;
+}

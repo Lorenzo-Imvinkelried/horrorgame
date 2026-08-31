@@ -22,6 +22,7 @@ public:
     ~Player();
 
     void ProcessMouseMovement(float xoffset, float yoffset);
+    void ProcessMouseScroll(float yoffset);
     void ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManager, FootprintSystem& footprints);
     void Update(float deltaTime); // Physics update
     void Render(GLuint shaderProgram);
@@ -49,6 +50,8 @@ public:
     // 3rd Person Attributes
     bool IsThirdPerson = true;
     float CameraDistance = 3.5f;
+    float MinCameraDistance = 1.0f;
+    float MaxCameraDistance = 12.0f;
     float CameraPitch = 0.0f;
     float ModelYaw = 0.0f;
     float WalkAnimTimer = 0.0f;
@@ -99,7 +102,7 @@ public:
     bool IsAttacking() const { return m_attackTimer > 0.0f; }
     bool IsBlocking() const { return m_isBlocking; }
     void TakeDamage(int dmg, DamageNumberSystem& damageNumbers, struct FatalErrorPopup* fatalError = nullptr, bool shadowAegis = false);
-    void UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<class EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<class WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers);
+    void UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<class EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<class WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers, class Dragon* dragon = nullptr);
 
 private:
     void updateCameraVectors();

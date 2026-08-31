@@ -8,6 +8,7 @@
 #include "PassiveMob.h"
 #include "EnemyMob.h"
 #include "WaterMonster.h"
+#include "entities/Dragon.h"
 #include "ui/UIRenderer.h"
 #include <cmath>
 #include <iostream>
@@ -38,7 +39,8 @@ bool SpellSystem::CastBloodBurst(Player& player,
                                 std::vector<std::unique_ptr<EnemyMob>>& enemyMobs,
                                 std::vector<std::unique_ptr<WaterMonster>>& waterMonsters,
                                 ParticleSystem& particles, 
-                                DamageNumberSystem& damageNumbers) 
+                                DamageNumberSystem& damageNumbers,
+                                Dragon* dragon) 
 {
     const int manaCost = 25;
     if (m_cdBloodBurst > 0.0f || player.Stats.CurrentMP < manaCost || player.StunTimer > 0.0f) return false;
@@ -54,7 +56,22 @@ bool SpellSystem::CastBloodBurst(Player& player,
     }
 
     int spellDamage = 34 + player.Stats.Strength / 2 + player.Stats.Intelligence / 3;
-    float aoeRadius = 7.5f;
+    float aoeRadius = 8.5f;
+
+    // Damage dragon if in AoE range
+    if (dragon != nullptr && dragon->IsAlive() && !dragon->IsDying()) {
+        float d = glm::distance(player.Position, dragon->GetPosition());
+        if (d < (aoeRadius + dragon->GetRadius())) {
+            bool killed = dragon->TakeDamage(spellDamage, player.Position, particles, damageNumbers, &player);
+            damageNumbers.SpawnDamage(dragon->GetPosition() + glm::vec3(0, 2.5f, 0), spellDamage, true);
+            if (killed) {
+                bool lvlUp = false;
+                player.Stats.AddExp(dragon->GetExpReward(), lvlUp);
+                damageNumbers.SpawnExp(dragon->GetPosition() + glm::vec3(0, 3.0f, 0), dragon->GetExpReward());
+                if (lvlUp) damageNumbers.SpawnLevelUp(player.Position);
+            }
+        }
+    }
 
     // Damage all nearby monsters
     for (auto& mPtr : monsters) {

@@ -143,11 +143,32 @@ void ItemDropSystem::Update(float deltaTime, glm::vec3 playerPos, InventorySyste
             }
         }
 
-        // Partículas suaves de brillo mientras flota
-        if (rand() % 60 == 0) {
+        // Partículas temáticas y haz de luz vertical continuo según rareza
+        if ((rand() % 100) < 40) {
             const ItemDefinition& def = ItemRegistry::Get().Get(it->instance.id);
-            glm::vec4 sparkCol = (def.rarity >= ItemRarity::RARE) ? glm::vec4(0.9f, 0.8f, 0.2f, 0.8f) : glm::vec4(0.4f, 0.8f, 0.9f, 0.6f);
-            particles.SpawnParticle(it->position + glm::vec3(0, 0.2f, 0), glm::vec3(0, 0.4f, 0), sparkCol, 0.08f, 0.6f, 0.0f);
+            glm::vec4 sparkCol(0.9f, 0.9f, 0.9f, 0.8f);
+            float beamH = 1.2f;
+
+            if (def.rarity == ItemRarity::UNCOMMON) {
+                sparkCol = glm::vec4(0.2f, 0.85f, 0.3f, 0.9f);
+                beamH = 1.6f;
+            } else if (def.rarity == ItemRarity::RARE) {
+                sparkCol = glm::vec4(0.15f, 0.45f, 0.98f, 0.95f);
+                beamH = 2.4f;
+            } else if (def.rarity == ItemRarity::EPIC) {
+                sparkCol = glm::vec4(0.75f, 0.20f, 0.95f, 1.0f);
+                beamH = 3.2f;
+            } else if (def.rarity == ItemRarity::LEGENDARY) {
+                sparkCol = ((rand() % 2) == 0) ? glm::vec4(1.0f, 0.75f, 0.1f, 1.0f) : glm::vec4(1.0f, 0.25f, 0.1f, 1.0f);
+                beamH = 4.5f;
+            }
+
+            glm::vec3 emitPos = it->position + glm::vec3(
+                (rand() % 100 / 50.0f - 1.0f) * 0.25f,
+                0.1f + (rand() % 100 / 100.0f) * beamH,
+                (rand() % 100 / 50.0f - 1.0f) * 0.25f
+            );
+            particles.SpawnParticle(emitPos, glm::vec3(0, 0.6f, 0), sparkCol, 0.12f, 0.65f, 0.0f);
         }
 
         ++it;
@@ -155,7 +176,7 @@ void ItemDropSystem::Update(float deltaTime, glm::vec3 playerPos, InventorySyste
 }
 
 std::string ItemDropSystem::GetNearbyPrompt(glm::vec3 playerPos) const {
-    float closestDist = 2.8f;
+    float closestDist = 3.2f;
     const WorldItemDrop* bestDrop = nullptr;
 
     for (const auto& drop : m_drops) {
@@ -177,7 +198,7 @@ std::string ItemDropSystem::GetNearbyPrompt(glm::vec3 playerPos) const {
 bool ItemDropSystem::TryCollectNearby(glm::vec3 playerPos, InventorySystem& inventory, 
                                       DamageNumberSystem& damageNumbers, ParticleSystem& particles) 
 {
-    float closestDist = 3.0f;
+    float closestDist = 3.2f;
     auto bestIt = m_drops.end();
 
     for (auto it = m_drops.begin(); it != m_drops.end(); ++it) {
@@ -215,18 +236,24 @@ bool ItemDropSystem::TryCollectNearby(glm::vec3 playerPos, InventorySystem& inve
 void ItemDropSystem::Render(GLuint shaderProgram, glm::vec3 cameraPos) {
     if (m_drops.empty() || m_itemVAO == 0) return;
 
+    GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
+
     glBindVertexArray(m_itemVAO);
 
     for (const auto& drop : m_drops) {
-        float bobOffset = sin(drop.bobTimer) * 0.08f;
+        float bobOffset = sin(drop.bobTimer) * 0.12f;
         glm::vec3 renderPos = drop.position + glm::vec3(0.0f, bobOffset, 0.0f);
 
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, renderPos);
         model = glm::rotate(model, glm::radians(drop.rotationYaw), glm::vec3(0.0f, 1.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(1.2f));
+        model = glm::scale(model, glm::vec3(1.35f));
 
-        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
         glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_itemVertexCount));
     }
 

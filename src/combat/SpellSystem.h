@@ -15,6 +15,8 @@ class PassiveMob;
 class EnemyMob;
 class WaterMonster;
 
+class Dragon;
+
 class SpellSystem {
 public:
     SpellSystem();
@@ -28,7 +30,8 @@ public:
                         std::vector<std::unique_ptr<EnemyMob>>& enemyMobs,
                         std::vector<std::unique_ptr<WaterMonster>>& waterMonsters,
                         ParticleSystem& particles, 
-                        DamageNumberSystem& damageNumbers);
+                        DamageNumberSystem& damageNumbers,
+                        Dragon* dragon = nullptr);
 
     bool CastShadowAegis(Player& player, ParticleSystem& particles);
 

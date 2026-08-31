@@ -910,12 +910,20 @@ int main() {
     bool isBuildMode = false;
     BuildingType currentBuildType = BuildingType::WALL;
     float currentBuildYaw = 0.0f;
-
     bool isShovelMode = false;
+    bool isGamePaused = false;
 
     auto handleKeyAction = [&](int key) {
 #ifndef __EMSCRIPTEN__
-        if (key == sf::Keyboard::Escape) window.close();
+        if (key == sf::Keyboard::Escape) {
+            if (inventory.IsOpen()) inventory.SetOpen(false);
+            else if (isCharacterPanelOpen) isCharacterPanelOpen = false;
+            else if (fatalError.active) fatalError.active = false;
+            else if (loreModal.active) loreModal.active = false;
+            else if (isBuildMode) isBuildMode = false;
+            else if (isShovelMode) isShovelMode = false;
+            else isGamePaused = !isGamePaused;
+        }
         if (key == sf::Keyboard::R) {
             if (isBuildMode) {
                 currentBuildYaw = fmod(currentBuildYaw + 90.0f, 360.0f);
@@ -995,12 +1003,28 @@ int main() {
                     }
                 }
             }
+        } else if (!isBuildMode && !isCharacterPanelOpen) {
+            // Quickbar Consumables [1] Health, [2] Mana, [3] Blood/Heart, [4] Meat
+            if (key == sf::Keyboard::Num1 || key == sf::Keyboard::Numpad1) {
+                int s = inventory.GetInventory().FindItemByString("potion_health");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            } else if (key == sf::Keyboard::Num2 || key == sf::Keyboard::Numpad2) {
+                int s = inventory.GetInventory().FindItemByString("potion_mana");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            } else if (key == sf::Keyboard::Num3 || key == sf::Keyboard::Numpad3) {
+                int s = inventory.GetInventory().FindItemByString("dragon_heart");
+                if (s == -1) s = inventory.GetInventory().FindItemByString("blood_vial");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            } else if (key == sf::Keyboard::Num4 || key == sf::Keyboard::Numpad4) {
+                int s = inventory.GetInventory().FindItemByString("raw_meat");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            }
         }
         if (key == sf::Keyboard::I || key == sf::Keyboard::Tab) {
             inventory.ToggleOpen();
         }
         if (key == sf::Keyboard::T) {
-            spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
+            spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers, &dragon);
         }
         if (key == sf::Keyboard::G && !isBuildMode && !isShovelMode) {
             skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
@@ -1018,6 +1042,15 @@ int main() {
             }
         }
 #else
+        if (key == GLFW_KEY_ESCAPE) {
+            if (inventory.IsOpen()) inventory.SetOpen(false);
+            else if (isCharacterPanelOpen) isCharacterPanelOpen = false;
+            else if (fatalError.active) fatalError.active = false;
+            else if (loreModal.active) loreModal.active = false;
+            else if (isBuildMode) isBuildMode = false;
+            else if (isShovelMode) isShovelMode = false;
+            else isGamePaused = !isGamePaused;
+        }
         if (key == GLFW_KEY_R) {
             if (isBuildMode) {
                 currentBuildYaw = fmod(currentBuildYaw + 90.0f, 360.0f);
@@ -1097,12 +1130,28 @@ int main() {
                     }
                 }
             }
+        } else if (!isBuildMode && !isCharacterPanelOpen) {
+            // Quickbar Consumables [1] Health, [2] Mana, [3] Blood/Heart, [4] Meat
+            if (key == GLFW_KEY_1 || key == GLFW_KEY_KP_1) {
+                int s = inventory.GetInventory().FindItemByString("potion_health");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            } else if (key == GLFW_KEY_2 || key == GLFW_KEY_KP_2) {
+                int s = inventory.GetInventory().FindItemByString("potion_mana");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            } else if (key == GLFW_KEY_3 || key == GLFW_KEY_KP_3) {
+                int s = inventory.GetInventory().FindItemByString("dragon_heart");
+                if (s == -1) s = inventory.GetInventory().FindItemByString("blood_vial");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            } else if (key == GLFW_KEY_4 || key == GLFW_KEY_KP_4) {
+                int s = inventory.GetInventory().FindItemByString("raw_meat");
+                if (s != -1) inventory.UseOrEquipSlot(s, &player, &particles, &damageNumbers);
+            }
         }
         if (key == GLFW_KEY_I || key == GLFW_KEY_TAB) {
             inventory.ToggleOpen();
         }
         if (key == GLFW_KEY_T) {
-            spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
+            spellSystem.CastBloodBurst(player, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers, &dragon);
         }
         if (key == GLFW_KEY_G && !isBuildMode) {
             skinningSystem.TrySkin(player.Position, passiveMobs, inventory, player, damageNumbers, particles, scentSystem);
@@ -1130,6 +1179,24 @@ int main() {
             s_EmscriptenKeyHandler(key);
         }
     });
+
+    static std::function<void(double, double)> s_ScrollHandler;
+    s_ScrollHandler = [&](double, double yoffset) {
+        player.ProcessMouseScroll((float)yoffset);
+    };
+    glfwSetScrollCallback(window, [](GLFWwindow*, double xoffset, double yoffset) {
+        if (s_ScrollHandler) s_ScrollHandler(xoffset, yoffset);
+    });
+
+    static std::function<void(int)> s_FocusHandler;
+    s_FocusHandler = [&](int focused) {
+        if (focused == GLFW_FALSE) {
+            isGamePaused = true;
+        }
+    };
+    glfwSetWindowFocusCallback(window, [](GLFWwindow*, int focused) {
+        if (s_FocusHandler) s_FocusHandler(focused);
+    });
 #endif
 
 #ifndef __EMSCRIPTEN__
@@ -1154,6 +1221,10 @@ int main() {
         sf::Event event;
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) window.close();
+            if (event.type == sf::Event::LostFocus) isGamePaused = true;
+            if (event.type == sf::Event::MouseWheelScrolled) {
+                player.ProcessMouseScroll(event.mouseWheelScroll.delta);
+            }
             if (event.type == sf::Event::KeyPressed) {
                 handleKeyAction(event.key.code);
             }
@@ -1177,6 +1248,10 @@ int main() {
 
         glfwPollEvents();
 #endif
+
+        if (isGamePaused) {
+            deltaTime = 0.0f;
+        }
 
         if (PlatformInput::IsKeyPressed(PlatformInput::Left)) {
             float angle = -2.0f * deltaTime;
@@ -1445,9 +1520,19 @@ int main() {
                 }
             }
 
-            // Left Click: UI Button Clicks, Target Selection & Sword Attack / Build / Dig
+            // Left Click: Pause Menu, UI Button Clicks, Target Selection & Sword / Bow Attack / Build / Dig
             static bool leftWasPressed = false;
             if (leftIsPressed && !leftWasPressed) {
+                // -1. Check Pause Menu
+                if (isGamePaused) {
+                    bool resumeReq = false;
+                    if (UIRenderer::HandlePauseMenuClick(mouseNdcX, mouseNdcY, resumeReq)) {
+                        if (resumeReq) isGamePaused = false;
+                        leftWasPressed = leftIsPressed;
+                        goto skipWorldTargeting;
+                    }
+                }
+
                 // 0. Build Mode Placement
                 if (isBuildMode) {
                     buildingSystem.PlacePiece(currentBuildType, buildPos, currentBuildYaw, &particles);
@@ -1465,7 +1550,7 @@ int main() {
                 // 1. Check UI Modals First
                 if (inventory.IsOpen()) {
                     bool closeReq = false;
-                    if (inventory.HandleMouseClick(mouseNdcX, mouseNdcY, &player, &particles, &damageNumbers, closeReq)) {
+                    if (inventory.HandleMouseClick(mouseNdcX, mouseNdcY, &player, &particles, &damageNumbers, &itemDropSystem, closeReq)) {
                         if (closeReq) inventory.SetOpen(false);
                         leftWasPressed = leftIsPressed;
                         goto skipWorldTargeting;
@@ -1513,13 +1598,25 @@ int main() {
                 Monster* bestMonster = nullptr;
                 EnemyMob* bestEnemy = nullptr;
                 WaterMonster* bestWater = nullptr;
+                Dragon* bestDragon = nullptr;
                 // Darkness & Flashlight logic on targeting:
-                float maxTargetingRange = 42.0f;
+                float maxTargetingRange = 45.0f;
                 bool isNightTimeNow = (dayCycleTime >= 120.0f && dayCycleTime <= 228.0f);
                 if (isNightTimeNow && !gameCfg.flashlightEnabled) {
                     maxTargetingRange = 4.0f; // Blind targeting in dark mist without flashlight!
                 }
                 float closestDist = maxTargetingRange;
+
+                // Check Dragon target
+                if (dragon.IsAlive() && !dragon.IsDying()) {
+                    glm::vec3 dPos = dragon.GetPosition() + glm::vec3(0, 1.8f, 0);
+                    glm::vec3 toD = glm::normalize(dPos - activeCamPos);
+                    float dot = glm::dot(camForward, toD);
+                    float dist = glm::distance(player.Position, dragon.GetPosition());
+                    if (dot > 0.72f && dist < 160.0f) {
+                        bestDragon = &dragon;
+                    }
+                }
 
                 for (auto& deer : passiveMobs) {
                     if (!deer->IsAlive()) continue;
@@ -1534,6 +1631,7 @@ int main() {
                         bestMonster = nullptr;
                         bestEnemy = nullptr;
                         bestWater = nullptr;
+                        bestDragon = nullptr;
                     }
                 }
 
@@ -1550,6 +1648,7 @@ int main() {
                         bestDeer = nullptr;
                         bestMonster = nullptr;
                         bestWater = nullptr;
+                        bestDragon = nullptr;
                     }
                 }
 
@@ -1566,6 +1665,7 @@ int main() {
                         bestDeer = nullptr;
                         bestMonster = nullptr;
                         bestEnemy = nullptr;
+                        bestDragon = nullptr;
                     }
                 }
 
@@ -1582,10 +1682,13 @@ int main() {
                         bestDeer = nullptr;
                         bestEnemy = nullptr;
                         bestWater = nullptr;
+                        bestDragon = nullptr;
                     }
                 }
 
-                if (bestWater) {
+                if (bestDragon) {
+                    targeting.SelectDragon(bestDragon);
+                } else if (bestWater) {
                     targeting.SelectWaterMonster(bestWater);
                 } else if (bestEnemy) {
                     targeting.SelectEnemy(bestEnemy);
@@ -1595,9 +1698,49 @@ int main() {
                     targeting.SelectMonster(bestMonster);
                 }
 
-                // Swing sword immediately on click (even while running/sprinting)
-                if (player.TryAttack()) {
-                    horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
+                // Attack Execution: Bow Shooting or Sword Melee
+                if (!isGamePaused) {
+                    const ItemInstance& mhItem = inventory.GetEquipment().GetEquipped(EquipSlot::MAIN_HAND);
+                    bool isHoldingBow = false;
+                    if (mhItem.IsValid()) {
+                        const ItemDefinition& def = ItemRegistry::Get().Get(mhItem.id);
+                        if (def.iconId == "bow" || def.stringId == "hunting_bow" || def.stringId == "dragon_bone_bow") {
+                            isHoldingBow = true;
+                        }
+                    }
+
+                    if (isHoldingBow) {
+                        if (player.TryAttack()) {
+                            glm::vec3 spawnPos = player.Position + glm::vec3(0, 1.3f, 0);
+                            glm::vec3 aimTarget = spawnPos + player.Front * 45.0f;
+                            if (targeting.HasTarget()) {
+                                aimTarget = targeting.GetTargetPosition() + glm::vec3(0, 1.2f, 0);
+                            }
+
+                            int bonusDmg = 0;
+                            int arrowSlot = inventory.GetInventory().FindItemByString("hunting_arrow");
+                            if (arrowSlot != -1) {
+                                inventory.GetInventory().RemoveItemAt(arrowSlot, 1);
+                                bonusDmg = 12;
+                            }
+
+                            int shotDmg = player.Stats.Attack + bonusDmg;
+                            glm::vec4 arrowCol = (mhItem.id == ItemRegistry::Get().FindId("dragon_bone_bow"))
+                                ? glm::vec4(1.0f, 0.45f, 0.1f, 1.0f)
+                                : glm::vec4(0.95f, 0.88f, 0.55f, 1.0f);
+
+                            projectiles.Spawn(spawnPos, aimTarget, 38.0f, shotDmg, arrowCol, true);
+
+                            for (int i = 0; i < 10; ++i) {
+                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*1.2f, (rand()%100/50.0f + 0.2f)*1.5f, (rand()%100/50.0f - 1.0f)*1.2f);
+                                particles.SpawnParticle(spawnPos, pVel, arrowCol, 0.10f, 0.4f, 0.0f);
+                            }
+                        }
+                    } else {
+                        if (player.TryAttack()) {
+                            horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
+                        }
+                    }
                 }
             }
         skipWorldTargeting:
@@ -1605,9 +1748,42 @@ int main() {
         }
 
         // Holding [Q] attacks constantly respecting attack speed / agility multiplier
-        if (PlatformInput::IsKeyPressed(PlatformInput::Q)) {
-            if (player.TryAttack()) {
-                horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
+        if (PlatformInput::IsKeyPressed(PlatformInput::Q) && !isGamePaused) {
+            const ItemInstance& mhItem = inventory.GetEquipment().GetEquipped(EquipSlot::MAIN_HAND);
+            bool isHoldingBow = false;
+            if (mhItem.IsValid()) {
+                const ItemDefinition& def = ItemRegistry::Get().Get(mhItem.id);
+                if (def.iconId == "bow" || def.stringId == "hunting_bow" || def.stringId == "dragon_bone_bow") {
+                    isHoldingBow = true;
+                }
+            }
+
+            if (isHoldingBow) {
+                if (player.TryAttack()) {
+                    glm::vec3 spawnPos = player.Position + glm::vec3(0, 1.3f, 0);
+                    glm::vec3 aimTarget = spawnPos + player.Front * 45.0f;
+                    if (targeting.HasTarget()) {
+                        aimTarget = targeting.GetTargetPosition() + glm::vec3(0, 1.2f, 0);
+                    }
+
+                    int bonusDmg = 0;
+                    int arrowSlot = inventory.GetInventory().FindItemByString("hunting_arrow");
+                    if (arrowSlot != -1) {
+                        inventory.GetInventory().RemoveItemAt(arrowSlot, 1);
+                        bonusDmg = 12;
+                    }
+
+                    int shotDmg = player.Stats.Attack + bonusDmg;
+                    glm::vec4 arrowCol = (mhItem.id == ItemRegistry::Get().FindId("dragon_bone_bow"))
+                        ? glm::vec4(1.0f, 0.45f, 0.1f, 1.0f)
+                        : glm::vec4(0.95f, 0.88f, 0.55f, 1.0f);
+
+                    projectiles.Spawn(spawnPos, aimTarget, 38.0f, shotDmg, arrowCol, true);
+                }
+            } else {
+                if (player.TryAttack()) {
+                    horrorProps.CheckSwordCut(player.Position, 3.2f, particles);
+                }
             }
         }
 
@@ -1823,6 +1999,14 @@ int main() {
             }
         }
 
+        // Generar botin legendario del Dragon Ancestro al caer
+        if (dragon.IsDead() && !dragon.HasDroppedLoot()) {
+            dragon.SetLootDropped(true);
+            LootTable dTable = LootManager::GetDragonLoot();
+            std::vector<ItemInstance> drops = dTable.GenerateLoot(1.0f);
+            itemDropSystem.SpawnDrops(drops, dragon.GetPosition() + glm::vec3(0, 0.8f, 0));
+        }
+
         // Dynamic Enemy Mobs Spawning & Cleanup (Corrupted Warriors, Giants, Mages)
         static float enemySpawnTimer = 0.0f;
         enemySpawnTimer += deltaTime;
@@ -1918,8 +2102,8 @@ int main() {
             buildingSystem.CheckCollision(enemy->GetPositionRef(), enemy->GetRadius(), 2.0f, ePush);
         }
 
-        // Update Flying Magic Projectiles
-        projectiles.Update(deltaTime, &player, particles, damageNumbers);
+        // Update Flying Magic & Bow Projectiles
+        projectiles.Update(deltaTime, &player, particles, damageNumbers, &monsters, &passiveMobs, &enemyMobs, &waterMonsters, &dragon);
 
         // Update Passive Mobs (Forest Deer: Fawns, Adults, Alphas, Demonic)
         for (auto& deer : passiveMobs) {
@@ -1929,13 +2113,13 @@ int main() {
         }
 
         // Update Flying Dragon
-        dragon.Update(deltaTime, player.Position, particles, damageNumbers);
+        dragon.Update(deltaTime, player.Position, particles, damageNumbers, &player);
 
         // Update Floating Combat Numbers (Damage & EXP)
         damageNumbers.Update(deltaTime);
 
-        // Update Melee Combat (Monsters, Passive Mobs, Enemy Mobs, Water Monsters, EXP & Level Up)
-        player.UpdateCombat(deltaTime, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers);
+        // Update Melee Combat (Monsters, Passive Mobs, Enemy Mobs, Water Monsters, Dragon, EXP & Level Up)
+        player.UpdateCombat(deltaTime, monsters, passiveMobs, enemyMobs, waterMonsters, particles, damageNumbers, &dragon);
 
         // Update Critters (Butterflies, Fireflies, Jumping Frogs)
         critters.Update(deltaTime, player.Position);
@@ -2481,13 +2665,21 @@ int main() {
             uiRenderer.RenderFatalErrorModal(uiProgram, uiVAO, uiVBO, fatalError, mouseNdcX, mouseNdcY);
         }
 
+        // Quickbar Hotbar HUD ([1], [2], [3], [4] Potions & Consumables)
+        uiRenderer.RenderQuickbarHUD(uiProgram, uiVAO, uiVBO, inventory.GetInventory());
+
         // Inventory & Equipment Window (I key)
         if (inventory.IsOpen()) {
             inventory.RenderWindow(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY, &player.Stats);
         }
 
-        // Render software cursor on top of UI if any modal is active or in 3rd person
-        bool isUiActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen();
+        // Windows 98 Game Pause Menu (ESC or Window Lost Focus)
+        if (isGamePaused) {
+            uiRenderer.RenderPauseMenu(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY);
+        }
+
+        // Render software cursor on top of UI if any modal is active, paused, or in 3rd person
+        bool isUiActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen() || isGamePaused;
         if (isUiActive || player.IsThirdPerson) {
             UIRenderer::RenderCursor(uiProgram, uiVAO, uiVBO, mouseNdcX, mouseNdcY);
         }

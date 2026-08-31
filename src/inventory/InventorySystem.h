@@ -26,6 +26,7 @@ enum class ItemType {
 };
 
 class Player;
+class ItemDropSystem;
 
 /**
  * @brief InventorySystem: Fachada y gestor de interfaz de usuario para Inventario y Equipamiento.
@@ -43,15 +44,19 @@ public:
 
     bool UseOrEquipSlot(int slotIndex, Player* player, ParticleSystem* particles = nullptr, DamageNumberSystem* damageNumbers = nullptr);
     bool UnequipSlot(EquipSlot slot, Player* player);
+    bool DropSlot(int slotIndex, Player* player, ItemDropSystem* itemDropSystem, ParticleSystem* particles = nullptr);
     void RecalculateBonuses(PlayerStats& stats);
 
     // --- Renderizado e Interacción con UI (Inventario + Equipamiento) ---
     void RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY, const PlayerStats* playerStats = nullptr);
-    bool HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, bool& closeRequested);
+    bool HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, ItemDropSystem* itemDropSystem, bool& closeRequested);
 
     bool IsOpen() const noexcept { return m_isOpen; }
     void ToggleOpen() noexcept { m_isOpen = !m_isOpen; }
     void SetOpen(bool open) noexcept { m_isOpen = open; }
+
+    int GetSelectedSlot() const noexcept { return m_selectedSlot; }
+    void SetSelectedSlot(int s) noexcept { m_selectedSlot = s; }
 
     Inventory& GetInventory() noexcept { return m_inventory; }
     const Inventory& GetInventory() const noexcept { return m_inventory; }
@@ -63,6 +68,7 @@ private:
     ItemId mapLegacyType(ItemType type) const;
 
     bool m_isOpen = false;
+    int m_selectedSlot = -1;
     Inventory m_inventory;  // Contenedor de 16 slots
     Equipment m_equipment;  // Gestor de equipo
 };

@@ -332,5 +332,109 @@ void ItemRegistry::InitDefaultItems() {
         RegisterItem(item);
     }
 
+    // -------------------------------------------------------------------------
+    // 4. SET DE ARMADURA Y EQUIPO LEGENDARIO DE DRAGON (BOSS LOOT)
+    // -------------------------------------------------------------------------
+    {
+        ItemDefinition item;
+        item.stringId = "dragon_helm";
+        item.name = "Yelmo Draconico Ancestral";
+        item.description = "Casco forjado con craneo y cuernos de dragon: +18 DEF / +60 HP / +8 ATQ / +5% CRIT.";
+        item.category = ItemCategory::EQUIPMENT;
+        item.rarity = ItemRarity::LEGENDARY;
+        item.maxStack = 1;
+        item.weight = 3.5f;
+        item.value = 850;
+        item.iconId = "helm_dragon";
+        item.equipSlot = EquipSlot::HEAD;
+        item.equipStats.defense = 18;
+        item.equipStats.maxHpBonus = 60;
+        item.equipStats.attackPower = 8;
+        item.equipStats.critChance = 5;
+        RegisterItem(item);
+    }
+    {
+        ItemDefinition item;
+        item.stringId = "dragon_chest";
+        item.name = "Coraza de Placas Draconicas";
+        item.description = "Pesada armadura forjada con escamas impenetrables: +30 DEF / +100 HP / +10 ATQ / +12% EVA.";
+        item.category = ItemCategory::EQUIPMENT;
+        item.rarity = ItemRarity::LEGENDARY;
+        item.maxStack = 1;
+        item.weight = 7.8f;
+        item.value = 1250;
+        item.iconId = "chest_dragon";
+        item.equipSlot = EquipSlot::CHEST;
+        item.equipStats.defense = 30;
+        item.equipStats.maxHpBonus = 100;
+        item.equipStats.attackPower = 10;
+        item.equipStats.evasion = 12;
+        RegisterItem(item);
+    }
+    {
+        ItemDefinition item;
+        item.stringId = "dragon_scale_ring";
+        item.name = "Sello Igneo del Dragon";
+        item.description = "Sortija tallada en gema volcanica draconica: +14 ATQ / +15% CRIT / +35 MP.";
+        item.category = ItemCategory::EQUIPMENT;
+        item.rarity = ItemRarity::LEGENDARY;
+        item.maxStack = 1;
+        item.weight = 0.05f;
+        item.value = 780;
+        item.iconId = "ring_dragon";
+        item.equipSlot = EquipSlot::RING_1;
+        item.equipStats.attackPower = 14;
+        item.equipStats.critChance = 15;
+        item.equipStats.maxMpBonus = 35;
+        RegisterItem(item);
+    }
+    {
+        ItemDefinition item;
+        item.stringId = "dragon_bone_bow";
+        item.name = "Gran Arco de Hueso de Dragon";
+        item.description = "Arco colosal tensado con tendones de Wyvern: +26 ATQ / +20% CRIT a distancia.";
+        item.category = ItemCategory::EQUIPMENT;
+        item.rarity = ItemRarity::LEGENDARY;
+        item.maxStack = 1;
+        item.weight = 3.2f;
+        item.value = 950;
+        item.iconId = "bow";
+        item.equipSlot = EquipSlot::MAIN_HAND;
+        item.isTwoHanded = true;
+        item.equipStats.attackPower = 26;
+        item.equipStats.critChance = 20;
+        RegisterItem(item);
+    }
+    {
+        ItemDefinition item;
+        item.stringId = "dragon_heart";
+        item.name = "Corazon de Fuego Ancestral";
+        item.description = "Organo llameante de dragon que pulsa con calor eterno. Restaura +120 HP y +80 MP al instante.";
+        item.category = ItemCategory::CONSUMABLE;
+        item.rarity = ItemRarity::LEGENDARY;
+        item.maxStack = 5;
+        item.weight = 1.0f;
+        item.value = 500;
+        item.iconId = "heart_dragon";
+        item.isUsable = true;
+        item.effects.push_back({ ItemEffectType::RESTORE_HP, 120.0f, 0.0f });
+        item.effects.push_back({ ItemEffectType::RESTORE_MP, 80.0f, 0.0f });
+        item.effects.push_back({ ItemEffectType::BUFF_ATTACK, 12.0f, 60.0f }); // Buff de furia +12 ATQ por 60s
+        RegisterItem(item);
+    }
+    {
+        ItemDefinition item;
+        item.stringId = "dragon_scale";
+        item.name = "Escama de Dragon Carmesi";
+        item.description = "Escama legendaria tan dura como el diamante. Material mitico de artesania.";
+        item.category = ItemCategory::MATERIAL;
+        item.rarity = ItemRarity::EPIC;
+        item.maxStack = 50;
+        item.weight = 0.5f;
+        item.value = 150;
+        item.iconId = "scale_dragon";
+        RegisterItem(item);
+    }
+
     std::cout << "[ItemRegistry] Catalogo inicializado con " << GetTotalRegistered() << " definiciones de objetos." << std::endl;
 }
