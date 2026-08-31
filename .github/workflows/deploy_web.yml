@@ -3,9 +3,8 @@ name: Build and Deploy Web Game
 on:
   push:
     branches:
-      - arpg-game
-      - main
       - master
+      - main
   workflow_dispatch:
 
 permissions:
@@ -65,6 +64,7 @@ jobs:
           path: dist_web/
 
   deploy:
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
