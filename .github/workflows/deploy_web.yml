@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -48,6 +48,8 @@ jobs:
           elif [ -f "build_web/index.html" ]; then
             cp -v build_web/index.* dist_web/
           fi
+          cp -v vercel.json dist_web/ || true
+          cp -v netlify.toml dist_web/ || true
           echo "=== Contenido desplegado ==="
           ls -la dist_web/
           head -n 15 dist_web/index.html
@@ -62,6 +64,14 @@ jobs:
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist_web/
+
+      - name: Deploy to gh-pages branch (for Vercel / Netlify automatic deploys)
+        uses: peaceiris/actions-gh-pages@v4
+        if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist_web
+          publish_branch: gh-pages
 
   deploy:
     if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
