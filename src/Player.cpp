@@ -795,6 +795,15 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
             while (diff < -180.0f) diff += 360.0f;
             ModelYaw += diff * glm::clamp(deltaTime * 14.0f, 0.0f, 1.0f);
 
+            // In 3rd Person: Camera smoothly tracks behind player facing direction unless Right Click is held
+            if (IsThirdPerson && !IsFreeOrbiting) {
+                float camDiff = ModelYaw - Yaw;
+                while (camDiff > 180.0f) camDiff -= 360.0f;
+                while (camDiff < -180.0f) camDiff += 360.0f;
+                Yaw += camDiff * glm::clamp(deltaTime * 9.0f, 0.0f, 1.0f);
+                updateCameraVectors();
+            }
+
             // Footprints
             if (IsGrounded) {
                  static float distAccumulator = 0.0f;

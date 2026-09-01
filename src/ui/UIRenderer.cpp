@@ -206,12 +206,12 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
                            bool isBloodMoon) 
 {
     // =========================================================================
-    // 1. WINDOWS 98 SUFFERING_MONITOR.EXE (Top-Left in NDC)
+    // 1. WINDOWS 98 VRAM_DUNGEON_MONITOR.EXE (Top-Left in NDC)
     // =========================================================================
     float pX = -0.96f, pY = 0.50f;
     float pW = 0.60f, pH = 0.46f;
 
-    DrawWin98Window(uiProgram, uiVAO, uiVBO, pX, pY, pW, pH, "SUFFERING_MONITOR.EXE", true);
+    DrawWin98Window(uiProgram, uiVAO, uiVBO, pX, pY, pW, pH, "VRAM_DUNGEON_MONITOR.EXE", true);
 
     // ECG Oscilloscope Screen
     float hpPct = std::clamp((float)stats.CurrentHP / (float)stats.MaxHP, 0.0f, 1.0f);
@@ -254,7 +254,7 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     if (expPct > 0.002f) {
         drawColoredQuad(uiProgram, uiVAO, uiVBO, -0.698f, -0.980f, 1.646f * expPct, 0.020f, glm::vec3(0.06f, 0.14f, 0.48f));
     }
-    std::string taskbarText = "PROGRESO_EXP.SYS | [Q] ATACAR  [F] ANTORCHA  [B] CONSTRUIR  [P] PALA  [I] INV";
+    std::string taskbarText = "VRAM_DUNGEON.SYS | [Q] ATACAR  [F] ANTORCHA  [B] CONSTRUIR  [P] PALA  [I] INV";
     DrawString(taskbarText, -0.97f, -0.980f, 0.021f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
 
     // =========================================================================
@@ -703,7 +703,7 @@ void UIRenderer::RenderPauseMenu(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, f
     float mW = 0.90f, mH = 0.55f;
     float mX = -mW * 0.5f, mY = -mH * 0.5f;
 
-    DrawWin98Window(uiProgram, uiVAO, uiVBO, mX, mY, mW, mH, "SISTEMA EN PAUSA - FAT16_OS.EXE", false);
+    DrawWin98Window(uiProgram, uiVAO, uiVBO, mX, mY, mW, mH, "SISTEMA EN PAUSA - VRAM DUNGEON.EXE", false);
 
     DrawString("PARTIDA EN PAUSA", mX + 0.22f, mY + mH - 0.13f, 0.034f, glm::vec3(0.85f, 0.15f, 0.15f), uiProgram, uiVAO, uiVBO);
     DrawString("La simulacion del mundo ha sido congelada.", mX + 0.06f, mY + mH - 0.22f, 0.022f, glm::vec3(0.12f, 0.12f, 0.18f), uiProgram, uiVAO, uiVBO);

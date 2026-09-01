@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Horror Forest - PS1 Horror Game</title>
+    <title>VRAM DUNGEON - Retro 3D ARPG</title>
     <style>
         * {
             box-sizing: border-box;
@@ -259,8 +259,8 @@
     <!-- Overlay Screen (Loading / Start Menu) -->
     <div id="overlay-screen" class="overlay-screen">
         <div class="title-box">
-            <h1>PS1 HORROR FOREST</h1>
-            <p>RETRO SURVIVAL HORROR</p>
+            <h1>VRAM DUNGEON</h1>
+            <p>RETRO 3D ARPG DUNGEON</p>
         </div>
 
         <!-- Loading Bar -->
@@ -268,7 +268,7 @@
             <div class="progress-bar-bg">
                 <div id="progress-fill" class="progress-bar-fill"></div>
             </div>
-            <div id="status-text">DESCARGANDO ASSETS Y MUNDO 3D...</div>
+            <div id="status-text">CARGANDO VRAM DUNGEON...</div>
         </div>
 
         <!-- Start Menu Box (Revealed once loaded) -->
@@ -278,19 +278,23 @@
             <div class="controls-card">
                 <h3>Guía de Controles:</h3>
                 <div class="controls-grid">
-                    <div><span class="key-badge">W A S D</span> Moverse</div>
-                    <div><span class="key-badge">MOUSE</span> Mirar / Rotar</div>
-                    <div><span class="key-badge">ESPACIO</span> Saltar / Trepar</div>
-                    <div><span class="key-badge">F</span> Linterna</div>
-                    <div><span class="key-badge">CLICK IZQ</span> Atacar / Disparar</div>
-                    <div><span class="key-badge">E</span> Interactuar</div>
-                    <div><span class="key-badge">TAB / I</span> Inventario</div>
-                    <div><span class="key-badge">1 - 4</span> Cambiar Arma</div>
+                    <div><span class="key-badge">W A S D</span> Moverse (Giro automático)</div>
+                    <div><span class="key-badge">CLICK DER</span> Mantener: Órbita Libre</div>
+                    <div><span class="key-badge">RUEDA</span> Zoom Cámara (1P / 3P)</div>
+                    <div><span class="key-badge">CLICK IZQ / Q</span> Atacar / Arco</div>
+                    <div><span class="key-badge">E</span> Interactuar / Escudo</div>
+                    <div><span class="key-badge">R / T</span> Hechizos Arcano / Sangre</div>
+                    <div><span class="key-badge">I / TAB</span> Inventario & Equipo</div>
+                    <div><span class="key-badge">C</span> Atributos & Stats</div>
+                    <div><span class="key-badge">1 - 4</span> Pociones & Consumibles</div>
+                    <div><span class="key-badge">B / P</span> Construcción / Pala</div>
+                    <div><span class="key-badge">F</span> Antorcha / Recoger Drop</div>
+                    <div><span class="key-badge">ESC</span> Pausa / Cerrar Ventanas</div>
                 </div>
             </div>
 
             <div class="footer-note">
-                💡 Haz clic para atrapar el mouse. Presiona <span class="key-badge">ESC</span> para liberar el cursor.
+                💡 Haz clic para atrapar el mouse. Presiona <span class="key-badge">ESC</span> para pausar o liberar el cursor.
             </div>
         </div>
     </div>

@@ -509,7 +509,7 @@ int main() {
 
     // Use Borderless Fullscreen
     sf::VideoMode desktop = sf::VideoMode::getDesktopMode();
-    sf::Window window(desktop, "GamePS1Horror", sf::Style::None, settings);
+    sf::Window window(desktop, "VRAM DUNGEON", sf::Style::None, settings);
     window.setVerticalSyncEnabled(Config::Graphics::VSyncEnabled);
     window.setMouseCursorVisible(true);
     PlatformInput::Init(&window);
@@ -523,7 +523,7 @@ int main() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "GamePS1Horror", NULL, NULL);
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "VRAM DUNGEON", NULL, NULL);
     if (!window) {
         std::cerr << "Failed to create GLFW window" << std::endl;
         return -1;
@@ -1501,6 +1501,7 @@ int main() {
             }
 
             bool isUiModalActive = isCharacterPanelOpen || loreModal.active || fatalError.active || inventory.IsOpen();
+            player.IsFreeOrbiting = rightIsPressed;
 
             // In 3rd Person or when UI is open: ONLY rotate camera when Right Click is held down (WoW style)
             // In 1st Person: Rotate camera when UI is not active
@@ -2363,6 +2364,9 @@ int main() {
         glBindTexture(GL_TEXTURE_2D, textureID);
         dragon.Render(shaderProgram);
         dragon.RenderHealthBar(shaderProgram, activeCamPos);
+
+        // Render Celestial Bodies (Sun in the Day & Moon at Night)
+        weatherSystem.RenderCelestialBodies(shaderProgram, activeCamPos, dayCycleTime, globalTime);
 
         // Render Magic Projectiles
         projectiles.Render(shaderProgram);

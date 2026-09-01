@@ -49,6 +49,7 @@ public:
 
     // 3rd Person Attributes
     bool IsThirdPerson = true;
+    bool IsFreeOrbiting = false;
     float CameraDistance = 3.5f;
     float MinCameraDistance = 1.0f;
     float MaxCameraDistance = 12.0f;

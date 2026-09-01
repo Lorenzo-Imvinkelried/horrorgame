@@ -180,7 +180,7 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     float pW = 1.62f, pH = 1.48f;
     float pX = m_winX, pY = m_winY;
 
-    UIRenderer::DrawWin98Window(uiProgram, uiVAO, uiVBO, pX, pY, pW, pH, "INVENTARIO Y EQUIPO - ARPG FAT16.EXE", true);
+    UIRenderer::DrawWin98Window(uiProgram, uiVAO, uiVBO, pX, pY, pW, pH, "INVENTARIO Y EQUIPO - VRAM DUNGEON FAT16.EXE", true);
 
     float fSize = 0.024f;
     std::string hoveredDesc = "SELECCIONA UN OBJETO O RANURA PARA VER DETALLES / TIRAR AL SUELO";

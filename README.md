@@ -1,6 +1,6 @@
-# Horror Game (PS1 Style)
+# VRAM DUNGEON (Retro 3D ARPG)
 
-Un juego de terror con estética PS1 desarrollado en C++ usando SFML y OpenGL.
+Un juego ARPG y supervivencia 3D con estética retro PS1 y sistemas procedurales, desarrollado en C++ puro con OpenGL y compilable tanto para Windows como para WebAssembly.
 
 ## Requisitos Previos
 
