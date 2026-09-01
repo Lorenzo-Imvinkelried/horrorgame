@@ -41,75 +41,9 @@ bool RenderPipeline::Init(int internalW, int internalH) {
     m_internalH = internalH;
 
     // 1. Shaders
-    m_shaderProgram = ShaderLoader::Load("assets/shaders/world.vert", "assets/shaders/world.frag");
+    m_shaderProgram = ShaderLoader::Load("assets/shaders/ps1.vert", "assets/shaders/ps1.frag");
+    m_postProgram = ShaderLoader::Load("assets/shaders/screen.vert", "assets/shaders/screen.frag");
     m_uiProgram = ShaderLoader::Load("assets/shaders/ui.vert", "assets/shaders/ui.frag");
-
-    // Post Process Shader (Internal retro scaler / dither)
-    const char* postVertSrc = 
-        "#version 330 core\n"
-        "layout (location = 0) in vec2 aPos;\n"
-        "layout (location = 1) in vec2 aTexCoords;\n"
-        "out vec2 TexCoords;\n"
-        "void main() {\n"
-        "    TexCoords = aTexCoords;\n"
-        "    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);\n"
-        "}\0";
-
-    const char* postFragSrc = 
-        "#version 330 core\n"
-        "out vec4 FragColor;\n"
-        "in vec2 TexCoords;\n"
-        "uniform sampler2D screenTexture;\n"
-        "void main() {\n"
-        "    FragColor = texture(screenTexture, TexCoords);\n"
-        "}\0";
-
-#ifdef __EMSCRIPTEN__
-    const char* postVertSrcES = 
-        "#version 300 es\n"
-        "precision highp float;\n"
-        "layout (location = 0) in vec2 aPos;\n"
-        "layout (location = 1) in vec2 aTexCoords;\n"
-        "out vec2 TexCoords;\n"
-        "void main() {\n"
-        "    TexCoords = aTexCoords;\n"
-        "    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);\n"
-        "}\0";
-
-    const char* postFragSrcES = 
-        "#version 300 es\n"
-        "precision highp float;\n"
-        "precision mediump sampler2D;\n"
-        "out vec4 FragColor;\n"
-        "in vec2 TexCoords;\n"
-        "uniform sampler2D screenTexture;\n"
-        "void main() {\n"
-        "    FragColor = texture(screenTexture, TexCoords);\n"
-        "}\0";
-
-    GLuint pvs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(pvs, 1, &postVertSrcES, NULL);
-    glCompileShader(pvs);
-
-    GLuint pfs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(pfs, 1, &postFragSrcES, NULL);
-    glCompileShader(pfs);
-#else
-    GLuint pvs = glCreateShader(GL_VERTEX_SHADER);
-    glShaderSource(pvs, 1, &postVertSrc, NULL);
-    glCompileShader(pvs);
-
-    GLuint pfs = glCreateShader(GL_FRAGMENT_SHADER);
-    glShaderSource(pfs, 1, &postFragSrc, NULL);
-    glCompileShader(pfs);
-#endif
-
-    m_postProgram = glCreateProgram();
-    glAttachShader(m_postProgram, pvs);
-    glAttachShader(m_postProgram, pfs);
-    glLinkProgram(m_postProgram);
-    glDeleteShader(pvs);
-    glDeleteShader(pfs);
 
     // 2. FBO Setup
     ResizeFBO(m_internalW, m_internalH);
@@ -314,7 +248,14 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     glm::mat4 proj = glm::perspective(glm::radians(75.0f), (float)m_internalW / (float)m_internalH, 0.1f, 1000.0f);
 
     glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(view));
-    glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_Proj"), 1, GL_FALSE, glm::value_ptr(proj));
+    glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_Projection"), 1, GL_FALSE, glm::value_ptr(proj));
+    glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_Model"), 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+    glUniform2f(glGetUniformLocation(m_shaderProgram, "u_WindDirection"), windDir.x, windDir.y);
+    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_LodDistNear"), Config::Trees::WindLodNear);
+    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_LodDistFar"), Config::Trees::WindLodFar);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsPlayerTreePass"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_UseBirdAttribs"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ParticleMode"), 0);
 
     glm::vec3 activeCamPos = inputMgr.IsDebugCam() ? inputMgr.GetFreeCamPos() : player.GetCameraPosition();
 
@@ -395,13 +336,17 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
 void RenderPipeline::RenderPostProcess(int screenW, int screenH) {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, screenW, screenH);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
 
+    glDisable(GL_DEPTH_TEST);
     glUseProgram(m_postProgram);
     glBindVertexArray(m_quadVAO);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_colorTex);
-    glUniform1i(glGetUniformLocation(m_postProgram, "screenTexture"), 0);
+    glUniform1i(glGetUniformLocation(m_postProgram, "u_ScreenTexture"), 0);
+    glUniform1i(glGetUniformLocation(m_postProgram, "u_IsGameOver"), 0);
+    glUniform1f(glGetUniformLocation(m_postProgram, "u_GameOverTime"), 0.0f);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glBindVertexArray(0);
 }
