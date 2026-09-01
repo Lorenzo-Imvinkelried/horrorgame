@@ -230,6 +230,7 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     glUniform2f(glGetUniformLocation(m_shaderProgram, "u_Resolution"), (float)m_internalW, (float)m_internalH);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "u_Snap"), 1);
 
+    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_FogDensity"), Config::World::FogDensity);
     glUniform1f(glGetUniformLocation(m_shaderProgram, "u_FogStart"), Config::World::FogDistStart);
     glUniform1f(glGetUniformLocation(m_shaderProgram, "u_FogEnd"), Config::World::FogDistEnd);
 

@@ -304,6 +304,34 @@ void GameApp::loadConfigFile() {
                 ss >> Config::Terrain::DetailAmplitude;
             }
         }
+        if (line.find("fogDensity") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::World::FogDensity;
+                std::cout << "[Config] Densidad de niebla configurada: " << Config::World::FogDensity << std::endl;
+            }
+        }
+        if (line.find("fogDistStart") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::World::FogDistStart;
+            }
+        }
+        if (line.find("fogDistEnd") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::World::FogDistEnd;
+            }
+        }
     }
 }
 

@@ -11,6 +11,7 @@ uniform float u_Alpha; // Particle transparency override
 uniform int u_IsDebug; // 0 = Normal, 1 = Red, 2 = Blue
 
 uniform vec3 u_FogColor;
+uniform float u_FogDensity; // Configurable distance fog density (e.g. 0.009 for clear view)
 
 void main()
 {
@@ -35,7 +36,7 @@ void main()
 
     // -- DISTANCE FOG --
     // Exponential-squared fog (smoothly gets denser, avoiding sharp linear cuts)
-    float density = 0.016; // Adjusted for a smooth 120m blend (further away)
+    float density = (u_FogDensity > 0.0) ? u_FogDensity : 0.009; // Default lowered for clearer distance
     float fogFactor = 1.0 - exp(-pow(density * vDist, 2.0));
     fogFactor = clamp(fogFactor, 0.0, 1.0);
     

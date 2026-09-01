@@ -1,46 +1,50 @@
 ================================================================================
-                    VRAM DUNGEON - GUIA DE CLIMAS (config.json)
+                    VRAM DUNGEON - GUIA DE CONFIGURACION (config.json)
 ================================================================================
 
-Para configurar con que clima arranca el juego, edita el campo "initialWeather"
-en el archivo config.json (por ejemplo: "initialWeather": "CLEAR_SUNNY").
-
 --------------------------------------------------------------------------------
-LISTA DE CLIMAS DISPONIBLES:
+1. CLIMAS DISPONIBLES ("initialWeather"):
 --------------------------------------------------------------------------------
 
-1. "CLEAR_SUNNY" (o "CLEAR", "SUNNY", "DESPEJADO")
-   - Cielo despejado y luminoso con sol radiante de día y luna de noche.
-   - Niebla suave a la distancia estilo PS1.
-   - Sin precipitaciones.
+- "CLEAR_SUNNY" (o "CLEAR", "SUNNY", "DESPEJADO")
+  Cielo despejado y luminoso con sol radiante de día y luna de noche.
+  Niebla suave a la distancia estilo PS1. Sin precipitaciones.
 
-2. "OVERCAST" (o "NUBLADO")
-   - Cielo encapotado y atmósfera densa y grisácea.
-   - Mayor densidad de niebla en el horizonte.
+- "OVERCAST" (o "NUBLADO")
+  Cielo encapotado y atmósfera densa y grisácea. Mayor niebla en el horizonte.
 
-3. "MYSTIC_FOG" (o "FOG", "NIEBLA", "NIEBLA_MISTICA")
-   - Niebla mística densa con tinte cian/turquesa sobrenatural.
-   - Esporas de polen bioluminiscentes flotantes que emiten destellos.
+- "MYSTIC_FOG" (o "FOG", "NIEBLA", "NIEBLA_MISTICA")
+  Niebla mística densa con tinte cian/turquesa sobrenatural y esporas bioluminiscentes.
 
-4. "LIGHT_RAIN" (o "RAIN", "LLUVIA", "LLUVIA_SUAVE", "STORM")
-   - Lluvia continua optimizada con viento.
-   - Niebla azulada tormentosa y relámpagos periódicos en el cielo.
+- "LIGHT_RAIN" (o "RAIN", "LLUVIA", "LLUVIA_SUAVE", "STORM")
+  Lluvia continua con viento, niebla de tormenta y relámpagos periódicos en el cielo.
 
-5. "EMBER_WIND" (o "EMBER", "CENIZAS", "BRIZA_DE_CENIZAS")
-   - Viento cálido con partículas de cenizas ardientes y luciérnagas doradas.
-   - Horizonte con tinte anaranjado tenue.
+- "EMBER_WIND" (o "EMBER", "CENIZAS", "BRIZA_DE_CENIZAS")
+  Viento cálido con partículas de cenizas ardientes y luciérnagas doradas.
 
-6. "BLOOD_MOON_STORM" (o "BLOOD_MOON", "LUNA_DE_SANGRE")
-   - Cielo carmesí de pesadilla con luna de sangre gigante.
-   - Lluvia de cenizas ardientes rojas y relámpagos carmesí.
-   - Mobs más agresivos y mayor dificultad.
+- "BLOOD_MOON_STORM" (o "BLOOD_MOON", "LUNA_DE_SANGRE")
+  Cielo carmesí de pesadilla con luna de sangre gigante y lluvia de cenizas ardientes.
 
 --------------------------------------------------------------------------------
-EJEMPLO EN config.json:
+2. NIEBLA Y VISIBILIDAD ("fogDensity", "fogDistStart", "fogDistEnd"):
+--------------------------------------------------------------------------------
+- "fogDensity": Densidad de la niebla exponencial.
+  * 0.006 -> Muy poco fog (visión muy clara a larga distancia)
+  * 0.009 -> Niebla suave recomendada (balance PS1 claro)
+  * 0.016 -> Niebla densa clásica horror
+
+- "fogDistStart": Distancia en metros antes de que empiece a verse la niebla (ej: 45.0).
+- "fogDistEnd": Distancia en metros para máxima visibilidad (ej: 95.0).
+
+--------------------------------------------------------------------------------
+EJEMPLO COMPLETO EN config.json:
 --------------------------------------------------------------------------------
 {
   "isNight": false,
   "initialWeather": "CLEAR_SUNNY",
+  "fogDensity": 0.009,
+  "fogDistStart": 45.0,
+  "fogDistEnd": 95.0,
   "darkness": 0.16,
   "flashlightEnabled": true
 }

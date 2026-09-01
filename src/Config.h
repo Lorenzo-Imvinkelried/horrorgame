@@ -32,8 +32,9 @@ namespace Config {
         constexpr int MapRadius = 24; // Reduce to 24 (Width 49) to prevent VSync drops. 32 was hitting GPU limits.
         constexpr int RenderDistance = 16; // Reduced from 24 to 16 for FPS Stability
         constexpr int RenderBatchSize = 2; // NxN chunks per batch (2x2 = 4 chunks). 4x4 was too heavy on CPU gen.
-        constexpr float FogDistStart = 35.0f; // Adjusted for new distance (Dense horror fog)
-        constexpr float FogDistEnd = 65.0f; // Max visibility
+        inline float FogDistStart = 45.0f; // Distance before fog begins
+        inline float FogDistEnd = 95.0f; // Max visibility range
+        inline float FogDensity = 0.009f; // Exponential fog density (Lower = clearer visibility)
     }
 
     namespace Trees {
