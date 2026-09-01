@@ -795,12 +795,13 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
             while (diff < -180.0f) diff += 360.0f;
             ModelYaw += diff * glm::clamp(deltaTime * 14.0f, 0.0f, 1.0f);
 
-            // In 3rd Person: Camera smoothly tracks behind player facing direction unless Right Click is held
+            // In 3rd Person: Camera smoothly tracks behind player movement direction unless Right Click is held
             if (IsThirdPerson && !IsFreeOrbiting) {
-                float camDiff = ModelYaw - Yaw;
+                float desiredCamYaw = glm::degrees(atan2(moveDir.z, moveDir.x));
+                float camDiff = desiredCamYaw - Yaw;
                 while (camDiff > 180.0f) camDiff -= 360.0f;
                 while (camDiff < -180.0f) camDiff += 360.0f;
-                Yaw += camDiff * glm::clamp(deltaTime * 9.0f, 0.0f, 1.0f);
+                Yaw += camDiff * glm::clamp(deltaTime * 4.5f, 0.0f, 1.0f);
                 updateCameraVectors();
             }
 
