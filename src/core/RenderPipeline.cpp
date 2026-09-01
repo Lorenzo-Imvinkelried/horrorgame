@@ -260,10 +260,17 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     glm::vec3 activeCamPos = inputMgr.IsDebugCam() ? inputMgr.GetFreeCamPos() : player.GetCameraPosition();
 
     // 1. Terrain & Foliage
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsInstanced"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ConformToTerrain"), 0);
+    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_WindStrength"), 0.0f);
+    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_Alpha"), 1.0f);
+    glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_textureID);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_Texture"), 0);
+
     chunkManager.UpdateVisibility(proj * view);
     chunkManager.RenderTerrain(m_shaderProgram);
-    chunkManager.RenderTrees(m_shaderProgram, m_trunkVAO, m_leavesVAO, m_trunkVertexCount, m_leavesVertexCount, activeCamPos);
+    chunkManager.RenderTrees(m_shaderProgram, m_trunkVAO, m_leavesVAO, m_trunkVertexCount, m_leavesVertexCount, player.Position);
 
     // 2. World Structures & Placed Buildings
     structureSystem.Render(m_shaderProgram, activeCamPos);

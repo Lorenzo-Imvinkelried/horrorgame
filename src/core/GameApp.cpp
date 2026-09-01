@@ -195,6 +195,10 @@ void GameApp::initWorld() {
     float py = WorldGenerator::GetHeight(px, pz) + 1.0f;
     m_player = std::make_unique<Player>(glm::vec3(px, py, pz));
 
+    m_chunkManager->SetBirdSystem(&m_mobManager->GetBirds());
+    m_chunkManager->Init();
+    m_chunkManager->Update(m_player->Position);
+
     m_mobManager->Init(m_player->Position);
 }
 
