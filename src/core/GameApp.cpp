@@ -161,7 +161,7 @@ bool GameApp::Init() {
 
     // Instantiating Subsystems NOW that OpenGL context is valid
     m_renderPipeline = std::make_unique<RenderPipeline>();
-    if (!m_renderPipeline->Init(640, 480)) {
+    if (!m_renderPipeline->Init(Config::Graphics::InternalWidth, Config::Graphics::InternalHeight)) {
         std::cerr << "Failed to initialize RenderPipeline" << std::endl;
         return false;
     }
@@ -398,7 +398,8 @@ void GameApp::UpdateFrame() {
                                    *m_structureSystem, *m_itemDropSystem,
                                    *m_horrorProps, *m_projectiles, *m_targeting,
                                    *m_mobManager, *m_weatherSystem, *m_damageNumbers,
-                                   *m_particles, *m_inputManager, m_windSystem->GetDirection(),
+                                   *m_particles, *m_footprints, *m_inputManager,
+                                   m_windSystem->GetDirection(),
                                    m_terraTarget, m_hasTerraTarget, m_buildPos);
 
     // Pass 2: Post-Processing Retro Scaling

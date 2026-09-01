@@ -14,6 +14,7 @@ class MobManager;
 class WeatherSystem;
 class DamageNumberSystem;
 class ParticleSystem;
+class FootprintSystem;
 class InventorySystem;
 class InputManager;
 
@@ -32,6 +33,7 @@ public:
                        ProjectileSystem& projectiles, TargetingSystem& targeting,
                        MobManager& mobManager, WeatherSystem& weatherSystem,
                        DamageNumberSystem& damageNumbers, ParticleSystem& particles,
+                       FootprintSystem& footprints,
                        InputManager& inputMgr, const glm::vec2& windDir,
                        const glm::vec3& terraTarget, bool hasTerraTarget,
                        const glm::vec3& buildPos);

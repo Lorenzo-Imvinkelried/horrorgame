@@ -176,6 +176,7 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
                                    ProjectileSystem& projectiles, TargetingSystem& targeting,
                                    MobManager& mobManager, WeatherSystem& weatherSystem,
                                    DamageNumberSystem& damageNumbers, ParticleSystem& particles,
+                                   FootprintSystem& footprints,
                                    InputManager& inputMgr, const glm::vec2& windDir,
                                    const glm::vec3& terraTarget, bool hasTerraTarget,
                                    const glm::vec3& buildPos)
@@ -250,16 +251,13 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_Projection"), 1, GL_FALSE, glm::value_ptr(proj));
     glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_Model"), 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
+
+    // FRUSTUM CULLING UPDATE
+    chunkManager.UpdateVisibility(proj * view);
+
     glUniform2f(glGetUniformLocation(m_shaderProgram, "u_WindDirection"), windDir.x, windDir.y);
-    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_LodDistNear"), Config::Trees::WindLodNear);
-    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_LodDistFar"), Config::Trees::WindLodFar);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsPlayerTreePass"), 0);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_UseBirdAttribs"), 0);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ParticleMode"), 0);
 
-    glm::vec3 activeCamPos = inputMgr.IsDebugCam() ? inputMgr.GetFreeCamPos() : player.GetCameraPosition();
-
-    // 1. Terrain & Foliage
+    // 1. Terrain Render
     glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsInstanced"), 0);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ConformToTerrain"), 0);
     glUniform1f(glGetUniformLocation(m_shaderProgram, "u_WindStrength"), 0.0f);
@@ -267,61 +265,96 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, m_textureID);
     glUniform1i(glGetUniformLocation(m_shaderProgram, "u_Texture"), 0);
-
-    chunkManager.UpdateVisibility(proj * view);
     chunkManager.RenderTerrain(m_shaderProgram);
+
+    // 2. Tree Render
     chunkManager.RenderTrees(m_shaderProgram, m_trunkVAO, m_leavesVAO, m_trunkVertexCount, m_leavesVertexCount, player.Position);
 
-    // 2. World Structures & Placed Buildings
-    glBindTexture(GL_TEXTURE_2D, m_textureID);
-    structureSystem.Render(m_shaderProgram, activeCamPos);
-    glBindTexture(GL_TEXTURE_2D, m_textureID);
-    buildingSystem.Render(m_shaderProgram, activeCamPos);
+    // 3. Footprints
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ConformToTerrain"), 0);
+    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_WindStrength"), 0.0f);
+    footprints.Render(m_shaderProgram);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ConformToTerrain"), 0);
 
-    // 3. Build Ghost Preview
-    if (inputMgr.IsBuildMode()) {
-        buildingSystem.RenderGhost(m_shaderProgram, inputMgr.GetCurrentBuildType(), buildPos, inputMgr.GetCurrentBuildYaw(), true, m_whiteTexID);
+    glm::vec3 activeCamPos = inputMgr.IsDebugCam() ? inputMgr.GetFreeCamPos() : player.GetCameraPosition();
+    particles.Render(m_shaderProgram, activeCamPos);
+
+    // 4. Player (3rd Person)
+    if (player.IsThirdPerson) {
+        glBindTexture(GL_TEXTURE_2D, m_textureID);
+        player.Render(m_shaderProgram);
     }
 
-    // 4. Horror Props
+    // 5. Mobs, Birds, Critters, Dragon
+    mobManager.Render(m_shaderProgram, activeCamPos, m_textureID, globalTime);
+
+    // 6. Celestial Bodies (Sun / Moon)
+    weatherSystem.RenderCelestialBodies(m_shaderProgram, activeCamPos, dayCycleTime, globalTime);
+
+    // 7. Projectiles
+    projectiles.Render(m_shaderProgram);
+
+    // 8. 3D Target Ring
+    targeting.RenderTargetRing(m_shaderProgram);
+
+    // 9. Environmental Horror Props
     std::vector<glm::vec4> nearbyTreesForProps;
     chunkManager.GetTreesInRange(player.Position, 85.0f, nearbyTreesForProps);
     glBindTexture(GL_TEXTURE_2D, m_textureID);
     horrorProps.Render(m_shaderProgram, nearbyTreesForProps, globalTime, windDir);
 
-    // 5. Ground Loot Pouches
+    // 10. Procedural World Structures & Items & Placed Buildings
+    structureSystem.Render(m_shaderProgram, activeCamPos);
     itemDropSystem.Render(m_shaderProgram, activeCamPos);
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
+    buildingSystem.Render(m_shaderProgram, activeCamPos);
 
-    // 6. Mobs & Monsters & Dragon
-    mobManager.Render(m_shaderProgram, activeCamPos, m_textureID, globalTime);
+    // 11. Build Ghost Preview
+    if (inputMgr.IsBuildMode()) {
+        buildingSystem.RenderGhost(m_shaderProgram, inputMgr.GetCurrentBuildType(), buildPos, inputMgr.GetCurrentBuildYaw(), true, m_whiteTexID);
+    }
 
-    // 7. Celestial Sun and Moon
-    weatherSystem.RenderCelestialBodies(m_shaderProgram, activeCamPos, dayCycleTime, globalTime);
+    // --- SAFETY RESET ---
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsInstanced"), 0);
+    glUniform1f(glGetUniformLocation(m_shaderProgram, "u_WindStrength"), 0.0f);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ConformToTerrain"), 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_UseBirdAttribs"), 0);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    for (int i = 0; i < 8; i++) glDisableVertexAttribArray(i);
 
-    // 8. Player Character Model / First-Person Weapons
-    if (player.IsThirdPerson) {
-        glBindTexture(GL_TEXTURE_2D, m_textureID);
-        player.Render(m_shaderProgram);
-    } else {
+    // 12. Water (Transparent - Rendered after solid objects)
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
+    chunkManager.RenderWater(m_shaderProgram);
+
+    // 13. Weapon (Overlay - Clear Depth - 1st Person Only)
+    if (!player.IsThirdPerson) {
+        glClear(GL_DEPTH_BUFFER_BIT);
+        glm::mat4 viewIdentity = glm::mat4(1.0f);
+        glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(viewIdentity));
         glBindTexture(GL_TEXTURE_2D, m_textureID);
         player.RenderFirstPersonSword(m_shaderProgram);
         player.RenderFirstPersonTorch(m_shaderProgram);
     }
 
-    // 9. Projectiles
-    projectiles.Render(m_shaderProgram);
+    // 14. Monster Beacon Markers
+    if (inputMgr.ShowMonsterMarker()) {
+        glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsInstanced"), 0);
+        glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ConformToTerrain"), 0);
+        glUniform1i(glGetUniformLocation(m_shaderProgram, "u_Texture"), 0);
+        glBindTexture(GL_TEXTURE_2D, m_whiteTexID);
+        glDisable(GL_DEPTH_TEST);
+        for (const auto& mPtr : mobManager.GetMonsters()) {
+            glm::vec3 mPos = mPtr->GetPosition();
+            glm::vec3 markerColor = mPtr->HasVisualContact() ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
+            DebugDraw::DrawLine(mPos, mPos + glm::vec3(0.0f, 200.0f, 0.0f), markerColor, m_debugVAO, m_debugVBO);
+            DebugDraw::DrawLine(mPos - glm::vec3(2.5f, 0.0f, 0.0f), mPos + glm::vec3(2.5f, 0.0f, 0.0f), markerColor, m_debugVAO, m_debugVBO);
+            DebugDraw::DrawLine(mPos - glm::vec3(0.0f, 0.0f, 2.5f), mPos + glm::vec3(0.0f, 0.0f, 2.5f), markerColor, m_debugVAO, m_debugVBO);
+        }
+        glEnable(GL_DEPTH_TEST);
+    }
 
-    // 10. Target Ring
-    targeting.RenderTargetRing(m_shaderProgram);
-
-    // 11. Water (Transparent)
-    glBindTexture(GL_TEXTURE_2D, m_textureID);
-    chunkManager.RenderWater(m_shaderProgram);
-
-    // 12. Particles
-    particles.Render(m_shaderProgram, activeCamPos);
-
-    // 13. Terraforming Ring (Shovel Mode)
+    // 15. Shovel Reticle (Donut)
     if (inputMgr.IsShovelMode() && hasTerraTarget) {
         glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsInstanced"), 0);
         glUniform1i(glGetUniformLocation(m_shaderProgram, "u_ConformToTerrain"), 0);
@@ -329,17 +362,6 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
         glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_Model"), 1, GL_FALSE, glm::value_ptr(glm::mat4(1.0f)));
         glBindTexture(GL_TEXTURE_2D, m_whiteTexID);
         DebugDraw::DrawDonut(terraTarget.x, terraTarget.y + 0.08f, terraTarget.z, 3.3f, 3.6f, glm::vec3(0.35f, 0.90f, 0.40f), m_debugVAO, m_debugVBO);
-    }
-
-    // 14. Monster Beacon Markers
-    if (inputMgr.ShowMonsterMarker()) {
-        glDisable(GL_DEPTH_TEST);
-        for (const auto& mPtr : mobManager.GetMonsters()) {
-            glm::vec3 mPos = mPtr->GetPosition();
-            glm::vec3 markerColor = mPtr->HasVisualContact() ? glm::vec3(0.0f, 1.0f, 0.0f) : glm::vec3(1.0f, 0.0f, 0.0f);
-            DebugDraw::DrawLine(mPos, mPos + glm::vec3(0.0f, 200.0f, 0.0f), markerColor, m_debugVAO, m_debugVBO);
-        }
-        glEnable(GL_DEPTH_TEST);
     }
 }
 
