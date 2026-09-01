@@ -1,0 +1,5 @@
+# Leather Cap / Hood
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  1.56  0.0    0.32 0.32 0.32   0 0 0   0.38 0.26 0.16  HELM_HOOD
+BOX  0.0  1.70 -0.06   0.24 0.14 0.26  -0.2 0 0 0.30 0.20 0.12  HELM_PEAK
+BOX  0.0  1.56  0.16   0.24 0.18 0.04   0 0 0   0.45 0.32 0.20  HELM_TRIM

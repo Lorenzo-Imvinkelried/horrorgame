@@ -1016,11 +1016,23 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
             }
 
             m_targetYaw = glm::degrees(atan2(desiredDir.x, desiredDir.z));
-            targetVelocity = desiredDir * currentSpeed; 
-            
-            // AnimaciÃ³n enfocada
-            m_headYaw = 0.0f; 
-            m_headPitch = (distToPlayer < 3.0f) ? 20.0f : 0.0f; // Baja la cabeza para morder si estÃ¡ cerca
+
+            // Rango de ataque cuerpo a cuerpo: no correr adentro del cuerpo del jugador
+            // Al llegar a distancia de ataque (2.1m), detenerse y reproducir mordida/zarpazo
+            if (distToPlayer <= 2.1f) {
+                targetVelocity = glm::vec3(0.0f);
+                glm::vec3 toPlayerFlat = playerPos - m_pos;
+                toPlayerFlat.y = 0.0f;
+                if (glm::length(toPlayerFlat) > 0.001f) {
+                    m_targetYaw = glm::degrees(atan2(toPlayerFlat.x, toPlayerFlat.z));
+                }
+                m_headPitch = 22.0f + sin(m_stateTimer * 12.0f) * 16.0f;
+                m_headYaw = sin(m_stateTimer * 8.0f) * 15.0f;
+            } else {
+                targetVelocity = desiredDir * currentSpeed; 
+                m_headYaw = 0.0f; 
+                m_headPitch = (distToPlayer < 4.0f) ? 15.0f : 0.0f;
+            }
             break;
         }
 
@@ -1936,7 +1948,16 @@ void Monster::Update(float deltaTime, glm::vec3 playerPos, glm::vec3 playerFront
             }
             m_stuckTimer = 0.0f; // Reset after kicking
         }
-        
+
+        // Repulsión física jugador-monstruo: evita que el monstruo traspase o camine adentro del cuerpo
+        glm::vec2 toPlayer2D(nextPos.x - playerPos.x, nextPos.z - playerPos.z);
+        float d2D = glm::length(toPlayer2D);
+        if (d2D < 1.85f && d2D > 0.001f) {
+            glm::vec2 push = (toPlayer2D / d2D) * (1.85f - d2D);
+            nextPos.x += push.x;
+            nextPos.z += push.y;
+        }
+
         float limit = (Config::World::MapRadius - 1) * Config::World::ChunkSize * Config::World::ChunkScale;
         if (!std::isnan(nextPos.x) && !std::isnan(nextPos.y) && !std::isnan(nextPos.z)) {
             if (nextPos.x > limit) nextPos.x = limit;

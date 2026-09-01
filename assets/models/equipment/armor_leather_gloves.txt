@@ -1,0 +1,6 @@
+# Leather Gloves
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX -0.28  0.88 0.04   0.16 0.28 0.18  -0.15 0 0 0.34 0.22 0.14  GLOVES_FOREARM_L
+BOX  0.28  0.88 0.04   0.16 0.28 0.18  -0.15 0 0 0.34 0.22 0.14  GLOVES_FOREARM_R
+BOX -0.28  0.72 0.08   0.15 0.12 0.16   0 0 0    0.28 0.18 0.12  GLOVES_HAND_L
+BOX  0.28  0.72 0.08   0.15 0.12 0.16   0 0 0    0.28 0.18 0.12  GLOVES_HAND_R

@@ -31,7 +31,9 @@ public:
     WeatherState GetState() const { return m_state; }
     void SetState(WeatherState state) { m_state = state; m_weatherTimer = 0.0f; }
     void SetStateFromString(const std::string& name);
-    int GetNightCount() const { return m_dayCounter; }
+    int GetDayCount() const { return m_dayCounter; }
+    int GetNightCount() const { return m_nightCounter; }
+    bool IsNight() const { return m_isNight; }
     const char* GetWeatherName() const;
 
 private:
@@ -44,6 +46,9 @@ private:
     float m_lightningTimer = 0.0f;
     float m_lightningFlash = 0.0f;
     int m_dayCounter = 1;
+    int m_nightCounter = 1;
+    bool m_isNight = false;
+    bool m_wasNight = false;
     float m_lastDayCycleTime = 0.0f;
 
     // Celestial Body Geometry (Sun & Moon)

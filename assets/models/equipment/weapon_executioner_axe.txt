@@ -1,0 +1,12 @@
+# Executioner Battleaxe Model (2-Handed Colossal Axe oriented along +Z)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  0.0  0.10   0.075 0.075 0.30   0 0 0   0.32 0.16 0.12  GRIP_LOW
+BOX  0.0  0.0  0.45   0.070 0.070 0.22   0 0 0   0.32 0.16 0.12  GRIP_HIGH
+BOX  0.0  0.0 -0.10   0.095 0.095 0.08   0 0 0   0.55 0.55 0.60  POMMEL
+BOX  0.0  0.0  0.45   0.060 0.060 0.90   0 0 0   0.20 0.18 0.16  SHAFT
+BOX  0.0  0.0  0.86   0.110 0.150 0.20   0 0 0   0.45 0.45 0.50  HEAD_BLOCK
+BOX  0.0  0.26 0.86   0.035 0.420 0.36   0 0 0   0.65 0.68 0.72  BLADE_TOP
+BOX  0.0  0.44 0.86   0.018 0.450 0.38   0 0 0   0.95 0.95 1.00  EDGE_TOP
+BOX  0.0 -0.26 0.86   0.035 0.420 0.36   0 0 0   0.65 0.68 0.72  BLADE_BOT
+BOX  0.0 -0.44 0.86   0.018 0.450 0.38   0 0 0   0.95 0.95 1.00  EDGE_BOT
+BOX  0.0  0.0  1.10   0.050 0.050 0.26   0 0 0   0.85 0.85 0.90  TOP_SPIKE

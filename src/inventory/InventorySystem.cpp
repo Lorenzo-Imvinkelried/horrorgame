@@ -1,8 +1,12 @@
 #include "InventorySystem.h"
+#include "ItemModelRegistry.h"
 #include "Player.h"
 #include "ParticleSystem.h"
 #include "world/ItemDropSystem.h"
 #include "ui/UIRenderer.h"
+#include <glad/glad.h>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
 #include <iostream>
 #include <iomanip>
@@ -24,13 +28,9 @@ ItemId InventorySystem::mapLegacyType(ItemType type) const {
 }
 
 InventorySystem::InventorySystem()
-    : m_inventory(16, 60.0f)
+    : m_inventory(30, 160.0f)
 {
-    // Pack Inicial del Aventurero
-    m_inventory.AddItemByString("potion_health", 2);
-    m_inventory.AddItemByString("potion_mana", 1);
-    m_inventory.AddItemByString("blood_vial", 2);
-    m_inventory.AddItemByString("shadow_ring", 1);
+    // El jugador empieza con el inventario completamente vacío
 }
 
 bool InventorySystem::AddItem(ItemType type, int count) {
@@ -185,21 +185,25 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     float fSize = 0.024f;
     std::string hoveredDesc = "SELECCIONA UN OBJETO O RANURA PARA VER DETALLES / TIRAR AL SUELO";
 
+    m_hasHoveredItem = false;
+    m_hoveredItemStringId = "";
+    m_hoveredItemId = INVALID_ITEM_ID;
+
     // -------------------------------------------------------------------------
-    // PANEL IZQUIERDO: MOCHILA DE ALMACENAMIENTO (4x4 = 16 Slots)
+    // PANEL IZQUIERDO: MOCHILA DE ALMACENAMIENTO (5x6 = 30 Slots)
     // -------------------------------------------------------------------------
     std::ostringstream weightStream;
     weightStream << std::fixed << std::setprecision(1) << m_inventory.GetCurrentWeight() << "/" << m_inventory.GetMaxWeight() << " KG";
-    std::string bagHeader = "MOCHILA (16 CASILLAS) - PESO: " + weightStream.str();
+    std::string bagHeader = "MOCHILA (30 CASILLAS) - PESO: " + weightStream.str();
     UIRenderer::DrawString(bagHeader, pX + 0.035f, pY + pH - 0.12f, fSize, glm::vec3(0.06f, 0.14f, 0.48f), uiProgram, uiVAO, uiVBO);
 
-    float slotW = 0.170f, slotH = 0.140f;
-    float startX = pX + 0.035f, startY = pY + pH - 0.28f;
-    float padX = 0.018f, padY = 0.018f;
+    float slotW = 0.138f, slotH = 0.125f;
+    float startX = pX + 0.035f, startY = pY + pH - 0.25f;
+    float padX = 0.012f, padY = 0.014f;
 
-    for (int r = 0; r < 4; ++r) {
-        for (int c = 0; c < 4; ++c) {
-            int idx = r * 4 + c;
+    for (int r = 0; r < 6; ++r) {
+        for (int c = 0; c < 5; ++c) {
+            int idx = r * 5 + c;
             if (idx >= m_inventory.GetSlotCount()) break;
 
             float sx = startX + c * (slotW + padX);
@@ -214,60 +218,76 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
             if (item.IsValid()) {
                 const ItemDefinition& def = ItemRegistry::Get().Get(item.id);
 
-                if (hovered || isSelected) {
+                if (hovered) {
+                    m_hasHoveredItem = true;
+                    m_hoveredItemStringId = def.stringId;
+                    m_hoveredItemId = item.id;
+                    hoveredDesc = def.name + " (" + def.description + ")";
+                } else if (isSelected && !m_hasHoveredItem) {
                     hoveredDesc = def.name + " (" + def.description + ")";
                 }
 
-                // Color por rareza
+                // Color por rareza real
                 glm::vec3 textCol = glm::vec3(0.12f, 0.12f, 0.18f);
                 if (def.rarity == ItemRarity::UNCOMMON) textCol = glm::vec3(0.10f, 0.55f, 0.15f);
                 else if (def.rarity == ItemRarity::RARE) textCol = glm::vec3(0.10f, 0.35f, 0.85f);
                 else if (def.rarity == ItemRarity::EPIC) textCol = glm::vec3(0.60f, 0.15f, 0.80f);
                 else if (def.rarity == ItemRarity::LEGENDARY) textCol = glm::vec3(0.85f, 0.55f, 0.05f);
 
-                std::string shortName = def.name.substr(0, 7);
-                UIRenderer::DrawString(shortName, sx + 0.012f, sy + slotH - 0.050f, 0.022f, textCol, uiProgram, uiVAO, uiVBO);
+                std::string shortName = def.name.substr(0, 6);
+                UIRenderer::DrawString(shortName, sx + 0.008f, sy + slotH - 0.038f, 0.017f, textCol, uiProgram, uiVAO, uiVBO);
 
                 if (isSelected) {
-                    UIRenderer::DrawString("[SEL]", sx + slotW - 0.065f, sy + slotH - 0.050f, 0.018f, glm::vec3(0.85f, 0.45f, 0.05f), uiProgram, uiVAO, uiVBO);
+                    UIRenderer::DrawString("[SEL]", sx + slotW - 0.055f, sy + slotH - 0.038f, 0.016f, glm::vec3(0.85f, 0.45f, 0.05f), uiProgram, uiVAO, uiVBO);
                 }
 
                 if (item.quantity > 1) {
                     std::string cntStr = "x" + std::to_string(item.quantity);
-                    UIRenderer::DrawString(cntStr, sx + slotW - 0.060f, sy + 0.015f, 0.022f, glm::vec3(0.80f, 0.20f, 0.15f), uiProgram, uiVAO, uiVBO);
+                    UIRenderer::DrawString(cntStr, sx + slotW - 0.048f, sy + 0.010f, 0.018f, glm::vec3(0.85f, 0.15f, 0.10f), uiProgram, uiVAO, uiVBO);
                 } else if (def.IsEquippable()) {
-                    UIRenderer::DrawString("[EQ]", sx + slotW - 0.065f, sy + 0.015f, 0.020f, glm::vec3(0.15f, 0.60f, 0.25f), uiProgram, uiVAO, uiVBO);
+                    UIRenderer::DrawString("[EQ]", sx + slotW - 0.050f, sy + 0.010f, 0.016f, glm::vec3(0.15f, 0.60f, 0.25f), uiProgram, uiVAO, uiVBO);
                 }
             } else {
-                UIRenderer::DrawString("VACIO", sx + 0.035f, sy + (slotH - 0.022f) * 0.5f, 0.020f, glm::vec3(0.65f, 0.65f, 0.70f), uiProgram, uiVAO, uiVBO);
+                UIRenderer::DrawString("---", sx + 0.048f, sy + (slotH - 0.018f) * 0.5f, 0.018f, glm::vec3(0.65f, 0.65f, 0.70f), uiProgram, uiVAO, uiVBO);
             }
         }
     }
 
     // -------------------------------------------------------------------------
-    // PANEL DERECHO: EQUIPAMIENTO ACTIVO & HOJA DE ATRIBUTOS
+    // PANEL DERECHO: EQUIPAMIENTO ANATOMICO COMPLETO (ITEMS 3D INTERACTIVOS)
     // -------------------------------------------------------------------------
     float eqPanelX = pX + 0.81f;
-    UIRenderer::DrawString("EQUIPAMIENTO & ATRIBUTOS:", eqPanelX, pY + pH - 0.12f, fSize, glm::vec3(0.06f, 0.14f, 0.48f), uiProgram, uiVAO, uiVBO);
+    UIRenderer::DrawString("EQUIPAMIENTO ACTIVO (3D POR CASILLA):", eqPanelX, pY + pH - 0.12f, fSize, glm::vec3(0.06f, 0.14f, 0.48f), uiProgram, uiVAO, uiVBO);
 
-    // Ranuras de Equipamiento
+    float eqSlotW = 0.242f, eqSlotH = 0.118f;
+    float eqStartY = pY + pH - 0.25f;
+    float colGap = 0.018f;
+    float col1X = eqPanelX;
+    float col2X = eqPanelX + eqSlotW + colGap;
+    float col3X = eqPanelX + (eqSlotW + colGap) * 2.0f;
+
+    float row0Y = eqStartY;
+    float row1Y = eqStartY - (eqSlotH + 0.016f);
+    float row2Y = eqStartY - 2.0f * (eqSlotH + 0.016f);
+    float row3Y = eqStartY - 3.0f * (eqSlotH + 0.016f);
+
     struct EqSlotUI {
         EquipSlot slot;
         std::string label;
         float rx, ry, rw, rh;
     };
 
-    float eqSlotW = 0.235f, eqSlotH = 0.115f;
-    float eqStartY = pY + pH - 0.26f;
-
     EqSlotUI eqSlots[] = {
-        { EquipSlot::HEAD,      "CABEZA",   eqPanelX,            eqStartY,                    eqSlotW, eqSlotH },
-        { EquipSlot::CHEST,     "PECHO",    eqPanelX + eqSlotW + 0.02f, eqStartY,             eqSlotW, eqSlotH },
-        { EquipSlot::MAIN_HAND, "MANO 1",   eqPanelX,            eqStartY - (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::OFF_HAND,  "MANO 2",   eqPanelX + eqSlotW + 0.02f, eqStartY - (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::RING_1,    "ANILLO 1", eqPanelX,            eqStartY - 2.0f * (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::RING_2,    "ANILLO 2", eqPanelX + eqSlotW + 0.02f, eqStartY - 2.0f * (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::AMULET,    "AMULETO",  eqPanelX,            eqStartY - 3.0f * (eqSlotH + 0.015f), eqSlotW * 2.0f + 0.02f, eqSlotH }
+        { EquipSlot::HEAD,      "CABEZA",    col2X, row0Y, eqSlotW, eqSlotH },
+        { EquipSlot::MAIN_HAND, "MANO 1",    col1X, row1Y, eqSlotW, eqSlotH },
+        { EquipSlot::CHEST,     "PECHO",     col2X, row1Y, eqSlotW, eqSlotH },
+        { EquipSlot::OFF_HAND,  "MANO 2",    col3X, row1Y, eqSlotW, eqSlotH },
+        { EquipSlot::GLOVES,    "GUANTES",   col1X, row2Y, eqSlotW, eqSlotH },
+        { EquipSlot::LEGS,      "PANTALON",  col2X, row2Y, eqSlotW, eqSlotH },
+        { EquipSlot::AMULET,    "AMULETO",   col3X, row2Y, eqSlotW, eqSlotH },
+        { EquipSlot::RING_1,    "ANILLO 1",  col1X, row3Y, eqSlotW, eqSlotH },
+        { EquipSlot::FEET,      "BOTAS",     col2X, row3Y, eqSlotW, eqSlotH },
+        { EquipSlot::RING_2,    "ANILLO 2",  col3X, row3Y, eqSlotW, eqSlotH }
     };
 
     for (const auto& es : eqSlots) {
@@ -277,26 +297,37 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
 
         if (hovered && eqItem.IsValid()) {
             const ItemDefinition& def = ItemRegistry::Get().Get(eqItem.id);
+            m_hasHoveredItem = true;
+            m_hoveredItemStringId = def.stringId;
+            m_hoveredItemId = eqItem.id;
             hoveredDesc = def.name + " (" + def.description + ")";
         }
 
         UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, es.rx, es.ry, es.rw, es.rh, "", hovered, fSize);
-        UIRenderer::DrawString(es.label, es.rx + 0.012f, es.ry + es.rh - 0.040f, 0.018f, glm::vec3(0.40f, 0.40f, 0.45f), uiProgram, uiVAO, uiVBO);
+        UIRenderer::DrawString(es.label, es.rx + 0.010f, es.ry + es.rh - 0.035f, 0.016f, glm::vec3(0.40f, 0.40f, 0.45f), uiProgram, uiVAO, uiVBO);
 
         if (eqItem.IsValid()) {
             const ItemDefinition& def = ItemRegistry::Get().Get(eqItem.id);
             std::string sName = def.name.substr(0, 10);
-            UIRenderer::DrawString(sName, es.rx + 0.012f, es.ry + 0.015f, 0.022f, glm::vec3(0.08f, 0.48f, 0.15f), uiProgram, uiVAO, uiVBO);
+
+            // MANTENER LA CALIDAD REAL DEL ITEM (No todo verde)
+            glm::vec3 rarityCol = glm::vec3(0.92f, 0.92f, 0.95f); // COMMON
+            if (def.rarity == ItemRarity::UNCOMMON) rarityCol = glm::vec3(0.15f, 0.85f, 0.25f);
+            else if (def.rarity == ItemRarity::RARE) rarityCol = glm::vec3(0.20f, 0.55f, 1.0f);
+            else if (def.rarity == ItemRarity::EPIC) rarityCol = glm::vec3(0.85f, 0.25f, 0.95f);
+            else if (def.rarity == ItemRarity::LEGENDARY) rarityCol = glm::vec3(1.0f, 0.75f, 0.10f);
+
+            UIRenderer::DrawString(sName, es.rx + 0.010f, es.ry + 0.012f, 0.018f, rarityCol, uiProgram, uiVAO, uiVBO);
         } else if (isBlocked) {
-            UIRenderer::DrawString("[BLOQUEADO 2H]", es.rx + 0.012f, es.ry + 0.015f, 0.018f, glm::vec3(0.75f, 0.20f, 0.15f), uiProgram, uiVAO, uiVBO);
+            UIRenderer::DrawString("[BLOQ 2H]", es.rx + 0.010f, es.ry + 0.012f, 0.016f, glm::vec3(0.75f, 0.20f, 0.15f), uiProgram, uiVAO, uiVBO);
         } else {
-            UIRenderer::DrawString("[LIBRE]", es.rx + 0.035f, es.ry + 0.015f, 0.018f, glm::vec3(0.60f, 0.60f, 0.65f), uiProgram, uiVAO, uiVBO);
+            UIRenderer::DrawString("[LIBRE]", es.rx + 0.020f, es.ry + 0.012f, 0.016f, glm::vec3(0.60f, 0.60f, 0.65f), uiProgram, uiVAO, uiVBO);
         }
     }
 
     // Cuadro de Resumen de Estadísticas Totales (Inferior Derecho)
-    float statsY = pY + 0.22f;
-    float statsW = eqSlotW * 2.0f + 0.02f, statsH = 0.24f;
+    float statsY = pY + 0.18f;
+    float statsW = 0.76f, statsH = 0.17f;
     UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, eqPanelX, statsY, statsW, statsH, "", false, fSize);
 
     EquipmentStats totalEq = m_equipment.CalculateTotalStats();
@@ -311,14 +342,14 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     s2 << "CRIT: " << std::fixed << std::setprecision(1) << critVal << "% (+" << totalEq.critChance << "%)";
     s3 << "HP MAX: " << hpVal << " | MP MAX: " << mpVal;
 
-    UIRenderer::DrawString(s1.str(), eqPanelX + 0.015f, statsY + statsH - 0.055f, 0.020f, glm::vec3(0.10f, 0.12f, 0.20f), uiProgram, uiVAO, uiVBO);
-    UIRenderer::DrawString(s2.str(), eqPanelX + 0.015f, statsY + statsH - 0.115f, 0.020f, glm::vec3(0.70f, 0.25f, 0.10f), uiProgram, uiVAO, uiVBO);
-    UIRenderer::DrawString(s3.str(), eqPanelX + 0.015f, statsY + statsH - 0.175f, 0.020f, glm::vec3(0.12f, 0.45f, 0.65f), uiProgram, uiVAO, uiVBO);
+    UIRenderer::DrawString(s1.str(), eqPanelX + 0.015f, statsY + statsH - 0.045f, 0.019f, glm::vec3(0.10f, 0.12f, 0.20f), uiProgram, uiVAO, uiVBO);
+    UIRenderer::DrawString(s2.str(), eqPanelX + 0.015f, statsY + statsH - 0.090f, 0.019f, glm::vec3(0.70f, 0.25f, 0.10f), uiProgram, uiVAO, uiVBO);
+    UIRenderer::DrawString(s3.str(), eqPanelX + 0.015f, statsY + statsH - 0.135f, 0.019f, glm::vec3(0.12f, 0.45f, 0.65f), uiProgram, uiVAO, uiVBO);
 
     // -------------------------------------------------------------------------
     // BARRA INFERIOR DE INSPECCIÓN Y BOTONES DE ACCIÓN
     // -------------------------------------------------------------------------
-    float infoY = pY + 0.10f;
+    float infoY = pY + 0.095f;
     float infoW = pW - 0.07f, infoH = 0.075f;
     UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, pX + 0.035f, infoY, infoW, infoH, "", false, fSize);
     UIRenderer::DrawString(hoveredDesc, pX + 0.05f, infoY + 0.024f, 0.022f, glm::vec3(0.10f, 0.10f, 0.15f), uiProgram, uiVAO, uiVBO);
@@ -340,6 +371,72 @@ void InventorySystem::RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     float closeX = pX + pW - closeW - 0.035f, closeY = pY + 0.020f;
     bool closeHov = (mouseNdcX >= closeX && mouseNdcX <= closeX + closeW && mouseNdcY >= closeY && mouseNdcY <= closeY + closeH);
     UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, closeX, closeY, closeW, closeH, "CERRAR VENTANA (I)", closeHov, 0.020f);
+
+    // -------------------------------------------------------------------------
+    // TOOLTIP 3D DE INSPECCIÓN FLOTANTE (ESTILO MU ONLINE / DIABLO)
+    // -------------------------------------------------------------------------
+    if (m_hasHoveredItem && m_hoveredItemId != INVALID_ITEM_ID) {
+        const ItemDefinition& def = ItemRegistry::Get().Get(m_hoveredItemId);
+        float tipW = 0.44f, tipH = 0.60f;
+        float tipX = mouseNdcX + 0.04f;
+        if (tipX + tipW > 0.98f) tipX = mouseNdcX - tipW - 0.04f;
+        float tipY = mouseNdcY - tipH * 0.45f;
+        if (tipY < -0.96f) tipY = -0.96f;
+        if (tipY + tipH > 0.96f) tipY = 0.96f - tipH;
+
+        // Marco de ventana Win98 para la ficha del ítem
+        UIRenderer::DrawWin98Window(uiProgram, uiVAO, uiVBO, tipX, tipY, tipW, tipH, def.name, false);
+
+        // Vitrina 3D Inset
+        m_tipShowcaseX = tipX + 0.025f;
+        m_tipShowcaseY = tipY + tipH - 0.35f;
+        m_tipShowcaseW = tipW - 0.05f;
+        m_tipShowcaseH = 0.27f;
+
+        UIRenderer::DrawWin98Button(uiProgram, uiVAO, uiVBO, m_tipShowcaseX, m_tipShowcaseY, m_tipShowcaseW, m_tipShowcaseH, "", false, fSize);
+        UIRenderer::drawColoredQuad(uiProgram, uiVAO, uiVBO, m_tipShowcaseX + 0.006f, m_tipShowcaseY + 0.006f, m_tipShowcaseW - 0.012f, m_tipShowcaseH - 0.012f, glm::vec3(0.03f, 0.04f, 0.07f));
+        UIRenderer::DrawString("3D INSPECT", m_tipShowcaseX + 0.012f, m_tipShowcaseY + m_tipShowcaseH - 0.026f, 0.015f, glm::vec3(0.40f, 0.65f, 0.90f), uiProgram, uiVAO, uiVBO);
+
+        // Rarity Badge
+        glm::vec3 rCol = glm::vec3(0.92f, 0.92f, 0.95f);
+        std::string rLabel = "[COMUN]";
+        if (def.rarity == ItemRarity::UNCOMMON) { rCol = glm::vec3(0.15f, 0.85f, 0.25f); rLabel = "[POCO COMUN]"; }
+        else if (def.rarity == ItemRarity::RARE) { rCol = glm::vec3(0.20f, 0.55f, 1.0f); rLabel = "[RARO]"; }
+        else if (def.rarity == ItemRarity::EPIC) { rCol = glm::vec3(0.85f, 0.25f, 0.95f); rLabel = "[EPICO]"; }
+        else if (def.rarity == ItemRarity::LEGENDARY) { rCol = glm::vec3(1.0f, 0.75f, 0.10f); rLabel = "[LEGENDARIO]"; }
+
+        UIRenderer::DrawString(rLabel, tipX + 0.025f, tipY + tipH - 0.385f, 0.018f, rCol, uiProgram, uiVAO, uiVBO);
+
+        std::string typeStr = "TIPO: " + def.name.substr(0, 18);
+        if (def.IsEquippable()) typeStr = "EQUIPABLE: " + def.name.substr(0, 16);
+        else if (def.isUsable) typeStr = "TIPO: CONSUMIBLE";
+        else typeStr = "TIPO: RECURSO / MISC";
+        UIRenderer::DrawString(typeStr, tipX + 0.025f, tipY + tipH - 0.420f, 0.016f, glm::vec3(0.12f, 0.14f, 0.22f), uiProgram, uiVAO, uiVBO);
+
+        if (def.equipStats.attackPower > 0) {
+            std::string s = "ATQ: +" + std::to_string(def.equipStats.attackPower) + " | CRIT: +" + std::to_string((int)def.equipStats.critChance) + "%";
+            UIRenderer::DrawString(s, tipX + 0.025f, tipY + tipH - 0.455f, 0.017f, glm::vec3(0.85f, 0.25f, 0.10f), uiProgram, uiVAO, uiVBO);
+        } else if (def.equipStats.defense > 0) {
+            std::string s = "DEF: +" + std::to_string(def.equipStats.defense) + " | HP: +" + std::to_string(def.equipStats.maxHpBonus);
+            UIRenderer::DrawString(s, tipX + 0.025f, tipY + tipH - 0.455f, 0.017f, glm::vec3(0.15f, 0.45f, 0.85f), uiProgram, uiVAO, uiVBO);
+        } else if (!def.effects.empty()) {
+            std::string s = "EFECTO: RESTAURA " + std::to_string((int)def.effects[0].magnitude);
+            if (def.effects[0].type == ItemEffectType::RESTORE_HP) s += " HP";
+            else if (def.effects[0].type == ItemEffectType::RESTORE_MP) s += " MP";
+            UIRenderer::DrawString(s, tipX + 0.025f, tipY + tipH - 0.455f, 0.017f, glm::vec3(0.10f, 0.65f, 0.25f), uiProgram, uiVAO, uiVBO);
+        }
+
+        std::string desc = def.description.substr(0, 30);
+        UIRenderer::DrawString(desc, tipX + 0.025f, tipY + tipH - 0.495f, 0.015f, glm::vec3(0.35f, 0.35f, 0.40f), uiProgram, uiVAO, uiVBO);
+        if (def.description.length() > 30) {
+            std::string desc2 = def.description.substr(30, 30);
+            UIRenderer::DrawString(desc2, tipX + 0.025f, tipY + tipH - 0.525f, 0.015f, glm::vec3(0.35f, 0.35f, 0.40f), uiProgram, uiVAO, uiVBO);
+        }
+
+        std::ostringstream ws;
+        ws << "PESO: " << std::fixed << std::setprecision(1) << def.weight << " KG";
+        UIRenderer::DrawString(ws.str(), tipX + 0.025f, tipY + 0.025f, 0.015f, glm::vec3(0.40f, 0.40f, 0.45f), uiProgram, uiVAO, uiVBO);
+    }
 }
 
 bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, ItemDropSystem* itemDropSystem, bool& closeRequested) {
@@ -385,14 +482,14 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
         return true;
     }
 
-    // Clic en Ranuras de Mochila (4x4 = 16)
-    float slotW = 0.170f, slotH = 0.140f;
-    float startX = pX + 0.035f, startY = pY + pH - 0.28f;
-    float padX = 0.018f, padY = 0.018f;
+    // Clic en Ranuras de Mochila (5x6 = 30)
+    float slotW = 0.138f, slotH = 0.125f;
+    float startX = pX + 0.035f, startY = pY + pH - 0.25f;
+    float padX = 0.012f, padY = 0.014f;
 
-    for (int r = 0; r < 4; ++r) {
-        for (int c = 0; c < 4; ++c) {
-            int idx = r * 4 + c;
+    for (int r = 0; r < 6; ++r) {
+        for (int c = 0; c < 5; ++c) {
+            int idx = r * 5 + c;
             if (idx >= m_inventory.GetSlotCount()) break;
 
             float sx = startX + c * (slotW + padX);
@@ -400,7 +497,6 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
 
             if (mouseNdcX >= sx && mouseNdcX <= sx + slotW && mouseNdcY >= sy && mouseNdcY <= sy + slotH) {
                 if (m_selectedSlot == idx) {
-                    // Doble clic / re-clic usa o equipa
                     UseOrEquipSlot(idx, player, particles, damageNumbers);
                 } else {
                     m_selectedSlot = idx;
@@ -412,8 +508,17 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
 
     // Clic en Ranuras de Equipo (Desequipar)
     float eqPanelX = pX + 0.81f;
-    float eqSlotW = 0.235f, eqSlotH = 0.115f;
-    float eqStartY = pY + pH - 0.26f;
+    float eqSlotW = 0.242f, eqSlotH = 0.118f;
+    float eqStartY = pY + pH - 0.25f;
+    float colGap = 0.018f;
+    float col1X = eqPanelX;
+    float col2X = eqPanelX + eqSlotW + colGap;
+    float col3X = eqPanelX + (eqSlotW + colGap) * 2.0f;
+
+    float row0Y = eqStartY;
+    float row1Y = eqStartY - (eqSlotH + 0.016f);
+    float row2Y = eqStartY - 2.0f * (eqSlotH + 0.016f);
+    float row3Y = eqStartY - 3.0f * (eqSlotH + 0.016f);
 
     struct EqSlotClick {
         EquipSlot slot;
@@ -421,13 +526,16 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
     };
 
     EqSlotClick eqClicks[] = {
-        { EquipSlot::HEAD,      eqPanelX,            eqStartY,                    eqSlotW, eqSlotH },
-        { EquipSlot::CHEST,     eqPanelX + eqSlotW + 0.02f, eqStartY,             eqSlotW, eqSlotH },
-        { EquipSlot::MAIN_HAND, eqPanelX,            eqStartY - (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::OFF_HAND,  eqPanelX + eqSlotW + 0.02f, eqStartY - (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::RING_1,    eqPanelX,            eqStartY - 2.0f * (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::RING_2,    eqPanelX + eqSlotW + 0.02f, eqStartY - 2.0f * (eqSlotH + 0.015f), eqSlotW, eqSlotH },
-        { EquipSlot::AMULET,    eqPanelX,            eqStartY - 3.0f * (eqSlotH + 0.015f), eqSlotW * 2.0f + 0.02f, eqSlotH }
+        { EquipSlot::HEAD,      col2X, row0Y, eqSlotW, eqSlotH },
+        { EquipSlot::MAIN_HAND, col1X, row1Y, eqSlotW, eqSlotH },
+        { EquipSlot::CHEST,     col2X, row1Y, eqSlotW, eqSlotH },
+        { EquipSlot::OFF_HAND,  col3X, row1Y, eqSlotW, eqSlotH },
+        { EquipSlot::GLOVES,    col1X, row2Y, eqSlotW, eqSlotH },
+        { EquipSlot::LEGS,      col2X, row2Y, eqSlotW, eqSlotH },
+        { EquipSlot::AMULET,    col3X, row2Y, eqSlotW, eqSlotH },
+        { EquipSlot::RING_1,    col1X, row3Y, eqSlotW, eqSlotH },
+        { EquipSlot::FEET,      col2X, row3Y, eqSlotW, eqSlotH },
+        { EquipSlot::RING_2,    col3X, row3Y, eqSlotW, eqSlotH }
     };
 
     for (const auto& ec : eqClicks) {
@@ -438,4 +546,30 @@ bool InventorySystem::HandleMouseClick(float mouseNdcX, float mouseNdcY, Player*
     }
 
     return false;
+}
+
+void InventorySystem::Render3DItemSlots(GLuint shaderProgram, float globalTime, int screenW, int screenH, float mouseNdcX, float mouseNdcY) {
+    if (!m_isOpen) return;
+
+    // Solo si hay un ítem bajo el cursor mostramos el visor 3D interactivo en el Tooltip
+    if (!m_hasHoveredItem || m_hoveredItemStringId.empty()) return;
+
+    ItemModelRegistry::Get().Init();
+
+    GLint curVp[4] = {0};
+    glGetIntegerv(GL_VIEWPORT, curVp);
+    int realW = (curVp[2] > 0) ? curVp[2] : screenW;
+    int realH = (curVp[3] > 0) ? curVp[3] : screenH;
+
+    // Vitrina 3D Flotante dentro del Tooltip de Inspección (Rotación continua en 360° estilo MU Online)
+    int vpX = (int)((m_tipShowcaseX + 0.006f + 1.0f) * 0.5f * realW);
+    int vpY = (int)((m_tipShowcaseY + 0.006f + 1.0f) * 0.5f * realH);
+    int vpW = (int)((m_tipShowcaseW - 0.012f) * 0.5f * realW);
+    int vpH = (int)((m_tipShowcaseH - 0.012f) * 0.5f * realH);
+
+    ItemModelRegistry::Get().RenderItemInSlot(m_hoveredItemStringId, vpX, vpY, vpW, vpH, true, globalTime, shaderProgram);
+
+    glDisable(GL_SCISSOR_TEST);
+    glDisable(GL_DEPTH_TEST);
+    glViewport(0, 0, realW, realH);
 }

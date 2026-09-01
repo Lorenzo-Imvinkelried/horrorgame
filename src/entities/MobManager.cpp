@@ -10,6 +10,7 @@
 #include "WorldGenerator.h"
 #include "Config.h"
 #include "ui/UIRenderer.h"
+#include "combat/TargetingSystem.h"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -20,9 +21,9 @@ MobManager::~MobManager() {}
 void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
     // 1. Passive & Hostile Forest Deer (Fawns, Adults, Alphas, Demonic)
     m_passiveMobs.clear();
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 14; ++i) {
         float angle = (float)(rand() % 360) * 0.017453f;
-        float dist = 20.0f + (rand() % 50);
+        float dist = 20.0f + (rand() % 45);
         float dx = playerPos.x + cos(angle) * dist;
         float dz = playerPos.z + sin(angle) * dist;
         float dy = WorldGenerator::GetHeight(dx, dz);
@@ -35,7 +36,7 @@ void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
     EnemyType initialTypes[] = {
         EnemyType::BERSERKER_WARRIOR,
         EnemyType::DEATH_KNIGHT,
-        EnemyType::SHADOW_ASSASSIN,
+        EnemyType::CORRUPTED_WARRIOR,
         EnemyType::SKELETON_ARCHER,
         EnemyType::CORRUPTED_WARRIOR,
         EnemyType::DARK_MAGE,
@@ -43,13 +44,13 @@ void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
         EnemyType::TREANT,
         EnemyType::NEUTRAL_GIANT
     };
-    for (int i = 0; i < 9; ++i) {
+    for (int i = 0; i < 14; ++i) {
         float angle = (float)(rand() % 360) * 0.017453f;
-        float dist = 45.0f + (rand() % 50);
+        float dist = 28.0f + (rand() % 45);
         float ex = playerPos.x + cos(angle) * dist;
         float ez = playerPos.z + sin(angle) * dist;
         float ey = WorldGenerator::GetHeight(ex, ez);
-        if (ey > 1.5f) {
+        if (ey > Config::Water::Level + 0.6f) {
             m_enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(ex, ey, ez), initialTypes[i % 9], 1));
         }
     }
@@ -69,13 +70,19 @@ void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
 
     // 4. Night Shadow Lurkers (Monsters)
     m_monsters.clear();
-    SpawnNightMonsters(playerPos, monsterCount);
+    if (monsterCount > 0) {
+        SpawnNightMonsters(playerPos, monsterCount);
+    }
 }
 
 void MobManager::SpawnNightMonsters(glm::vec3 playerPos, int count) {
+    float minRad = 32.0f;
+    float maxRad = 55.0f;
+    int diff = std::max(10, (int)(maxRad - minRad));
+
     for (int i = 0; i < count; ++i) {
         float angle = (float)(rand() % 360) * 0.017453f;
-        float dist = Config::Gameplay::MonsterSpawnMinRadius + (rand() % (int)(Config::Gameplay::MonsterSpawnMaxRadius - Config::Gameplay::MonsterSpawnMinRadius));
+        float dist = minRad + (float)(rand() % diff);
         float mx = playerPos.x + cos(angle) * dist;
         float mz = playerPos.z + sin(angle) * dist;
         float my = WorldGenerator::GetHeight(mx, mz);
@@ -90,13 +97,16 @@ void MobManager::DespawnNightMonsters() {
 void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkManager, ScentSystem& scentSystem,
                         WindSystem& windSystem, ParticleSystem& particles, DamageNumberSystem& damageNumbers,
                         ItemDropSystem& itemDropSystem, ProjectileSystem& projectiles, float globalTime,
-                        float dayCycleTime, int nightCount, bool isBloodMoon, FatalErrorPopup* fatalError)
+                        float dayCycleTime, int nightCount, bool isBloodMoon, FatalErrorPopup* fatalError,
+                        TargetingSystem* targeting)
 {
-    bool isNight = (dayCycleTime >= 120.0f && dayCycleTime <= 228.0f);
+    float cycleNorm = fmod(dayCycleTime, 240.0f) / 240.0f;
+    if (cycleNorm < 0.0f) cycleNorm += 1.0f;
+    bool isNight = (cycleNorm >= 0.50f && cycleNorm <= 0.88f);
 
     // Spawning / despawning shadow monsters across night transitions
     if (isNight && !m_wasNight) {
-        int count = std::min(1 + (nightCount / 2), 4);
+        int count = std::min(2 + (nightCount / 2), 5);
         if (isBloodMoon) count += 2;
         SpawnNightMonsters(player.Position, count);
     } else if (!isNight && m_wasNight) {
@@ -109,9 +119,8 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
     m_birds.CleanupDistantBirds(player.Position, 80.0f);
     m_critters.Update(deltaTime, player.Position);
 
-    // 2. Passive Mobs (Deer)
+    // 2. Passive Mobs (Deer) - Update all so deathTimer and mesh advance
     for (auto& deer : m_passiveMobs) {
-        if (!deer->IsAlive()) continue;
         deer->Update(deltaTime, player.Position, &player, particles, damageNumbers);
     }
 
@@ -123,9 +132,8 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
     // 4. Ancestral Dragon Boss
     m_dragon.Update(deltaTime, player.Position, particles, damageNumbers, &player);
 
-    // 5. Enemy Mobs AI & Combat
+    // 5. Enemy Mobs AI & Combat - Update all so deathTimer and mesh advance
     for (auto& enemy : m_enemyMobs) {
-        if (!enemy->IsAlive()) continue;
         enemy->Update(deltaTime, player.Position, &player, particles, damageNumbers, projectiles);
     }
 
@@ -133,18 +141,32 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
     glm::vec2 windDir = windSystem.GetDirection();
     m_highestDangerLevel = 0.0f;
 
+    static float s_shadowAttackTimer = 0.0f;
+    if (s_shadowAttackTimer > 0.0f) s_shadowAttackTimer -= deltaTime;
+
     for (auto& m : m_monsters) {
         if (m->IsDead()) continue;
         m->Update(deltaTime, player.Position, player.Front, windDir,
                   chunkManager, scentSystem, particles,
                   player.Velocity, 0, false,
                   player.IsClimbing, player.ClimbingTreePos,
-                  player.HasTorchActive);
+                  (player.HasTorchActive && !player.AreBothHandsOccupied()));
 
         float dist = glm::distance(player.Position, m->GetPosition());
         if (dist < 24.0f) {
             float d = 1.0f - (dist / 24.0f);
             if (d > m_highestDangerLevel) m_highestDangerLevel = d;
+        }
+
+        // Ataque cuerpo a cuerpo del monstruo de las sombras al estar en rango
+        if (dist <= 2.3f && s_shadowAttackTimer <= 0.0f && !player.IsDead()) {
+            s_shadowAttackTimer = 1.15f;
+            int dmg = 22 + (nightCount * 4);
+            player.TakeDamage(dmg, damageNumbers);
+            for (int i = 0; i < 20; ++i) {
+                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*3.0f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*3.0f);
+                particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.85f, 0.05f, 0.05f, 1.0f), 0.14f, 0.75f, -9.8f);
+            }
         }
     }
 
@@ -157,6 +179,160 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
             }
         }
     }
+
+    // 7. Cleanup targeting if target died
+    if (targeting && targeting->HasTarget() && !targeting->IsTargetAlive()) {
+        targeting->ClearTarget();
+    }
+
+    // 8. Cleanup removable / decayed / distant entities
+    m_passiveMobs.erase(std::remove_if(m_passiveMobs.begin(), m_passiveMobs.end(),
+        [&](const std::unique_ptr<PassiveMob>& d) {
+            if (!d->IsAlive()) {
+                bool rem = d->IsSkinned() && d->IsRemovable();
+                if (rem && targeting && targeting->GetPassiveTarget() == d.get()) targeting->ClearTarget();
+                return rem;
+            }
+            return glm::distance(player.Position, d->GetPosition()) > 180.0f;
+        }), m_passiveMobs.end());
+
+    m_enemyMobs.erase(std::remove_if(m_enemyMobs.begin(), m_enemyMobs.end(),
+        [&](const std::unique_ptr<EnemyMob>& e) {
+            if (!e->IsAlive()) {
+                bool rem = e->IsRemovable() && e->HasDroppedLoot();
+                if (rem && targeting && targeting->GetEnemyTarget() == e.get()) targeting->ClearTarget();
+                return rem;
+            }
+            return glm::distance(player.Position, e->GetPosition()) > 180.0f;
+        }), m_enemyMobs.end());
+
+    m_waterMonsters.erase(std::remove_if(m_waterMonsters.begin(), m_waterMonsters.end(),
+        [&](const std::unique_ptr<WaterMonster>& wm) {
+            bool rem = !wm->IsAlive() && wm->IsRemovable();
+            if (rem && targeting && targeting->GetWaterTarget() == wm.get()) targeting->ClearTarget();
+            return rem;
+        }), m_waterMonsters.end());
+
+    m_monsters.erase(std::remove_if(m_monsters.begin(), m_monsters.end(),
+        [&](const std::unique_ptr<Monster>& m) {
+            bool rem = m->IsDead() && m->HasDroppedLoot();
+            if (rem && targeting && targeting->GetMonsterTarget() == m.get()) targeting->ClearTarget();
+            return rem;
+        }), m_monsters.end());
+
+    // 9. Dynamic Population Spawning & Living World Maintenance
+    m_populationTimer += deltaTime;
+    if (m_populationTimer >= 2.0f) {
+        m_populationTimer = 0.0f;
+        MaintainWorldPopulation(player.Position, nightCount, isBloodMoon, isNight);
+    }
+}
+
+void MobManager::MaintainWorldPopulation(glm::vec3 playerPos, int nightCount, bool isBloodMoon, bool isNight) {
+    // 1. Maintain Passive Deer Population (~12-16 living deer within 100m)
+    int aliveDeer = 0;
+    for (auto& d : m_passiveMobs) {
+        if (d->IsAlive() && glm::distance(playerPos, d->GetPosition()) < 100.0f) {
+            aliveDeer++;
+        }
+    }
+    if (aliveDeer < 13) {
+        int toSpawn = std::min(3, 14 - aliveDeer);
+        for (int i = 0; i < toSpawn; ++i) {
+            float angle = (float)(rand() % 360) * 0.017453f;
+            float dist = 28.0f + (float)(rand() % 35);
+            float dx = playerPos.x + cos(angle) * dist;
+            float dz = playerPos.z + sin(angle) * dist;
+            float dy = WorldGenerator::GetHeight(dx, dz);
+            if (dy > Config::Water::Level + 0.6f) {
+                int roll = rand() % 10;
+                DeerSize size = (roll == 0) ? DeerSize::DEMONIC : ((roll < 3) ? DeerSize::ALPHA : ((roll < 6) ? DeerSize::ADULT : DeerSize::FAWN));
+                m_passiveMobs.push_back(std::make_unique<PassiveMob>(glm::vec3(dx, dy, dz), size));
+            }
+        }
+    }
+
+    // 2. Maintain Enemy Mob Population (~12-16 living enemies within 100m)
+    if (!isNight) {
+        // Los cazadores/asesinos de las sombras NO salen de día: desaparecen con la luz solar
+        for (auto& e : m_enemyMobs) {
+            if (e->IsAlive() && e->GetType() == EnemyType::SHADOW_ASSASSIN) {
+                e->SetDead();
+            }
+        }
+    }
+
+    int aliveEnemies = 0;
+    for (auto& e : m_enemyMobs) {
+        if (e->IsAlive() && glm::distance(playerPos, e->GetPosition()) < 100.0f) {
+            aliveEnemies++;
+        }
+    }
+    if (aliveEnemies < 13) {
+        std::vector<EnemyType> availableTypes = {
+            EnemyType::BERSERKER_WARRIOR,
+            EnemyType::DEATH_KNIGHT,
+            EnemyType::SKELETON_ARCHER,
+            EnemyType::CORRUPTED_WARRIOR,
+            EnemyType::DARK_MAGE,
+            EnemyType::VAMPIRE,
+            EnemyType::TREANT,
+            EnemyType::NEUTRAL_GIANT
+        };
+        // Los cazadores blancos (Shadow Assassins) SOLO salen de noche
+        if (isNight) {
+            availableTypes.push_back(EnemyType::SHADOW_ASSASSIN);
+            availableTypes.push_back(EnemyType::SHADOW_ASSASSIN); // Mayor probabilidad nocturna
+        }
+
+        int toSpawn = std::min(3, 14 - aliveEnemies);
+        for (int i = 0; i < toSpawn; ++i) {
+            float angle = (float)(rand() % 360) * 0.017453f;
+            float dist = 32.0f + (float)(rand() % 35);
+            float ex = playerPos.x + cos(angle) * dist;
+            float ez = playerPos.z + sin(angle) * dist;
+            float ey = WorldGenerator::GetHeight(ex, ez);
+            if (ey > Config::Water::Level + 0.6f) {
+                EnemyType type = availableTypes[rand() % availableTypes.size()];
+                int lvl = std::max(1, nightCount);
+                m_enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(ex, ey, ez), type, lvl));
+            }
+        }
+    }
+
+    // 3. Maintain Water Monsters (~2-3 near lakes)
+    int aliveWater = 0;
+    for (auto& wm : m_waterMonsters) {
+        if (wm->IsAlive() && glm::distance(playerPos, wm->GetPosition()) < 100.0f) {
+            aliveWater++;
+        }
+    }
+    if (aliveWater < 3) {
+        for (int attempts = 0; attempts < 25; ++attempts) {
+            float angle = (float)(rand() % 360) * 0.017453f;
+            float dist = 25.0f + (float)(rand() % 65);
+            float wx = playerPos.x + cos(angle) * dist;
+            float wz = playerPos.z + sin(angle) * dist;
+            float wy = WorldGenerator::GetHeight(wx, wz);
+            if (wy < Config::Water::Level - 0.2f) {
+                m_waterMonsters.push_back(std::make_unique<WaterMonster>(glm::vec3(wx, Config::Water::Level - 0.6f, wz)));
+                break;
+            }
+        }
+    }
+
+    // 4. Night Shadow Lurkers (maintain while night active, 2-5 monsters)
+    if (isNight) {
+        int targetShadowCount = std::min(2 + (nightCount / 2), 5);
+        if (isBloodMoon) targetShadowCount += 2;
+        int aliveShadow = 0;
+        for (auto& m : m_monsters) {
+            if (!m->IsDead()) aliveShadow++;
+        }
+        if (aliveShadow < targetShadowCount) {
+            SpawnNightMonsters(playerPos, targetShadowCount - aliveShadow);
+        }
+    }
 }
 
 void MobManager::Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint textureID, float globalTime) {
@@ -165,10 +341,10 @@ void MobManager::Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint tex
     m_birds.Render(shaderProgram);
     m_critters.Render(shaderProgram);
 
-    // 2. Passive Forest Animals
+    // 2. Passive Forest Animals (Render alive OR dead unskinned deer)
     glBindTexture(GL_TEXTURE_2D, textureID);
     for (auto& deer : m_passiveMobs) {
-        if (!deer->IsAlive()) continue;
+        if (!deer->IsAlive() && deer->IsSkinned()) continue; // Keep dead deer visible until skinned
         deer->Render(shaderProgram);
     }
 
@@ -189,6 +365,7 @@ void MobManager::Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint tex
 
     // 5. Water Monsters
     for (auto& wm : m_waterMonsters) {
+        if (!wm->IsAlive()) continue;
         glBindTexture(GL_TEXTURE_2D, textureID);
         wm->Render(shaderProgram);
         wm->RenderHealthBar(shaderProgram, activeCamPos);

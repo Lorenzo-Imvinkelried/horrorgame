@@ -17,7 +17,7 @@ std::string SkinningSystem::GetPrompt(glm::vec3 playerPos, const std::vector<std
         if (!deer->IsAlive() && !deer->IsSkinned()) {
             float dist = glm::distance(playerPos, deer->GetPosition());
             if (dist < 2.8f) {
-                return "[G] DESOLLAR ANIMAL (PIEL Y CARNE)";
+                return "[E] DESOLLAR ANIMAL (PIEL Y CARNE)";
             }
         }
     }

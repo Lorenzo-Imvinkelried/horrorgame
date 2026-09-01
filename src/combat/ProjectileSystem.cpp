@@ -135,10 +135,16 @@ void ProjectileSystem::Update(float deltaTime, Player* player, ParticleSystem& p
         // Advance position
         it->pos += it->vel * deltaTime;
 
-        // Spawn magical arcane particle trail
-        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*0.6f, (rand()%100/50.0f - 1.0f)*0.6f, (rand()%100/50.0f - 1.0f)*0.6f);
-        particles.SpawnParticle(it->pos, pVel - it->vel * 0.15f, it->color, 0.16f, 0.45f, 0.0f);
-        particles.SpawnParticle(it->pos, pVel * 0.4f, glm::vec4(1.0f, 0.8f, 1.0f, 0.8f), 0.10f, 0.35f, 0.0f);
+        // Spawn trail particles
+        if (it->type == ProjectileType::ARROW) {
+            // Distinct visible flight streak behind arrowhead and red fletching
+            particles.SpawnParticle(it->pos, -it->vel * 0.05f, glm::vec4(1.0f, 0.95f, 0.70f, 0.90f), 0.12f, 0.30f, 0.0f);
+            particles.SpawnParticle(it->pos, glm::vec3(0.0f), glm::vec4(1.0f, 0.35f, 0.20f, 0.85f), 0.09f, 0.22f, 0.0f);
+        } else {
+            glm::vec3 pVel((rand()%100/50.0f - 1.0f)*0.6f, (rand()%100/50.0f - 1.0f)*0.6f, (rand()%100/50.0f - 1.0f)*0.6f);
+            particles.SpawnParticle(it->pos, pVel - it->vel * 0.15f, it->color, 0.16f, 0.45f, 0.0f);
+            particles.SpawnParticle(it->pos, pVel * 0.4f, glm::vec4(1.0f, 0.8f, 1.0f, 0.8f), 0.10f, 0.35f, 0.0f);
+        }
 
         // Check collision with ground/terrain
         float groundY = WorldGenerator::GetHeight(it->pos.x, it->pos.z);
@@ -299,6 +305,9 @@ void ProjectileSystem::Render(GLuint shaderProgram) {
     glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
 
+    // CRITICAL: u_IsDebug = 3 instructs ps1.frag to passthrough vertex colors without texture discard
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 3);
+
     // 1. Render Magic Orbs (Spinning Emissive)
     if (m_VAO != 0) {
         glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 1);
@@ -324,7 +333,7 @@ void ProjectileSystem::Render(GLuint shaderProgram) {
         for (const auto& p : m_projectiles) {
             if (!p.active || p.type != ProjectileType::ARROW) continue;
 
-            glm::vec3 vDir = glm::normalize(p.vel);
+            glm::vec3 vDir = glm::length(p.vel) > 0.001f ? glm::normalize(p.vel) : glm::vec3(0, 0, 1);
             float yaw = atan2(vDir.x, vDir.z);
             float pitch = -asin(std::clamp(vDir.y, -0.999f, 0.999f));
 
@@ -332,13 +341,14 @@ void ProjectileSystem::Render(GLuint shaderProgram) {
             model = glm::translate(model, p.pos);
             model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
             model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
-            model = glm::scale(model, glm::vec3(1.4f));
+            model = glm::scale(model, glm::vec3(2.0f)); // Clear, prominent size in flight
 
             glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
             glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_arrowVertexCount);
         }
     }
 
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 0);
     glBindVertexArray(0);
 }

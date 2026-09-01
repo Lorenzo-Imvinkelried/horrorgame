@@ -1,0 +1,9 @@
+# Berserker Battleaxe Model (Double-bitted Barbarian Axe)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  0.0  0.22   0.06 0.06 0.85   0 0 0   0.38 0.24 0.14  WOOD_SHAFT
+BOX  0.0  0.0  0.10   0.08 0.08 0.06   0 0 0   0.45 0.45 0.50  IRON_BAND1
+BOX  0.0  0.0  0.35   0.08 0.08 0.06   0 0 0   0.45 0.45 0.50  IRON_BAND2
+BOX  0.0  0.0  0.62   0.10 0.12 0.18   0 0 0   0.35 0.35 0.40  AXE_COLLAR
+BOX  0.0  0.18 0.62   0.035 0.35 0.30  0 0 0   0.82 0.84 0.90  BLADE_LEFT
+BOX  0.0 -0.18 0.62   0.035 0.35 0.30  0 0 0   0.82 0.84 0.90  BLADE_RIGHT
+BOX  0.0  0.0  0.80   0.04 0.04 0.20   0 0 0   0.75 0.78 0.85  TOP_SPIKE

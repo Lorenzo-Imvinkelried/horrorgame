@@ -29,12 +29,20 @@ Player::~Player() {
         glDeleteBuffers(1, &m_playerVBO);
         m_playerVBO = 0;
     }
+    if (m_fpVAO) {
+        glDeleteVertexArrays(1, &m_fpVAO);
+        m_fpVAO = 0;
+    }
+    if (m_fpVBO) {
+        glDeleteBuffers(1, &m_fpVBO);
+        m_fpVBO = 0;
+    }
 }
 
 #include "UIRenderer.h"
 
 bool Player::TryAttack() {
-    if (StunTimer > 0.0f) return false;
+    if (m_isDead || StunTimer > 0.0f) return false;
     if (m_attackTimer <= 0.0f && m_attackCooldownTimer <= 0.0f && !m_isBlocking) {
         float agiFactor = Stats.GetAttackSpeedMultiplier();
         m_attackDuration = 0.52f / agiFactor;
@@ -43,9 +51,28 @@ bool Player::TryAttack() {
         m_attackCooldownTimer = m_attackDuration + m_attackCooldown;
         m_attackHitDone = false;
         m_attackCombo = (m_attackCombo + 1) % 2;
+
+        // Empuñadura dual: alternar mano derecha e izquierda (el escudo no pega)
+        bool isDualWieldingWeapons = (!m_equippedMainHandId.empty() && 
+                                      !m_equippedOffHandId.empty() && 
+                                      m_equippedOffHandId != "iron_shield");
+        if (isDualWieldingWeapons) {
+            m_activeAttackHand = (m_activeAttackHand == 0) ? 1 : 0;
+        } else {
+            m_activeAttackHand = 0; // Siempre mano derecha si es arma sola o escudo
+        }
+
         return true;
     }
     return false;
+}
+
+bool Player::AreBothHandsOccupied() const {
+    bool is2H = (m_equippedMainHandId.find("greatsword") != std::string::npos ||
+                 m_equippedMainHandId.find("executioner") != std::string::npos ||
+                 m_equippedMainHandId.find("dragonslayer") != std::string::npos ||
+                 m_equippedMainHandId == "hunting_bow");
+    return is2H || (!m_equippedMainHandId.empty() && !m_equippedOffHandId.empty());
 }
 
 void Player::TakeDamage(int dmg, DamageNumberSystem& damageNumbers, FatalErrorPopup* fatalError, bool shadowAegis) {
@@ -63,19 +90,43 @@ void Player::TakeDamage(int dmg, DamageNumberSystem& damageNumbers, FatalErrorPo
             dmg = std::max(1, dmg / 4); // Shield blocks 75%
         }
     } else {
-        dmg = std::max(1, dmg - Stats.Defense / 2);
+        float defRatio = (float)Stats.Defense / (Stats.Defense + 45.0f);
+        dmg = std::max(2, (int)(dmg * (1.0f - defRatio)));
     }
     Stats.CurrentHP -= dmg;
-    if (Stats.CurrentHP < 0) Stats.CurrentHP = 0;
-    damageNumbers.SpawnDamage(Position + glm::vec3(0.0f, 1.2f, 0.0f), dmg, false);
+    if (Stats.CurrentHP <= 0) {
+        Stats.CurrentHP = 0;
+        if (!m_isDead) {
+            m_isDead = true;
+            DeathTimer = 0.0f;
+            m_isBlocking = false;
+            m_attackTimer = 0.0f;
+            std::cout << "[Player] Has sucumbido. 0 HP alcanzado. Estado: MUERTO." << std::endl;
+        }
+    }
+    damageNumbers.SpawnPlayerDamage(Position, dmg, Front);
 
     // Fatal Error Popup Trigger on massive damage hits
-    if (dmg >= 22 && fatalError != nullptr) {
+    if (dmg >= 22 && fatalError != nullptr && !m_isDead) {
         fatalError->active = true;
         fatalError->damageValue = dmg;
         fatalError->timer = 4.0f;
         fatalError->message = "EXCEPCION EN 0x000000FF";
     }
+}
+
+void Player::Respawn(glm::vec3 spawnPos) {
+    Position = spawnPos;
+    Velocity = glm::vec3(0.0f);
+    Stats.CurrentHP = Stats.MaxHP;
+    Stats.CurrentMP = Stats.MaxMP;
+    m_isDead = false;
+    DeathTimer = 0.0f;
+    StunTimer = 0.0f;
+    m_isBlocking = false;
+    m_attackTimer = 0.0f;
+    updateModelMesh();
+    std::cout << "[Player] Renacido con exito en el campamento." << std::endl;
 }
 
 #include "CombatCalculator.h"
@@ -99,158 +150,176 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
         m_attackTimer -= deltaTime;
         float progress = 1.0f - (m_attackTimer / m_attackDuration);
         
-        // Midpoint of sword swing (at the climax of the downward chop): deliver hit
-        if (progress >= 0.48f && !m_attackHitDone) {
+        // Clímax del tajo descendente (de arriba a abajo): mete el daño exactamente al descargar el golpe abajo
+        if (progress >= 0.50f && !m_attackHitDone) {
             m_attackHitDone = true;
             
             // In 3rd person use character facing, in 1st person use camera Front
             glm::vec3 forwardDir = IsThirdPerson ? glm::vec3(sin(glm::radians(ModelYaw)), 0.0f, cos(glm::radians(ModelYaw))) : Front;
+            glm::vec2 fwd2D = glm::length(glm::vec2(forwardDir.x, forwardDir.z)) > 0.001f ? glm::normalize(glm::vec2(forwardDir.x, forwardDir.z)) : glm::vec2(0.0f, 1.0f);
 
-            // Robust Melee Hitbox Evaluator: Point-blank 360-degree guarantee + wide 130-degree frontal cleave + slope tolerance
-            auto isHitByMelee = [&](const glm::vec3& targetPos, float targetRadius) -> bool {
+            bool isTwoHanded = (m_equippedMainHandId.find("greatsword") != std::string::npos ||
+                                m_equippedMainHandId.find("executioner") != std::string::npos ||
+                                m_equippedMainHandId.find("dragonslayer") != std::string::npos);
+            float baseReach = isTwoHanded ? 3.6f : 2.8f;
+            int maxHits = isTwoHanded ? 2 : 1; // 1-handed weapons hit strictly 1 target; 2-handed weapons can cleave at most 2 directly in blade sweep
+
+            struct HitCandidate {
+                enum class TargetType { DRAGON, MONSTER, WATER_MONSTER, ENEMY_MOB, PASSIVE_MOB } type;
+                void* ptr = nullptr;
+                glm::vec3 pos;
+                float radius;
+                float score;
+                int defense;
+                int evasion;
+            };
+            std::vector<HitCandidate> candidates;
+
+            auto evaluateCandidate = [&](void* ptr, HitCandidate::TargetType type, const glm::vec3& targetPos, float radius, int def, int eva) {
                 float dx = targetPos.x - Position.x;
                 float dz = targetPos.z - Position.z;
                 float dist2D = sqrt(dx * dx + dz * dz);
                 float dy = std::abs(targetPos.y - Position.y);
 
-                // Generous vertical tolerance for uneven slopes / height differences
-                if (dy > 4.5f) return false;
+                // Vertical tolerance: must be within striking reach
+                if (dy > 2.8f) return;
 
-                // 1. Point-Blank 360-degree hit guarantee (Always hits when close regardless of facing angle)
-                if (dist2D <= (2.8f + targetRadius)) {
-                    return true;
+                // Max physical reach
+                if (dist2D > (baseReach + radius)) return;
+
+                // Angle check: target MUST be in front of the player (±50 degrees frontal cone)
+                glm::vec2 toTarget2D = (dist2D > 0.001f) ? glm::vec2(dx / dist2D, dz / dist2D) : glm::vec2(0.0f);
+                float dot = glm::dot(fwd2D, toTarget2D);
+
+                // Tolerancia a quemarropa: si el mob está físicamente encima o rozando el cuerpo del jugador,
+                // omitimos la restricción de ángulo para poder golpearlo siempre
+                bool isPointBlank = (dist2D <= (radius + 0.95f));
+                if (!isPointBlank && dot < 0.50f) return;
+
+                // Crosshair aim alignment: how directly centered is the target in player's view?
+                glm::vec3 toTarget3D = (dist2D > 0.001f) ? glm::normalize((targetPos + glm::vec3(0, 1.0f, 0)) - (Position + glm::vec3(0, 1.6f, 0))) : Front;
+                float aimDot = (dist2D > 0.001f) ? glm::dot(Front, toTarget3D) : 1.0f;
+
+                // Priority score: direct crosshair alignment + proximity, with top priority for point-blank touching enemies
+                float score = (aimDot * 6.0f) + (dot * 3.0f) - (dist2D * 1.5f);
+                if (isPointBlank) {
+                    score += 30.0f; // Prioridad absoluta a mobs pegados o adentro del cuerpo
                 }
 
-                // 2. Forward arc cleave (Melee weapon reach up to 4.8m + radius)
-                if (dist2D <= (4.8f + targetRadius)) {
-                    glm::vec2 toTarget2D = (dist2D > 0.001f) ? glm::normalize(glm::vec2(dx, dz)) : glm::vec2(0.0f);
-                    glm::vec2 fwd2D = glm::normalize(glm::vec2(forwardDir.x, forwardDir.z));
-                    float dot = glm::dot(fwd2D, toTarget2D);
-                    if (dot >= -0.35f) { // 130-degree wide frontal attack arc
-                        return true;
-                    }
-                }
-                return false;
+                candidates.push_back({ type, ptr, targetPos, radius, score, def, eva });
             };
 
-            // 0. Check Dragon
+            // Evaluate all nearby potential targets
             if (dragon != nullptr && dragon->IsAlive() && !dragon->IsDying()) {
-                glm::vec3 dPos = dragon->GetPosition();
-                if (isHitByMelee(dPos, dragon->GetRadius() + 1.2f)) {
-                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 12, 5);
-                    if (dmgResult.IsHit) {
-                        bool killed = dragon->TakeDamage(dmgResult.Damage, Position, particles, damageNumbers, this);
-                        damageNumbers.SpawnDamage(dPos + glm::vec3(0, 2.0f, 0), dmgResult.Damage, dmgResult.IsCrit);
+                evaluateCandidate(dragon, HitCandidate::TargetType::DRAGON, dragon->GetPosition(), dragon->GetRadius() + 1.0f, 12, 5);
+            }
+            for (auto& mPtr : monsters) {
+                if (!mPtr->IsDead()) {
+                    evaluateCandidate(mPtr.get(), HitCandidate::TargetType::MONSTER, mPtr->GetPosition(), 1.0f, 10, 5);
+                }
+            }
+            for (auto& wm : waterMonsters) {
+                if (wm->IsAlive()) {
+                    evaluateCandidate(wm.get(), HitCandidate::TargetType::WATER_MONSTER, wm->GetPosition(), wm->GetRadius(), 4, 10);
+                }
+            }
+            for (auto& enemyPtr : enemyMobs) {
+                if (enemyPtr->IsAlive()) {
+                    evaluateCandidate(enemyPtr.get(), HitCandidate::TargetType::ENEMY_MOB, enemyPtr->GetPosition(), enemyPtr->GetRadius(), enemyPtr->GetDefense(), enemyPtr->GetEvasion());
+                }
+            }
+            for (auto& mobPtr : passiveMobs) {
+                if (mobPtr->IsAlive()) {
+                    evaluateCandidate(mobPtr.get(), HitCandidate::TargetType::PASSIVE_MOB, mobPtr->GetPosition(), mobPtr->GetRadius(), 4, 12);
+                }
+            }
 
+            // Sort descending by score: the single target most directly aligned with your strike is first!
+            std::sort(candidates.begin(), candidates.end(), [](const HitCandidate& a, const HitCandidate& b) {
+                return a.score > b.score;
+            });
+
+            // Deliver hit only to top candidates (maxHits: 1 for 1-handed, 2 for colossal 2-handed)
+            int hitsDelivered = 0;
+            for (const auto& cand : candidates) {
+                if (hitsDelivered >= maxHits) break;
+
+                AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, cand.defense, cand.evasion);
+                if (dmgResult.IsHit) {
+                    if (cand.type == HitCandidate::TargetType::DRAGON) {
+                        Dragon* d = static_cast<Dragon*>(cand.ptr);
+                        bool killed = d->TakeDamage(dmgResult.Damage, Position, particles, damageNumbers, this);
+                        damageNumbers.SpawnDamage(cand.pos + glm::vec3(0, 2.0f, 0), dmgResult.Damage, dmgResult.IsCrit);
                         if (killed) {
                             bool leveledUp = false;
-                            int expGain = dragon->GetExpReward();
+                            int expGain = d->GetExpReward();
                             Stats.AddExp(expGain, leveledUp);
-                            damageNumbers.SpawnExp(dPos + glm::vec3(0, 2.5f, 0), expGain);
+                            damageNumbers.SpawnExp(cand.pos + glm::vec3(0, 2.5f, 0), expGain);
                             if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
-                    }
-                }
-            }
-            
-            // 1. Check aggressive shadow monsters
-            for (auto& mPtr : monsters) {
-                if (mPtr->IsDead()) continue;
-                glm::vec3 mPos = mPtr->GetPosition();
-                if (isHitByMelee(mPos, 1.4f)) {
-                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 10, 5);
-                    if (dmgResult.IsHit) {
-                        mPtr->TakeDamage((float)dmgResult.Damage, false);
-                        damageNumbers.SpawnDamage(mPos, dmgResult.Damage, dmgResult.IsCrit);
-
-                        // Spawn impact blood / spark particles
-                        for (int i = 0; i < 24; ++i) {
+                    } else if (cand.type == HitCandidate::TargetType::MONSTER) {
+                        Monster* m = static_cast<Monster*>(cand.ptr);
+                        m->TakeDamage((float)dmgResult.Damage, false);
+                        damageNumbers.SpawnDamage(cand.pos, dmgResult.Damage, dmgResult.IsCrit);
+                        for (int i = 0; i < 20; ++i) {
                             glm::vec3 pVel((rand()%100/50.0f - 1.0f)*3.5f, (rand()%100/50.0f + 0.3f)*4.0f, (rand()%100/50.0f - 1.0f)*3.5f);
-                            particles.SpawnParticle(mPos + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.85f, 0.05f, 0.05f, 1.0f), 0.14f, 0.85f, -9.8f);
+                            particles.SpawnParticle(cand.pos + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.85f, 0.05f, 0.05f, 1.0f), 0.14f, 0.85f, -9.8f);
                         }
-
-                        if (mPtr->IsDead()) {
+                        if (m->IsDead()) {
                             bool leveledUp = false;
                             Stats.AddExp(85, leveledUp);
-                            damageNumbers.SpawnExp(mPos, 85);
+                            damageNumbers.SpawnExp(cand.pos, 85);
                             if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
-                    }
-                }
-            }
-
-            // 2. Check lake water monsters (Water Lurkers)
-            for (auto& wm : waterMonsters) {
-                if (!wm->IsAlive()) continue;
-                glm::vec3 wPos = wm->GetPosition();
-                if (isHitByMelee(wPos, wm->GetRadius()) || wm->IsDragging()) {
-                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 4, 10);
-                    if (dmgResult.IsHit) {
+                    } else if (cand.type == HitCandidate::TargetType::WATER_MONSTER) {
+                        WaterMonster* wm = static_cast<WaterMonster*>(cand.ptr);
                         bool killed = wm->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
-                        damageNumbers.SpawnDamage(wPos, dmgResult.Damage, dmgResult.IsCrit);
-
+                        damageNumbers.SpawnDamage(cand.pos, dmgResult.Damage, dmgResult.IsCrit);
                         if (killed) {
                             bool leveledUp = false;
                             int expGain = wm->GetExpReward();
                             Stats.AddExp(expGain, leveledUp);
-                            damageNumbers.SpawnExp(wPos, expGain);
+                            damageNumbers.SpawnExp(cand.pos, expGain);
                             if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
-                    }
-                }
-            }
-
-            // 3. Check enemy mobs (Corrupted Warriors, Neutral Giants, Dark Mages, Archers)
-            for (auto& enemyPtr : enemyMobs) {
-                if (!enemyPtr->IsAlive()) continue;
-                glm::vec3 ePos = enemyPtr->GetPosition();
-                if (isHitByMelee(ePos, enemyPtr->GetRadius())) {
-                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 6, 8);
-                    if (dmgResult.IsHit) {
-                        bool killed = enemyPtr->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
-                        damageNumbers.SpawnDamage(ePos, dmgResult.Damage, dmgResult.IsCrit);
-
+                    } else if (cand.type == HitCandidate::TargetType::ENEMY_MOB) {
+                        EnemyMob* em = static_cast<EnemyMob*>(cand.ptr);
+                        bool killed = em->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
+                        damageNumbers.SpawnDamage(cand.pos, dmgResult.Damage, dmgResult.IsCrit);
                         if (killed) {
                             bool leveledUp = false;
-                            int expGain = enemyPtr->GetExpReward();
+                            int expGain = em->GetExpReward();
                             Stats.AddExp(expGain, leveledUp);
-                            damageNumbers.SpawnExp(ePos, expGain);
+                            damageNumbers.SpawnExp(cand.pos, expGain);
                             if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
-                    }
-                }
-            }
-
-            // 4. Check passive & hostile mobs (Forest Deer & Demonic Deer)
-            for (auto& mobPtr : passiveMobs) {
-                if (!mobPtr->IsAlive()) continue;
-                glm::vec3 mobPos = mobPtr->GetPosition();
-                if (isHitByMelee(mobPos, mobPtr->GetRadius())) {
-                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 4, 12);
-                    if (dmgResult.IsHit) {
-                        bool killed = mobPtr->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
-                        damageNumbers.SpawnDamage(mobPos, dmgResult.Damage, dmgResult.IsCrit);
-
+                    } else if (cand.type == HitCandidate::TargetType::PASSIVE_MOB) {
+                        PassiveMob* pm = static_cast<PassiveMob*>(cand.ptr);
+                        bool killed = pm->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
+                        damageNumbers.SpawnDamage(cand.pos, dmgResult.Damage, dmgResult.IsCrit);
                         if (killed) {
                             bool leveledUp = false;
-                            int expGain = mobPtr->GetExpReward();
+                            int expGain = pm->GetExpReward();
                             Stats.AddExp(expGain, leveledUp);
-                            damageNumbers.SpawnExp(mobPos, expGain);
+                            damageNumbers.SpawnExp(cand.pos, expGain);
                             if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
                     }
+                } else {
+                    // Evaded: spawn evasion sparkle
+                    for (int i = 0; i < 6; ++i) {
+                        glm::vec3 pVel((rand()%100/50.0f - 1.0f)*1.5f, (rand()%100/50.0f + 0.5f)*2.0f, (rand()%100/50.0f - 1.0f)*1.5f);
+                        particles.SpawnParticle(cand.pos + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.7f, 0.7f, 0.9f, 0.8f), 0.08f, 0.4f, 0.0f);
+                    }
                 }
+
+                hitsDelivered++;
             }
         }
     }
 }
 
 void Player::initModel() {
-    m_baseBoxes = ModelLoader::Load("assets/models/player.txt");
-    if (m_baseBoxes.empty()) {
-        std::cerr << "[Player] Warning: player.txt model is empty or not found!" << std::endl;
-    }
-
     glGenVertexArrays(1, &m_playerVAO);
     glGenBuffers(1, &m_playerVBO);
 
@@ -272,6 +341,213 @@ void Player::initModel() {
 
     glBindVertexArray(0);
 
+    UpdateEquipmentVisuals("", "", "", "");
+}
+
+void Player::UpdateEquipmentVisuals(const std::string& mainHandId, const std::string& chestId, const std::string& headId, const std::string& offHandId, const std::string& legsId, const std::string& feetId, const std::string& glovesId) {
+    if (mainHandId == m_equippedMainHandId && chestId == m_equippedChestId &&
+        headId == m_equippedHeadId && offHandId == m_equippedOffHandId &&
+        legsId == m_equippedLegsId && feetId == m_equippedFeetId && glovesId == m_equippedGlovesId && !m_baseBoxes.empty()) {
+        return;
+    }
+
+    m_equippedMainHandId = mainHandId;
+    m_equippedChestId = chestId;
+    m_equippedHeadId = headId;
+    m_equippedOffHandId = offHandId;
+    m_equippedLegsId = legsId;
+    m_equippedFeetId = feetId;
+    m_equippedGlovesId = glovesId;
+
+    m_baseBoxes.clear();
+
+    // 1. Base Player Body (Peasant / Adventurer Frame)
+    std::vector<BoxDef> body = ModelLoader::Load("assets/models/equipment/player_body.txt");
+    if (body.empty()) {
+        body = ModelLoader::Load("assets/models/player.txt");
+    }
+    m_baseBoxes.insert(m_baseBoxes.end(), body.begin(), body.end());
+
+    // 2. Chest Armor
+    if (m_equippedChestId == "leather_armor") {
+        auto armor = ModelLoader::Load("assets/models/equipment/armor_leather.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), armor.begin(), armor.end());
+    } else if (m_equippedChestId == "iron_armor") {
+        auto armor = ModelLoader::Load("assets/models/equipment/armor_iron_plate.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), armor.begin(), armor.end());
+    } else if (m_equippedChestId == "deathknight_armor") {
+        auto armor = ModelLoader::Load("assets/models/equipment/armor_death_knight.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), armor.begin(), armor.end());
+    } else if (m_equippedChestId == "berserker_armor") {
+        auto armor = ModelLoader::Load("assets/models/equipment/armor_berserker.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), armor.begin(), armor.end());
+    } else if (m_equippedChestId == "shadow_garb") {
+        auto armor = ModelLoader::Load("assets/models/equipment/armor_shadow.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), armor.begin(), armor.end());
+    } else if (m_equippedChestId == "dragon_armor" || m_equippedChestId == "dragon_chest") {
+        auto armor = ModelLoader::Load("assets/models/equipment/armor_dragon.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), armor.begin(), armor.end());
+    }
+
+    // 3. Helmets
+    if (m_equippedHeadId == "leather_cap") {
+        auto helm = ModelLoader::Load("assets/models/equipment/helm_leather.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), helm.begin(), helm.end());
+    } else if (m_equippedHeadId == "iron_helm") {
+        auto helm = ModelLoader::Load("assets/models/equipment/helm_iron.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), helm.begin(), helm.end());
+    } else if (m_equippedHeadId == "deathknight_helm") {
+        auto helm = ModelLoader::Load("assets/models/equipment/helm_death_knight.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), helm.begin(), helm.end());
+    } else if (m_equippedHeadId == "berserker_helm") {
+        auto helm = ModelLoader::Load("assets/models/equipment/helm_berserker.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), helm.begin(), helm.end());
+    } else if (m_equippedHeadId == "shadow_hood") {
+        auto helm = ModelLoader::Load("assets/models/equipment/helm_shadow.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), helm.begin(), helm.end());
+    } else if (m_equippedHeadId == "dragon_helm") {
+        auto helm = ModelLoader::Load("assets/models/equipment/helm_dragon.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), helm.begin(), helm.end());
+    }
+
+    // 4. Legs / Pants
+    if (m_equippedLegsId == "leather_pants") {
+        auto pants = ModelLoader::Load("assets/models/equipment/armor_leather_pants.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), pants.begin(), pants.end());
+    } else if (m_equippedLegsId == "iron_greaves") {
+        auto pants = ModelLoader::Load("assets/models/equipment/armor_iron_greaves.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), pants.begin(), pants.end());
+    } else if (m_equippedLegsId == "deathknight_greaves") {
+        auto pants = ModelLoader::Load("assets/models/equipment/armor_death_knight_greaves.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), pants.begin(), pants.end());
+    } else if (m_equippedLegsId == "berserker_pants") {
+        auto pants = ModelLoader::Load("assets/models/equipment/armor_berserker_pants.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), pants.begin(), pants.end());
+    } else if (m_equippedLegsId == "shadow_pants") {
+        auto pants = ModelLoader::Load("assets/models/equipment/armor_shadow_pants.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), pants.begin(), pants.end());
+    } else if (m_equippedLegsId == "dragon_pants") {
+        auto pants = ModelLoader::Load("assets/models/equipment/armor_dragon_pants.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), pants.begin(), pants.end());
+    }
+
+    // 5. Boots / Feet
+    if (m_equippedFeetId == "leather_boots") {
+        auto boots = ModelLoader::Load("assets/models/equipment/armor_leather_boots.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), boots.begin(), boots.end());
+    } else if (m_equippedFeetId == "iron_boots") {
+        auto boots = ModelLoader::Load("assets/models/equipment/armor_iron_boots.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), boots.begin(), boots.end());
+    } else if (m_equippedFeetId == "deathknight_boots") {
+        auto boots = ModelLoader::Load("assets/models/equipment/armor_death_knight_boots.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), boots.begin(), boots.end());
+    } else if (m_equippedFeetId == "berserker_boots") {
+        auto boots = ModelLoader::Load("assets/models/equipment/armor_berserker_boots.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), boots.begin(), boots.end());
+    } else if (m_equippedFeetId == "shadow_boots") {
+        auto boots = ModelLoader::Load("assets/models/equipment/armor_shadow_boots.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), boots.begin(), boots.end());
+    } else if (m_equippedFeetId == "dragon_boots") {
+        auto boots = ModelLoader::Load("assets/models/equipment/armor_dragon_boots.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), boots.begin(), boots.end());
+    }
+
+    // 6. Gloves / Hands
+    if (m_equippedGlovesId == "leather_gloves") {
+        auto gloves = ModelLoader::Load("assets/models/equipment/armor_leather_gloves.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), gloves.begin(), gloves.end());
+    } else if (m_equippedGlovesId == "iron_gauntlets") {
+        auto gloves = ModelLoader::Load("assets/models/equipment/armor_iron_gauntlets.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), gloves.begin(), gloves.end());
+    } else if (m_equippedGlovesId == "deathknight_gauntlets") {
+        auto gloves = ModelLoader::Load("assets/models/equipment/armor_death_knight_gauntlets.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), gloves.begin(), gloves.end());
+    } else if (m_equippedGlovesId == "berserker_gauntlets") {
+        auto gloves = ModelLoader::Load("assets/models/equipment/armor_berserker_gauntlets.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), gloves.begin(), gloves.end());
+    } else if (m_equippedGlovesId == "shadow_gloves") {
+        auto gloves = ModelLoader::Load("assets/models/equipment/armor_shadow_gloves.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), gloves.begin(), gloves.end());
+    } else if (m_equippedGlovesId == "dragon_gauntlets") {
+        auto gloves = ModelLoader::Load("assets/models/equipment/armor_dragon_gauntlets.txt");
+        m_baseBoxes.insert(m_baseBoxes.end(), gloves.begin(), gloves.end());
+    }
+
+    // 7. Main Hand Weapons (Positioned in right hand at 0.28, 0.72, 0.08)
+    std::string weaponFile = "";
+    if (m_equippedMainHandId == "steel_shortsword" || m_equippedMainHandId == "cursed_sword") {
+        weaponFile = "assets/models/equipment/weapon_shortsword.txt";
+    } else if (m_equippedMainHandId == "iron_greatsword" || m_equippedMainHandId == "frost_claymore") {
+        weaponFile = "assets/models/equipment/weapon_greatsword.txt";
+    } else if (m_equippedMainHandId == "deathknight_greatsword") {
+        weaponFile = "assets/models/equipment/weapon_deathknight_greatsword.txt";
+    } else if (m_equippedMainHandId == "berserker_axe") {
+        weaponFile = "assets/models/equipment/weapon_berserker_axe.txt";
+    } else if (m_equippedMainHandId == "iron_hatchet") {
+        weaponFile = "assets/models/equipment/weapon_iron_hatchet.txt";
+    } else if (m_equippedMainHandId == "berserker_onehand_axe") {
+        weaponFile = "assets/models/equipment/weapon_berserker_onehand_axe.txt";
+    } else if (m_equippedMainHandId == "executioner_axe") {
+        weaponFile = "assets/models/equipment/weapon_executioner_axe.txt";
+    } else if (m_equippedMainHandId == "paladin_longsword") {
+        weaponFile = "assets/models/equipment/weapon_paladin_longsword.txt";
+    } else if (m_equippedMainHandId == "dragonslayer_greatsword") {
+        weaponFile = "assets/models/equipment/weapon_dragonslayer_greatsword.txt";
+    } else if (m_equippedMainHandId == "shadow_dagger") {
+        weaponFile = "assets/models/equipment/weapon_shadow_dagger.txt";
+    } else if (m_equippedMainHandId == "hunting_bow") {
+        weaponFile = "assets/models/equipment/weapon_hunting_bow.txt";
+    }
+
+    if (!weaponFile.empty()) {
+        auto weapon = ModelLoader::Load(weaponFile);
+        for (auto& b : weapon) {
+            if (m_equippedMainHandId == "hunting_bow") {
+                // Held upright in left hand ready to shoot (same as skeleton archer)
+                b.Pos = b.Pos * 1.05f + glm::vec3(-0.28f, 0.82f, 0.18f);
+                b.Name = "WEAPON_BOW_" + b.Name;
+            } else {
+                b.Pos += glm::vec3(0.28f, 0.72f, 0.08f);
+                b.Name = "WEAPON_" + b.Name;
+            }
+            m_baseBoxes.push_back(b);
+        }
+    }
+
+    // 8. Off Hand Shield or Dual Wield 1-Handed Weapon
+    if (m_equippedOffHandId == "iron_shield") {
+        auto shield = ModelLoader::Load("assets/models/equipment/weapon_shield.txt");
+        for (auto& b : shield) {
+            b.Pos += glm::vec3(-0.35f, 0.88f, 0.12f);
+            b.Name = "OFFHAND_SHIELD_" + b.Name;
+            m_baseBoxes.push_back(b);
+        }
+    } else if (!m_equippedOffHandId.empty()) {
+        std::string offhandFile = "";
+        if (m_equippedOffHandId == "shortsword") offhandFile = "assets/models/equipment/weapon_shortsword.txt";
+        else if (m_equippedOffHandId == "iron_hatchet") offhandFile = "assets/models/equipment/weapon_iron_hatchet.txt";
+        else if (m_equippedOffHandId == "berserker_onehand_axe") offhandFile = "assets/models/equipment/weapon_berserker_onehand_axe.txt";
+        else if (m_equippedOffHandId == "paladin_longsword") offhandFile = "assets/models/equipment/weapon_paladin_longsword.txt";
+        else if (m_equippedOffHandId == "shadow_dagger") offhandFile = "assets/models/equipment/weapon_shadow_dagger.txt";
+
+        if (!offhandFile.empty()) {
+            auto weapon = ModelLoader::Load(offhandFile);
+            for (auto& b : weapon) {
+                glm::vec3 p = b.Pos;
+                p.x = -p.x; // Mirror X for left hand
+                p += glm::vec3(-0.28f, 0.72f, 0.08f);
+                b.Pos = p;
+                b.Name = "OFFHAND_WEAPON_" + b.Name;
+                m_baseBoxes.push_back(b);
+            }
+        }
+    }
+
+    if (AreBothHandsOccupied()) {
+        HasTorchActive = false;
+    }
+
+    m_fpMeshNeedsRebuild = true;
     updateModelMesh();
 }
 
@@ -281,50 +557,84 @@ void Player::updateModelMesh() {
     float moveSpeed = glm::length(glm::vec2(Velocity.x, Velocity.z));
     
     // PS1 style procedural limb swing angles
-    float legSwing = (moveSpeed > 0.1f && IsGrounded) ? sin(WalkAnimTimer * 9.0f) * 0.45f : 0.0f;
-    float armSwing = (moveSpeed > 0.1f && IsGrounded) ? sin(WalkAnimTimer * 9.0f) * 0.38f : 0.0f;
-    float capeFlutter = (moveSpeed > 0.1f) ? sin(WalkAnimTimer * 18.0f) * 0.14f : sin(BreathTimer * 2.5f) * 0.04f;
-    float breathingTorso = sin(BreathTimer * 2.5f) * 0.015f;
+    float legSwing = (moveSpeed > 0.1f && IsGrounded && !m_isDead) ? sin(WalkAnimTimer * 9.0f) * 0.45f : 0.0f;
+    float armSwing = (moveSpeed > 0.1f && IsGrounded && !m_isDead) ? sin(WalkAnimTimer * 9.0f) * 0.38f : 0.0f;
+    float capeFlutter = (moveSpeed > 0.1f && !m_isDead) ? sin(WalkAnimTimer * 18.0f) * 0.14f : sin(BreathTimer * 2.5f) * 0.04f;
+    float breathingTorso = !m_isDead ? sin(BreathTimer * 2.5f) * 0.015f : 0.0f;
 
-    bool isAttacking = (m_attackTimer > 0.0f);
+    bool isAttacking = (m_attackTimer > 0.0f && !m_isDead);
     float attackProgress = isAttacking ? (1.0f - (m_attackTimer / m_attackDuration)) : 0.0f;
     
-    // Attack rotation for the entire right arm + sword chain (Vertical Overhead Chop from Top to Bottom)
+    // Attack rotation for arms
     float rightArmRotX = 0.0f;
     float rightArmRotY = 0.0f;
     float rightArmRotZ = 0.0f;
+
+    float leftArmRotX = 0.0f;
+    float leftArmRotY = 0.0f;
+    float leftArmRotZ = 0.0f;
     
-    if (isAttacking) {
-        if (attackProgress < 0.32f) {
-            // Phase 1: SUBE - Windup upwards above head
-            float w = attackProgress / 0.32f;
+    if (isAttacking && m_activeAttackHand == 0) {
+        // Golpe mano derecha: primero eleva de abajo a arriba (windup), luego tajo con furia de arriba a abajo
+        if (attackProgress < 0.28f) {
+            float w = attackProgress / 0.28f;
             float smoothW = w * w * (3.0f - 2.0f * w);
-            rightArmRotX = glm::mix(0.0f, 1.65f, smoothW);
-            rightArmRotY = glm::mix(0.0f, 0.10f, smoothW);
-            rightArmRotZ = glm::mix(0.0f, -0.12f, smoothW);
-        } else if (attackProgress < 0.72f) {
-            // Phase 2: BAJA - Powerful vertical cleave top to bottom
-            float s = (attackProgress - 0.32f) / 0.40f;
+            // De abajo a arriba (preparación del golpe sobre el hombro)
+            rightArmRotX = glm::mix(0.0f, -1.85f, smoothW);
+            rightArmRotY = glm::mix(0.0f, -0.25f, smoothW);
+            rightArmRotZ = glm::mix(0.0f, 0.20f, smoothW);
+        } else if (attackProgress < 0.65f) {
+            float s = (attackProgress - 0.28f) / 0.37f;
             float smoothS = s * s * (3.0f - 2.0f * s);
-            rightArmRotX = glm::mix(1.65f, -1.35f, smoothS);
-            rightArmRotY = glm::mix(0.10f, -0.04f, smoothS);
-            rightArmRotZ = glm::mix(-0.12f, 0.04f, smoothS);
+            // De arriba a abajo (corte descendente donde conecta el daño)
+            rightArmRotX = glm::mix(-1.85f, 1.55f, smoothS);
+            rightArmRotY = glm::mix(-0.25f, 0.10f, smoothS);
+            rightArmRotZ = glm::mix(0.20f, -0.15f, smoothS);
         } else {
-            // Phase 3: RECOVERY - Return smoothly to resting stance
-            float r = (attackProgress - 0.72f) / 0.28f;
+            float r = (attackProgress - 0.65f) / 0.35f;
             float smoothR = r * r * (3.0f - 2.0f * r);
-            rightArmRotX = glm::mix(-1.35f, 0.0f, smoothR);
-            rightArmRotY = glm::mix(-0.04f, 0.0f, smoothR);
-            rightArmRotZ = glm::mix(0.04f, 0.0f, smoothR);
+            // Recuperación de abajo a posición neutral
+            rightArmRotX = glm::mix(1.55f, 0.0f, smoothR);
+            rightArmRotY = glm::mix(0.10f, 0.0f, smoothR);
+            rightArmRotZ = glm::mix(-0.15f, 0.0f, smoothR);
         }
-    } else if (m_isBlocking) {
-        // Defensive Parry Stance
+        leftArmRotX = (HasTorchActive && !m_isDead) ? 0.72f : (m_isBlocking ? -0.30f : -armSwing);
+        leftArmRotZ = (HasTorchActive && !m_isDead) ? -0.15f : (m_isBlocking ? 0.40f : 0.0f);
+    } else if (isAttacking && m_activeAttackHand == 1) {
+        // Golpe mano izquierda (dual wield): de abajo a arriba, luego de arriba a abajo
+        rightArmRotX = armSwing * 0.65f;
+        if (attackProgress < 0.28f) {
+            float w = attackProgress / 0.28f;
+            float smoothW = w * w * (3.0f - 2.0f * w);
+            // De abajo a arriba
+            leftArmRotX = glm::mix(0.0f, -1.85f, smoothW);
+            leftArmRotY = glm::mix(0.0f, 0.25f, smoothW);
+            leftArmRotZ = glm::mix(0.0f, -0.20f, smoothW);
+        } else if (attackProgress < 0.65f) {
+            float s = (attackProgress - 0.28f) / 0.37f;
+            float smoothS = s * s * (3.0f - 2.0f * s);
+            // De arriba a abajo
+            leftArmRotX = glm::mix(-1.85f, 1.55f, smoothS);
+            leftArmRotY = glm::mix(0.25f, -0.10f, smoothS);
+            leftArmRotZ = glm::mix(-0.20f, 0.15f, smoothS);
+        } else {
+            float r = (attackProgress - 0.65f) / 0.35f;
+            float smoothR = r * r * (3.0f - 2.0f * r);
+            // Recuperación a posición neutral
+            leftArmRotX = glm::mix(1.55f, 0.0f, smoothR);
+            leftArmRotY = glm::mix(-0.10f, 0.0f, smoothR);
+            leftArmRotZ = glm::mix(0.15f, 0.0f, smoothR);
+        }
+    } else if (m_isBlocking && !m_isDead) {
         rightArmRotX = 0.40f;
         rightArmRotY = -0.60f;
         rightArmRotZ = -0.65f;
+        leftArmRotX = -0.30f;
+        leftArmRotZ = 0.40f;
     } else {
-        // Normal walking swing
         rightArmRotX = armSwing * 0.65f;
+        leftArmRotX = (HasTorchActive && !m_isDead && !AreBothHandsOccupied()) ? 0.72f : -armSwing;
+        leftArmRotZ = (HasTorchActive && !m_isDead && !AreBothHandsOccupied()) ? -0.15f : 0.0f;
     }
 
     // Joint Pivots for rigid hierarchical rotation
@@ -333,24 +643,27 @@ void Player::updateModelMesh() {
     glm::vec3 hipPivotL(-0.13f, 0.76f, 0.0f);
     glm::vec3 hipPivotR(0.13f, 0.76f, 0.0f);
 
-    // Build rotation matrix for right arm + sword chain
     glm::mat4 R_Arm = glm::mat4(1.0f);
     R_Arm = glm::rotate(R_Arm, rightArmRotZ, glm::vec3(0, 0, 1));
     R_Arm = glm::rotate(R_Arm, rightArmRotY, glm::vec3(0, 1, 0));
     R_Arm = glm::rotate(R_Arm, rightArmRotX, glm::vec3(1, 0, 0));
 
-    // Build rotation matrix for left arm (Holds torch upright when active)
-    float leftArmRotX = HasTorchActive ? 0.72f : (m_isBlocking ? -0.30f : -armSwing);
-    float leftArmRotZ = HasTorchActive ? -0.15f : (m_isBlocking ? 0.40f : 0.0f);
     glm::mat4 L_Arm = glm::mat4(1.0f);
     L_Arm = glm::rotate(L_Arm, leftArmRotZ, glm::vec3(0, 0, 1));
+    L_Arm = glm::rotate(L_Arm, leftArmRotY, glm::vec3(0, 1, 0));
     L_Arm = glm::rotate(L_Arm, leftArmRotX, glm::vec3(1, 0, 0));
+
+    // Death collapse transform: body tilts back 90 degrees and rests flat on ground
+    glm::mat4 rootM = glm::mat4(1.0f);
+    if (m_isDead) {
+        rootM = glm::translate(rootM, glm::vec3(0.0f, -0.65f, 0.0f));
+        rootM = glm::rotate(rootM, glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    }
 
     std::vector<TransformedBox> transformedBoxes;
     transformedBoxes.reserve(m_baseBoxes.size() + 4);
 
     for (const auto& box : m_baseBoxes) {
-        // Base Box Model Matrix
         glm::mat4 M = glm::mat4(1.0f);
         M = glm::translate(M, box.Pos);
         M = glm::rotate(M, box.Rot.z, glm::vec3(0,0,1));
@@ -359,53 +672,61 @@ void Player::updateModelMesh() {
         M = glm::scale(M, box.Scale);
 
         // Left Leg
-        if (box.Name == "THIGH_L" || box.Name == "BOOT_L" || box.Name == "FOOT_L") {
+        if (box.Name == "THIGH_L" || box.Name == "BOOT_L" || box.Name == "FOOT_L" ||
+            ((box.Name.find("LEGS") != std::string::npos || box.Name.find("BOOTS") != std::string::npos) && box.Name.find("_L") != std::string::npos)) {
             glm::mat4 finalM = glm::translate(glm::mat4(1.0f), hipPivotL) * glm::rotate(glm::mat4(1.0f), legSwing, glm::vec3(1,0,0)) * glm::translate(glm::mat4(1.0f), -hipPivotL) * M;
-            transformedBoxes.push_back({finalM, box.Color});
+            transformedBoxes.push_back({rootM * finalM, box.Color});
         }
         // Right Leg
-        else if (box.Name == "THIGH_R" || box.Name == "BOOT_R" || box.Name == "FOOT_R") {
+        else if (box.Name == "THIGH_R" || box.Name == "BOOT_R" || box.Name == "FOOT_R" ||
+                 ((box.Name.find("LEGS") != std::string::npos || box.Name.find("BOOTS") != std::string::npos) && box.Name.find("_R") != std::string::npos)) {
             glm::mat4 finalM = glm::translate(glm::mat4(1.0f), hipPivotR) * glm::rotate(glm::mat4(1.0f), -legSwing, glm::vec3(1,0,0)) * glm::translate(glm::mat4(1.0f), -hipPivotR) * M;
-            transformedBoxes.push_back({finalM, box.Color});
+            transformedBoxes.push_back({rootM * finalM, box.Color});
         }
-        // Left Arm
-        else if (box.Name == "SHOULDER_L" || box.Name == "ARM_UPPER_L" || box.Name == "FOREARM_L" || box.Name == "HAND_L") {
+        // Left Arm & Shield & Offhand Weapon & Bow & Gloves
+        else if (box.Name == "SHOULDER_L" || box.Name == "ARM_UPPER_L" || box.Name == "FOREARM_L" || box.Name == "HAND_L" ||
+                 (box.Name.find("GLOVES") != std::string::npos && box.Name.find("_L") != std::string::npos) ||
+                 box.Name.find("SHIELD") != std::string::npos || box.Name.find("OFFHAND") != std::string::npos ||
+                 box.Name.find("BOW") != std::string::npos || box.Name.find("PAULDRON_L") != std::string::npos) {
             glm::mat4 finalM = glm::translate(glm::mat4(1.0f), shoulderPivotL) * L_Arm * glm::translate(glm::mat4(1.0f), -shoulderPivotL) * M;
-            transformedBoxes.push_back({finalM, box.Color});
+            transformedBoxes.push_back({rootM * finalM, box.Color});
         }
-        // Right Arm & Complete Sword (100% Rigid Body Transform - Never breaks or separates)
-        else if (box.Name == "SHOULDER_R" || box.Name == "ARM_UPPER_R" || box.Name == "FOREARM_R" || box.Name == "HAND_R" || box.Name.find("SWORD") != std::string::npos) {
+        // Right Arm & Complete Weapon & Gloves
+        else if (box.Name == "SHOULDER_R" || box.Name == "ARM_UPPER_R" || box.Name == "FOREARM_R" || box.Name == "HAND_R" ||
+                 (box.Name.find("GLOVES") != std::string::npos && box.Name.find("_R") != std::string::npos) ||
+                 box.Name.find("SWORD") != std::string::npos || box.Name.find("WEAPON") != std::string::npos ||
+                 box.Name.find("BLADE") != std::string::npos || box.Name.find("AXE") != std::string::npos ||
+                 box.Name.find("HILT") != std::string::npos || box.Name.find("GUARD") != std::string::npos ||
+                 box.Name.find("POMMEL") != std::string::npos || box.Name.find("PAULDRON_R") != std::string::npos) {
             glm::mat4 finalM = glm::translate(glm::mat4(1.0f), shoulderPivotR) * R_Arm * glm::translate(glm::mat4(1.0f), -shoulderPivotR) * M;
-            transformedBoxes.push_back({finalM, box.Color});
+            transformedBoxes.push_back({rootM * finalM, box.Color});
         }
-        // Cape & Coat
-        else if (box.Name == "CAPE_BACK" || box.Name == "CAPE_LOWER" || box.Name == "SKIRT") {
+        // Cape & Skirt
+        else if (box.Name.find("CAPE") != std::string::npos || box.Name == "SKIRT") {
             glm::mat4 finalM = glm::translate(glm::mat4(1.0f), box.Pos) * glm::rotate(glm::mat4(1.0f), capeFlutter, glm::vec3(1,0,0)) * glm::translate(glm::mat4(1.0f), -box.Pos) * M;
-            transformedBoxes.push_back({finalM, box.Color});
+            transformedBoxes.push_back({rootM * finalM, box.Color});
         }
         // Torso Breathing
-        else if (box.Name == "CHEST_PLATE" || box.Name == "NECK_COLLAR") {
+        else if (box.Name.find("CHEST") != std::string::npos || box.Name.find("TORSO") != std::string::npos ||
+                 box.Name.find("GORGET") != std::string::npos || box.Name == "NECK_COLLAR") {
             glm::mat4 finalM = glm::scale(M, glm::vec3(1.0f, 1.0f + breathingTorso, 1.0f + breathingTorso));
-            transformedBoxes.push_back({finalM, box.Color});
+            transformedBoxes.push_back({rootM * finalM, box.Color});
         }
-        // Head / Torso Default
+        // Head / Default
         else {
-            transformedBoxes.push_back({M, box.Color});
+            transformedBoxes.push_back({rootM * M, box.Color});
         }
     }
 
     // Attach 3D Torch Model to Left Hand in 3rd Person
-    if (HasTorchActive) {
+    if (HasTorchActive && !m_isDead) {
         glm::mat4 torchBase = glm::translate(glm::mat4(1.0f), shoulderPivotL) * L_Arm * glm::translate(glm::mat4(1.0f), -shoulderPivotL);
-        // Handle
         glm::mat4 handleM = torchBase * glm::translate(glm::mat4(1.0f), glm::vec3(-0.28f, 0.95f, 0.28f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.08f, 0.55f, 0.08f));
-        transformedBoxes.push_back({handleM, glm::vec3(0.28f, 0.18f, 0.10f)});
-        // Ring
+        transformedBoxes.push_back({rootM * handleM, glm::vec3(0.28f, 0.18f, 0.10f)});
         glm::mat4 ringM = torchBase * glm::translate(glm::mat4(1.0f), glm::vec3(-0.28f, 1.20f, 0.28f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.14f, 0.08f, 0.14f));
-        transformedBoxes.push_back({ringM, glm::vec3(0.22f, 0.22f, 0.24f)});
-        // Flame
+        transformedBoxes.push_back({rootM * ringM, glm::vec3(0.22f, 0.22f, 0.24f)});
         glm::mat4 flameM = torchBase * glm::translate(glm::mat4(1.0f), glm::vec3(-0.28f, 1.30f, 0.28f)) * glm::scale(glm::mat4(1.0f), glm::vec3(0.12f, 0.16f, 0.12f));
-        transformedBoxes.push_back({flameM, glm::vec3(0.98f, 0.70f, 0.15f)});
+        transformedBoxes.push_back({rootM * flameM, glm::vec3(0.98f, 0.70f, 0.15f)});
     }
 
     std::vector<float> rawVertices;
@@ -417,33 +738,118 @@ void Player::updateModelMesh() {
     glBindBuffer(GL_ARRAY_BUFFER, 0);
 }
 
+void Player::RenderPreview(GLuint shaderProgram, const glm::mat4& modelMatrix) {
+    if (m_playerVAO == 0 || m_playerVertexCount == 0) return;
+
+    GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
+    glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelMatrix));
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
+    glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 0);
+
+    glBindVertexArray(m_playerVAO);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_playerVertexCount);
+    glBindVertexArray(0);
+}
+
 void Player::RenderFirstPersonSword(GLuint shaderProgram) {
-    if (m_baseBoxes.empty()) return;
+    if (m_fpMeshNeedsRebuild || m_fpVAO == 0) {
+        m_fpMeshNeedsRebuild = false;
 
-    // Filter only right hand and sword boxes for 1st person viewmodel
-    std::vector<BoxDef> fpBoxes;
-    for (const auto& box : m_baseBoxes) {
-        if (box.Name.find("SWORD") != std::string::npos || box.Name == "HAND_R" || box.Name == "FOREARM_R") {
-            BoxDef b = box;
-            // Center relative to right hand
-            b.Pos.x -= 0.28f;
-            b.Pos.y -= 0.72f;
-            b.Pos.z -= 0.08f;
-            fpBoxes.push_back(b);
+        std::vector<BoxDef> fpBoxes;
+
+        // Right hand
+        BoxDef handR;
+        handR.Name = "FP_HAND_R";
+        handR.Pos = glm::vec3(0.0f, -0.05f, 0.08f);
+        handR.Scale = glm::vec3(0.12f, 0.14f, 0.12f);
+        handR.Color = glm::vec3(0.68f, 0.52f, 0.40f);
+        fpBoxes.push_back(handR);
+
+        // Forearm sleeve with matching equipped armor tint
+        BoxDef armR;
+        armR.Name = "FP_ARM_R";
+        armR.Pos = glm::vec3(0.02f, -0.32f, 0.05f);
+        armR.Scale = glm::vec3(0.14f, 0.42f, 0.14f);
+        armR.Color = (m_equippedChestId == "iron_armor") ? glm::vec3(0.72f, 0.75f, 0.82f) :
+                     ((m_equippedChestId == "deathknight_armor") ? glm::vec3(0.14f, 0.14f, 0.18f) :
+                     ((m_equippedChestId == "berserker_armor") ? glm::vec3(0.45f, 0.28f, 0.16f) :
+                     ((m_equippedChestId == "shadow_garb") ? glm::vec3(0.14f, 0.12f, 0.18f) :
+                     ((m_equippedChestId == "dragon_armor" || m_equippedChestId == "dragon_chest") ? glm::vec3(0.75f, 0.15f, 0.12f) :
+                     ((m_equippedChestId == "leather_armor") ? glm::vec3(0.42f, 0.28f, 0.18f) : glm::vec3(0.42f, 0.38f, 0.32f))))));
+        fpBoxes.push_back(armR);
+
+        // Equipped weapon model
+        std::string weaponFile = "";
+        if (m_equippedMainHandId == "steel_shortsword" || m_equippedMainHandId == "cursed_sword") {
+            weaponFile = "assets/models/equipment/weapon_shortsword.txt";
+        } else if (m_equippedMainHandId == "iron_greatsword" || m_equippedMainHandId == "frost_claymore") {
+            weaponFile = "assets/models/equipment/weapon_greatsword.txt";
+        } else if (m_equippedMainHandId == "deathknight_greatsword") {
+            weaponFile = "assets/models/equipment/weapon_deathknight_greatsword.txt";
+        } else if (m_equippedMainHandId == "berserker_axe") {
+            weaponFile = "assets/models/equipment/weapon_berserker_axe.txt";
+        } else if (m_equippedMainHandId == "iron_hatchet") {
+            weaponFile = "assets/models/equipment/weapon_iron_hatchet.txt";
+        } else if (m_equippedMainHandId == "berserker_onehand_axe") {
+            weaponFile = "assets/models/equipment/weapon_berserker_onehand_axe.txt";
+        } else if (m_equippedMainHandId == "executioner_axe") {
+            weaponFile = "assets/models/equipment/weapon_executioner_axe.txt";
+        } else if (m_equippedMainHandId == "paladin_longsword") {
+            weaponFile = "assets/models/equipment/weapon_paladin_longsword.txt";
+        } else if (m_equippedMainHandId == "dragonslayer_greatsword") {
+            weaponFile = "assets/models/equipment/weapon_dragonslayer_greatsword.txt";
+        } else if (m_equippedMainHandId == "shadow_dagger") {
+            weaponFile = "assets/models/equipment/weapon_shadow_dagger.txt";
+        } else if (m_equippedMainHandId == "hunting_bow") {
+            weaponFile = "assets/models/equipment/weapon_hunting_bow.txt";
         }
-    }
 
-    static GLuint fpVAO = 0, fpVBO = 0;
-    static size_t fpVertexCount = 0;
-    if (fpVAO == 0) {
+        if (!weaponFile.empty()) {
+            auto weapon = ModelLoader::Load(weaponFile);
+            for (auto& b : weapon) {
+                if (m_equippedMainHandId == "hunting_bow") {
+                    b.Pos = b.Pos * 0.90f + glm::vec3(-0.24f, -0.06f, 0.35f);
+                } else {
+                    b.Pos += glm::vec3(0.0f, 0.0f, 0.08f);
+                }
+                fpBoxes.push_back(b);
+            }
+        }
+
+        // Dual Wield Off-hand Weapon in First Person
+        if (!m_equippedOffHandId.empty() && m_equippedOffHandId != "iron_shield") {
+            std::string offFpFile = "";
+            if (m_equippedOffHandId == "shortsword") offFpFile = "assets/models/equipment/weapon_shortsword.txt";
+            else if (m_equippedOffHandId == "iron_hatchet") offFpFile = "assets/models/equipment/weapon_iron_hatchet.txt";
+            else if (m_equippedOffHandId == "berserker_onehand_axe") offFpFile = "assets/models/equipment/weapon_berserker_onehand_axe.txt";
+            else if (m_equippedOffHandId == "paladin_longsword") offFpFile = "assets/models/equipment/weapon_paladin_longsword.txt";
+            else if (m_equippedOffHandId == "shadow_dagger") offFpFile = "assets/models/equipment/weapon_shadow_dagger.txt";
+
+            if (!offFpFile.empty()) {
+                auto offWeapon = ModelLoader::Load(offFpFile);
+                for (auto& b : offWeapon) {
+                    glm::vec3 p = b.Pos;
+                    p.x = -p.x;
+                    p += glm::vec3(-0.28f, -0.10f, 0.12f);
+                    b.Pos = p;
+                    fpBoxes.push_back(b);
+                }
+            }
+        }
+
         std::vector<float> rawVertices;
         ModelLoader::GenerateMesh(fpBoxes, rawVertices);
-        fpVertexCount = rawVertices.size() / 11;
+        m_fpVertexCount = rawVertices.size() / 11;
 
-        glGenVertexArrays(1, &fpVAO);
-        glGenBuffers(1, &fpVBO);
-        glBindVertexArray(fpVAO);
-        glBindBuffer(GL_ARRAY_BUFFER, fpVBO);
+        if (m_fpVAO == 0) {
+            glGenVertexArrays(1, &m_fpVAO);
+            glGenBuffers(1, &m_fpVBO);
+        }
+        glBindVertexArray(m_fpVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, m_fpVBO);
         glBufferData(GL_ARRAY_BUFFER, rawVertices.size() * sizeof(float), rawVertices.data(), GL_STATIC_DRAW);
 
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 11 * sizeof(float), (void*)0);
@@ -457,10 +863,11 @@ void Player::RenderFirstPersonSword(GLuint shaderProgram) {
         glBindVertexArray(0);
     }
 
+    if (m_fpVAO == 0 || m_fpVertexCount == 0) return;
+
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     glm::mat4 model = glm::mat4(1.0f);
 
-    // Position sword in lower-right of screen
     glm::vec3 viewPos(0.24f, -0.28f, 0.46f);
     viewPos += WeaponSwayPos;
     if (IsGrounded) {
@@ -471,35 +878,33 @@ void Player::RenderFirstPersonSword(GLuint shaderProgram) {
 
     if (m_attackTimer > 0.0f) {
         float progress = 1.0f - (m_attackTimer / m_attackDuration);
-        if (progress < 0.32f) {
-            // Phase 1: SUBE - Windup upwards high above screen
-            float w = progress / 0.32f;
+        if (progress < 0.28f) {
+            float w = progress / 0.28f;
             float smoothW = w * w * (3.0f - 2.0f * w);
-            model = glm::translate(model, glm::vec3(0.02f, 0.32f, -0.12f) * smoothW);
-            model = glm::rotate(model, glm::radians(52.0f * smoothW), glm::vec3(1, 0, 0));
-            model = glm::rotate(model, glm::radians(-18.0f * smoothW), glm::vec3(0, 0, 1));
-        } else if (progress < 0.72f) {
-            // Phase 2: BAJA - Heavy cleave chopping from top to bottom
-            float s = (progress - 0.32f) / 0.40f;
+            // Eleva el arma hacia arriba y atras (de abajo hacia arriba)
+            model = glm::translate(model, glm::vec3(0.03f, 0.28f, -0.15f) * smoothW);
+            model = glm::rotate(model, glm::radians(-55.0f * smoothW), glm::vec3(1, 0, 0));
+            model = glm::rotate(model, glm::radians(20.0f * smoothW), glm::vec3(0, 0, 1));
+        } else if (progress < 0.65f) {
+            float s = (progress - 0.28f) / 0.37f;
             float smoothS = s * s * (3.0f - 2.0f * s);
-            model = glm::translate(model, glm::mix(glm::vec3(0.02f, 0.32f, -0.12f), glm::vec3(-0.04f, -0.42f, 0.14f), smoothS));
-            model = glm::rotate(model, glm::radians(glm::mix(52.0f, -75.0f, smoothS)), glm::vec3(1, 0, 0));
-            model = glm::rotate(model, glm::radians(glm::mix(-18.0f, -5.0f, smoothS)), glm::vec3(0, 0, 1));
+            // Tajo hacia abajo con descarga de daño (de arriba hacia abajo)
+            model = glm::translate(model, glm::mix(glm::vec3(0.03f, 0.28f, -0.15f), glm::vec3(-0.05f, -0.36f, 0.15f), smoothS));
+            model = glm::rotate(model, glm::radians(glm::mix(-55.0f, 75.0f, smoothS)), glm::vec3(1, 0, 0));
+            model = glm::rotate(model, glm::radians(glm::mix(20.0f, -18.0f, smoothS)), glm::vec3(0, 0, 1));
         } else {
-            // Phase 3: RECOVERY - Reset smoothly to idle
-            float r = (progress - 0.72f) / 0.28f;
+            float r = (progress - 0.65f) / 0.35f;
             float smoothR = r * r * (3.0f - 2.0f * r);
-            model = glm::translate(model, glm::mix(glm::vec3(-0.04f, -0.42f, 0.14f), glm::vec3(0.0f), smoothR));
-            model = glm::rotate(model, glm::radians(glm::mix(-75.0f, 0.0f, smoothR)), glm::vec3(1, 0, 0));
-            model = glm::rotate(model, glm::radians(glm::mix(-5.0f, 0.0f, smoothR)), glm::vec3(0, 0, 1));
+            // Recuperación a la posición neutral
+            model = glm::translate(model, glm::mix(glm::vec3(-0.05f, -0.36f, 0.15f), glm::vec3(0.0f), smoothR));
+            model = glm::rotate(model, glm::radians(glm::mix(75.0f, 0.0f, smoothR)), glm::vec3(1, 0, 0));
+            model = glm::rotate(model, glm::radians(glm::mix(-18.0f, 0.0f, smoothR)), glm::vec3(0, 0, 1));
         }
     } else if (m_isBlocking) {
-        // Defensive block stance
         model = glm::translate(model, glm::vec3(-0.12f, 0.10f, -0.05f));
         model = glm::rotate(model, glm::radians(-35.0f), glm::vec3(0, 1, 0));
         model = glm::rotate(model, glm::radians(45.0f), glm::vec3(0, 0, 1));
     } else {
-        // Idle tilt
         model = glm::rotate(model, glm::radians(10.0f), glm::vec3(0, 1, 0));
         model = glm::rotate(model, glm::radians(-15.0f), glm::vec3(1, 0, 0));
     }
@@ -510,13 +915,13 @@ void Player::RenderFirstPersonSword(GLuint shaderProgram) {
     glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
 
-    glBindVertexArray(fpVAO);
-    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)fpVertexCount);
+    glBindVertexArray(m_fpVAO);
+    glDrawArrays(GL_TRIANGLES, 0, (GLsizei)m_fpVertexCount);
     glBindVertexArray(0);
 }
 
 void Player::RenderFirstPersonTorch(GLuint shaderProgram) {
-    if (!HasTorchActive) return;
+    if (!HasTorchActive || AreBothHandsOccupied()) return;
 
     static GLuint torchFpVAO = 0, torchFpVBO = 0;
     static size_t torchFpVertexCount = 0;
@@ -679,6 +1084,12 @@ void Player::ProcessMouseScroll(float yoffset) {
 }
 
 void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManager, FootprintSystem& footprints) {
+    if (m_isDead) {
+        Velocity.x = 0.0f;
+        Velocity.z = 0.0f;
+        return;
+    }
+
     glm::vec3 moveDir(0.0f);
     glm::vec3 flatFront = glm::normalize(glm::vec3(Front.x, 0.0f, Front.z));
     glm::vec3 flatRight = glm::normalize(glm::cross(flatFront, WorldUp));
@@ -887,6 +1298,22 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
 }
 
 void Player::Update(float deltaTime) {
+    if (m_isDead) {
+        DeathTimer += deltaTime;
+        Velocity.x = 0.0f;
+        Velocity.z = 0.0f;
+        Velocity.y -= Gravity * deltaTime;
+        Position.y += Velocity.y * deltaTime;
+        float terrainHeight = WorldGenerator::GetHeight(Position.x, Position.z);
+        if (Position.y < terrainHeight + 0.35f) {
+            Position.y = terrainHeight + 0.35f;
+            Velocity.y = 0.0f;
+            IsGrounded = true;
+        }
+        updateModelMesh();
+        return;
+    }
+
     if (IsClimbing) {
         BreathTimer += deltaTime * BreathSpeed;
         m_cameraNoiseAccumulator = std::max(0.0f, m_cameraNoiseAccumulator - deltaTime * 10.0f);

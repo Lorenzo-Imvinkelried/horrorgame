@@ -1,0 +1,7 @@
+# Death Knight Greaves
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0   0.88 0.0    0.44 0.18 0.30   0 0 0   0.16 0.12 0.18  PELVIS_LEGS
+BOX -0.13  0.62 0.0    0.20 0.32 0.22   0 0 0   0.18 0.14 0.22  LEGS_THIGH_L
+BOX  0.13  0.62 0.0    0.20 0.32 0.22   0 0 0   0.18 0.14 0.22  LEGS_THIGH_R
+BOX -0.13  0.46 0.11   0.16 0.14 0.10   0.2 0 0 0.75 0.15 0.15  LEGS_KNEE_L
+BOX  0.13  0.46 0.11   0.16 0.14 0.10   0.2 0 0 0.75 0.15 0.15  LEGS_KNEE_R

@@ -15,6 +15,9 @@ struct FloatingNumber {
     bool IsCrit;
     bool IsExp;
     bool IsLevelUp;
+    bool IsPlayerDamage;
+    bool IsHeal;
+    bool IsMana;
 };
 
 class DamageNumberSystem {
@@ -23,6 +26,9 @@ public:
     ~DamageNumberSystem();
 
     void SpawnDamage(glm::vec3 pos, int damage, bool isCrit);
+    void SpawnPlayerDamage(glm::vec3 playerPos, int damage, glm::vec3 camFront);
+    void SpawnHeal(glm::vec3 pos, int amount);
+    void SpawnMana(glm::vec3 pos, int amount);
     void SpawnExp(glm::vec3 pos, int exp);
     void SpawnLevelUp(glm::vec3 pos);
 

@@ -1,0 +1,9 @@
+# Greatsword Model (2-Handed Colossal Claymore)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  0.0  0.08   0.07 0.07 0.36   0 0 0   0.20 0.15 0.10  HILT
+BOX  0.0  0.0 -0.12   0.10 0.10 0.10   0 0 0   0.45 0.45 0.50  POMMEL
+BOX  0.0  0.0  0.28   0.08 0.46 0.08   0 0 0   0.42 0.44 0.50  GUARD
+BOX  0.0  0.0  0.42   0.04 0.14 0.20   0 0 0   0.55 0.58 0.65  RICASSO
+BOX  0.0  0.0  0.85   0.035 0.16 0.70  0 0 0   0.85 0.88 0.94  BLADE1
+BOX  0.0  0.0  1.35   0.030 0.14 0.60  0 0 0   0.90 0.93 0.98  BLADE2
+BOX  0.0  0.0  1.72   0.025 0.08 0.25  0 0 0   0.95 0.97 1.00  TIP

@@ -1,0 +1,9 @@
+# Paladin Longsword Model (1-Handed Holy Sword oriented along +Z)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  0.0 -0.06   0.070 0.070 0.06   0 0 0   0.95 0.80 0.20  POMMEL_SUN
+BOX  0.0  0.0  0.08   0.050 0.050 0.20   0 0 0   0.90 0.90 0.92  GRIP_WHITE
+BOX  0.0  0.0  0.20   0.060 0.360 0.06   0 0 0   0.95 0.80 0.20  GUARD_WINGS
+BOX  0.0  0.0  0.20   0.070 0.060 0.06   0 0 0   0.90 0.10 0.15  RUBY_GEM
+BOX  0.0  0.0  0.62   0.025 0.100 0.76   0 0 0   0.92 0.95 1.00  BLADE_SILVER
+BOX  0.0  0.0  0.62   0.015 0.120 0.78   0 0 0   1.00 1.00 1.00  EDGE_HOLY
+BOX  0.0  0.0  1.04   0.020 0.060 0.14   0 0 0   1.00 1.00 1.00  TIP_TRIANGLE

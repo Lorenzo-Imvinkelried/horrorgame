@@ -191,8 +191,9 @@ void WaterMonster::Update(float deltaTime, glm::vec3 playerPos, Player* player, 
             particles.SpawnParticle(m_pos + glm::vec3(0, 0.3f, 0), glm::vec3(0.0f, 1.2f, 0.0f), glm::vec4(0.7f, 0.9f, 1.0f, 0.8f), 0.18f, 0.5f, -4.0f);
         }
 
-        // LATCH ON AND GRAB PLAYER!
-        if (distToPlayer < 1.9f) {
+        // LATCH ON AND GRAB PLAYER (solo si el jugador está a nivel del agua y no sobre un árbol/estructura)
+        float vertDiff = std::abs(playerPos.y - m_pos.y);
+        if (distToPlayer < 1.9f && vertDiff <= 1.8f) {
             m_state = WaterMonsterState::DRAGGING_PLAYER;
             m_dragTimer = 0.0f;
             if (player != nullptr) {

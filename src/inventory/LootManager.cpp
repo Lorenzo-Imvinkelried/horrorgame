@@ -5,67 +5,162 @@ LootTable LootManager::GetEnemyLoot(EnemyType type, int nightLevel) {
 
     switch (type) {
         case EnemyType::SKELETON_ARCHER:
-            // 100% Flechas de Caza (x4 - x12), 40% Madera de arco, 15% Arco Recurvo
-            table.AddGuaranteedByString("hunting_arrow", 4, 12);
-            table.AddIndependentDropByString("wood_log", 0.40f, 1, 2);
-            table.AddIndependentDropByString("hunting_bow", 0.15f, 1, 1);
+            // 100% Flechas de Caza (x4 - x10), 35% Madera, 18% Arco Recurvo
+            table.AddGuaranteedByString("hunting_arrow", 4, 10);
+            table.AddIndependentDropByString("wood_log", 0.35f, 1, 2);
+            table.AddIndependentDropByString("hunting_bow", 0.18f, 1, 1);
             break;
 
-        case EnemyType::DEATH_KNIGHT:
-            // 100% Piedra/Acero (x2 - x4), 60% Vial de Sangre, 20% Mandoble de Escarcha (2H)
+        case EnemyType::DEATH_KNIGHT: {
+            // Materiales garantizados
             table.AddGuaranteedByString("stone_rock", 2, 4);
-            table.AddIndependentDropByString("blood_vial", 0.60f, 1, 2);
-            table.AddIndependentDropByString("frost_claymore", 0.20f, 1, 1);
+            table.AddIndependentDropByString("blood_vial", 0.50f, 1, 2);
+
+            // 45% de probabilidad de soltar MÁXIMO UNA pieza del set o arma del Caballero de la Muerte
+            float equipRoll = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            if (equipRoll < 0.45f) {
+                const char* dkPool[] = {
+                    "deathknight_greatsword",
+                    "deathknight_helm",
+                    "deathknight_armor",
+                    "deathknight_greaves",
+                    "deathknight_boots",
+                    "deathknight_gauntlets"
+                };
+                int pick = rand() % 6;
+                table.AddGuaranteedByString(dkPool[pick], 1, 1);
+            }
             break;
+        }
 
         case EnemyType::VAMPIRE:
-            // 100% Vial de Sangre (x2 - x3), 50% Medicina, 25% Anillo de Sifón Vampírico
+            // 100% Vial de Sangre (x2 - x3), 40% Medicina, 20% Anillo de Sifón Vampírico
             table.AddGuaranteedByString("blood_vial", 2, 3);
-            table.AddIndependentDropByString("potion_health", 0.50f, 1, 2);
-            table.AddIndependentDropByString("vampiric_ring", 0.25f, 1, 1);
+            table.AddIndependentDropByString("potion_health", 0.40f, 1, 2);
+            table.AddIndependentDropByString("vampiric_ring", 0.20f, 1, 1);
             break;
 
-        case EnemyType::SHADOW_ASSASSIN:
-            // 100% Piel de bestia, 45% Anillo de Sombras, 30% Medicina
+        case EnemyType::SHADOW_ASSASSIN: {
+            // Materiales garantizados
             table.AddGuaranteedByString("beast_pelt", 1, 2);
-            table.AddIndependentDropByString("shadow_ring", 0.45f, 1, 1);
+            table.AddIndependentDropByString("shadow_dagger", 0.35f, 1, 1); // Daga de las Sombras
             table.AddIndependentDropByString("potion_health", 0.30f, 1, 1);
-            break;
+            table.AddIndependentDropByString("shadow_ring", 0.25f, 1, 1);
 
-        case EnemyType::BERSERKER_WARRIOR:
-            // 100% Carne cruda, 50% Vial de Sangre, 35% Espada Maldita
-            table.AddGuaranteedByString("raw_meat", 2, 4);
-            table.AddIndependentDropByString("blood_vial", 0.50f, 1, 2);
-            table.AddIndependentDropByString("cursed_sword", 0.35f, 1, 1);
+            // 40% de probabilidad de soltar MÁXIMO UNA pieza del set de sombras o dagas
+            float equipRoll = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            if (equipRoll < 0.40f) {
+                const char* shadowPool[] = {
+                    "shadow_dagger",
+                    "shadow_hood",
+                    "shadow_garb",
+                    "shadow_pants",
+                    "shadow_boots",
+                    "shadow_gloves"
+                };
+                int pick = rand() % 6;
+                table.AddGuaranteedByString(shadowPool[pick], 1, 1);
+            }
             break;
+        }
+
+        case EnemyType::BERSERKER_WARRIOR: {
+            // Materiales garantizados
+            table.AddGuaranteedByString("raw_meat", 2, 3);
+            table.AddIndependentDropByString("blood_vial", 0.45f, 1, 2);
+
+            // 45% de probabilidad de soltar MÁXIMO UNA pieza del set bárbaro o hachas
+            float equipRoll = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            if (equipRoll < 0.45f) {
+                const char* berserkerPool[] = {
+                    "berserker_onehand_axe",
+                    "berserker_axe",
+                    "executioner_axe",
+                    "berserker_helm",
+                    "berserker_armor",
+                    "berserker_pants",
+                    "berserker_boots",
+                    "berserker_gauntlets"
+                };
+                int pick = rand() % 8;
+                table.AddGuaranteedByString(berserkerPool[pick], 1, 1);
+            }
+            break;
+        }
 
         case EnemyType::DARK_MAGE:
-            // 100% Éter Corrupto (x1 - x2), 40% Pergamino Arcano, 25% Amuleto Antiguo
+            // 100% Poción de maná, 35% Pergamino Arcano, 20% Amuleto Antiguo
             table.AddGuaranteedByString("potion_mana", 1, 2);
-            table.AddIndependentDropByString("arcane_scroll", 0.40f, 1, 1);
-            table.AddIndependentDropByString("ancient_amulet", 0.25f, 1, 1);
+            table.AddIndependentDropByString("arcane_scroll", 0.35f, 1, 1);
+            table.AddIndependentDropByString("ancient_amulet", 0.20f, 1, 1);
             break;
 
         case EnemyType::TREANT:
-            // 100% Troncos de Madera (x4 - x8), 60% Medicina natural
-            table.AddGuaranteedByString("wood_log", 4, 8);
-            table.AddIndependentDropByString("potion_health", 0.60f, 1, 2);
+            // 100% Troncos de Madera (x4 - x7), 50% Medicina natural
+            table.AddGuaranteedByString("wood_log", 4, 7);
+            table.AddIndependentDropByString("potion_health", 0.50f, 1, 2);
             break;
 
-        case EnemyType::NEUTRAL_GIANT:
-            // 100% Piedra (x5 - x10), 100% Madera (x3 - x6), 50% Escudo de Hierro
-            table.AddGuaranteedByString("stone_rock", 5, 10);
-            table.AddGuaranteedByString("wood_log", 3, 6);
-            table.AddIndependentDropByString("iron_shield", 0.50f, 1, 1);
+        case EnemyType::NEUTRAL_GIANT: {
+            // Materiales de construcción masivos garantizados
+            table.AddGuaranteedByString("stone_rock", 5, 8);
+            table.AddGuaranteedByString("wood_log", 3, 5);
+
+            // 50% de probabilidad de soltar MÁXIMO UNA pieza pesada
+            float equipRoll = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            if (equipRoll < 0.50f) {
+                const char* giantPool[] = {
+                    "iron_greatsword",
+                    "executioner_axe",
+                    "iron_armor",
+                    "iron_shield",
+                    "iron_helm"
+                };
+                int pick = rand() % 5;
+                table.AddGuaranteedByString(giantPool[pick], 1, 1);
+            }
             break;
+        }
 
         case EnemyType::CORRUPTED_WARRIOR:
-        default:
-            // 100% Carne cruda, 40% Espada, 30% Escudo
+        default: {
+            // Materiales garantizados
             table.AddGuaranteedByString("raw_meat", 1, 2);
-            table.AddIndependentDropByString("cursed_sword", 0.40f, 1, 1);
-            table.AddIndependentDropByString("iron_shield", 0.30f, 1, 1);
+
+            // 40% de probabilidad de soltar MÁXIMO UNA pieza de equipo
+            float equipRoll = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+            if (equipRoll < 0.40f) {
+                if (nightLevel <= 1) {
+                    const char* leatherPool[] = {
+                        "iron_hatchet",
+                        "steel_shortsword",
+                        "armor_leather",
+                        "helm_leather",
+                        "armor_leather_pants",
+                        "armor_leather_boots",
+                        "armor_leather_gloves",
+                        "iron_shield"
+                    };
+                    int pick = rand() % 8;
+                    table.AddGuaranteedByString(leatherPool[pick], 1, 1);
+                } else {
+                    const char* ironPool[] = {
+                        "iron_hatchet",
+                        "steel_shortsword",
+                        "paladin_longsword",
+                        "iron_armor",
+                        "iron_helm",
+                        "iron_greaves",
+                        "iron_boots",
+                        "iron_gauntlets",
+                        "iron_shield"
+                    };
+                    int pick = rand() % 9;
+                    table.AddGuaranteedByString(ironPool[pick], 1, 1);
+                }
+            }
             break;
+        }
     }
 
     return table;

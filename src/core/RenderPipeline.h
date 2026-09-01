@@ -17,6 +17,8 @@ class ParticleSystem;
 class FootprintSystem;
 class InventorySystem;
 class InputManager;
+class SpellSystem;
+class SkinningSystem;
 
 class RenderPipeline {
 public:
@@ -43,7 +45,10 @@ public:
     void RenderUI2D(Player& player, InventorySystem& inventory,
                     TargetingSystem& targeting, DamageNumberSystem& damageNumbers,
                     WeatherSystem& weatherSystem, MobManager& mobManager,
-                    InputManager& inputMgr, float globalTime, int currentFPS);
+                    InputManager& inputMgr, float globalTime, int currentFPS,
+                    SpellSystem& spellSystem, StructureSystem& structureSystem,
+                    ItemDropSystem& itemDropSystem, SkinningSystem& skinningSystem,
+                    HorrorPropsSystem& horrorProps);
 
     GLuint GetMainShaderProgram() const { return m_shaderProgram; }
     GLuint GetUIShaderProgram() const { return m_uiProgram; }
@@ -53,6 +58,8 @@ public:
     GLuint GetUIVBO() const { return m_uiVBO; }
     int GetInternalW() const { return m_internalW; }
     int GetInternalH() const { return m_internalH; }
+    int GetWindowW() const { return m_windowW; }
+    int GetWindowH() const { return m_windowH; }
 
 private:
     void initTextures();
@@ -60,6 +67,8 @@ private:
 
     int m_internalW = 640;
     int m_internalH = 480;
+    int m_windowW = 1280;
+    int m_windowH = 720;
 
     GLuint m_fbo = 0;
     GLuint m_colorTex = 0;

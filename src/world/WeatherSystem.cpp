@@ -6,6 +6,7 @@
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
+#include <iostream>
 
 WeatherSystem::WeatherSystem() {
     initCelestialMeshes();
@@ -117,13 +118,25 @@ void WeatherSystem::pickNextWeather(bool isNight) {
 }
 
 void WeatherSystem::Update(float deltaTime, float dayCycleTime, glm::vec3 playerPos, glm::vec3 windDir, ParticleSystem& particles) {
-    if (dayCycleTime < m_lastDayCycleTime) {
+    float cycleNorm = fmod(dayCycleTime, 240.0f) / 240.0f;
+    if (cycleNorm < 0.0f) cycleNorm += 1.0f;
+    float normDayTime = cycleNorm * 240.0f;
+
+    if (normDayTime < m_lastDayCycleTime) {
         m_dayCounter++;
         pickNextWeather(false);
     }
-    m_lastDayCycleTime = dayCycleTime;
+    m_lastDayCycleTime = normDayTime;
 
-    bool isNight = (dayCycleTime >= 120.0f && dayCycleTime <= 228.0f);
+    m_isNight = (cycleNorm >= 0.50f && cycleNorm <= 0.88f);
+    bool isNight = m_isNight;
+
+    // Increment night counter when night passes (difficulty increases for each survived night)
+    if (!isNight && m_wasNight) {
+        m_nightCounter++;
+        std::cout << "[WeatherSystem] Noche concluida. Dificultad incrementada a Nivel " << m_nightCounter << std::endl;
+    }
+    m_wasNight = isNight;
 
     // Weather state timer update
     m_weatherTimer += deltaTime;
@@ -222,23 +235,23 @@ void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 camera
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 1); // Emisivo brillante sin sombra
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 3); // Passthrough directo de color de vértices (evita que la niebla lo tape a la distancia)
 
-    bool isNight = (dayCycleTime >= 120.0f && dayCycleTime <= 228.0f);
+    float cycleNorm = fmod(dayCycleTime, 240.0f) / 240.0f;
+    if (cycleNorm < 0.0f) cycleNorm += 1.0f;
+
+    // Órbita celestial continua y suave de 360° en 240.0 segundos
+    // 0.00 = Amanecer en el Este
+    // 0.25 = Mediodía / Cenit Solar
+    // 0.50 = Atardecer en el Oeste
+    // 0.75 = Medianoche / Cenit Lunar
+    float sunAngle = cycleNorm * 6.2831853f;
 
     // -------------------------------------------------------------------------
-    // 1. RENDERIZADO DEL SOL (Visible de Día: 0 a 120s y 228 a 240s)
+    // 1. RENDERIZADO DEL SOL (Visible mientras esté sobre o próximo al horizonte)
     // -------------------------------------------------------------------------
-    if (!isNight && m_sunVAO != 0) {
-        float sunProgress = 0.0f;
-        if (dayCycleTime <= 120.0f) {
-            sunProgress = dayCycleTime / 120.0f;
-        } else {
-            sunProgress = (dayCycleTime - 228.0f) / 12.0f;
-        }
+    glm::vec3 sunDir = glm::normalize(glm::vec3(-cosf(sunAngle) * 0.90f, sinf(sunAngle), 0.35f));
 
-        float sunAngle = sunProgress * 3.14159265f; // Arco de este a oeste
-        glm::vec3 sunDir = glm::normalize(glm::vec3(cosf(sunAngle) * 0.85f, std::max(0.20f, sinf(sunAngle)), 0.35f));
-        glm::vec3 sunPos = cameraPos + sunDir * 125.0f;
-
+    if (sunDir.y > -0.20f && m_sunVAO != 0) {
+        glm::vec3 sunPos = cameraPos + sunDir * 135.0f;
         glm::vec3 toCam = glm::normalize(cameraPos - sunPos);
         float yaw = atan2f(toCam.x, toCam.z);
         float pitch = -asinf(std::clamp(toCam.y, -0.999f, 0.999f));
@@ -247,7 +260,7 @@ void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 camera
         model = glm::translate(model, sunPos);
         model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, globalTime * 0.20f, glm::vec3(0.0f, 0.0f, 1.0f)); // Rotación suave de rayos solares
+        model = glm::rotate(model, globalTime * 0.15f, glm::vec3(0.0f, 0.0f, 1.0f)); // Rotación suave de rayos solares
         model = glm::scale(model, glm::vec3(2.6f));
 
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
@@ -256,14 +269,13 @@ void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 camera
     }
 
     // -------------------------------------------------------------------------
-    // 2. RENDERIZADO DE LA LUNA (Visible de Noche: 120 a 228s)
+    // 2. RENDERIZADO DE LA LUNA (Ubicada exactamente opuesta a 180° / PI del Sol)
     // -------------------------------------------------------------------------
-    if (isNight && m_moonVAO != 0) {
-        float moonProgress = (dayCycleTime - 120.0f) / 108.0f;
-        float moonAngle = moonProgress * 3.14159265f;
-        glm::vec3 moonDir = glm::normalize(glm::vec3(cosf(moonAngle) * 0.85f, std::max(0.20f, sinf(moonAngle)), -0.35f));
-        glm::vec3 moonPos = cameraPos + moonDir * 125.0f;
+    float moonAngle = sunAngle + 3.14159265f;
+    glm::vec3 moonDir = glm::normalize(glm::vec3(-cosf(moonAngle) * 0.90f, sinf(moonAngle), -0.35f));
 
+    if (moonDir.y > -0.20f && m_moonVAO != 0) {
+        glm::vec3 moonPos = cameraPos + moonDir * 135.0f;
         glm::vec3 toCam = glm::normalize(cameraPos - moonPos);
         float yaw = atan2f(toCam.x, toCam.z);
         float pitch = -asinf(std::clamp(toCam.y, -0.999f, 0.999f));

@@ -1,0 +1,6 @@
+# Iron Boots / Sabatons
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX -0.13  0.30 0.0    0.20 0.38 0.23   0 0 0   0.62 0.62 0.68  BOOTS_SHIN_L
+BOX  0.13  0.30 0.0    0.20 0.38 0.23   0 0 0   0.62 0.62 0.68  BOOTS_SHIN_R
+BOX -0.13  0.06 0.05   0.20 0.15 0.29   0 0 0   0.58 0.58 0.64  BOOTS_FOOT_L
+BOX  0.13  0.06 0.05   0.20 0.15 0.29   0 0 0   0.58 0.58 0.64  BOOTS_FOOT_R

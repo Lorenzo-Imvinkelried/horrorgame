@@ -1,0 +1,7 @@
+# Leather Pants / Trousers
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0   0.88 0.0    0.42 0.16 0.28   0 0 0   0.34 0.22 0.14  PELVIS_LEGS
+BOX -0.13  0.62 0.0    0.18 0.32 0.20   0 0 0   0.38 0.24 0.16  LEGS_THIGH_L
+BOX  0.13  0.62 0.0    0.18 0.32 0.20   0 0 0   0.38 0.24 0.16  LEGS_THIGH_R
+BOX -0.13  0.46 0.08   0.14 0.12 0.06   0 0 0   0.26 0.16 0.10  LEGS_KNEE_L
+BOX  0.13  0.46 0.08   0.14 0.12 0.06   0 0 0   0.26 0.16 0.10  LEGS_KNEE_R

@@ -203,7 +203,9 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
                            float dangerLevel,
                            float globalTime,
                            int nightCount,
-                           bool isBloodMoon) 
+                           bool isBloodMoon,
+                           int dayCount,
+                           bool isNightTime) 
 {
     // =========================================================================
     // 1. WINDOWS 98 VRAM_DUNGEON_MONITOR.EXE (Top-Left in NDC)
@@ -233,10 +235,17 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
     std::string mpText = "MANA: " + std::to_string(stats.CurrentMP) + "/" + std::to_string(stats.MaxMP) + "  NVL: " + std::to_string(stats.Level);
     DrawString(mpText, pX + 0.020f, pY + 0.078f, 0.025f, glm::vec3(0.15f, 0.15f, 0.20f), uiProgram, uiVAO, uiVBO);
 
-    // NIGHT COUNTER & THREAT LEVEL
-    std::string nightText = "NOCHE " + std::to_string(nightCount) + (isBloodMoon ? " [LUNA DE SANGRE]" : " [AMENAZA NV." + std::to_string(nightCount) + "]");
-    glm::vec3 nightCol = isBloodMoon ? glm::vec3(0.85f, 0.08f, 0.08f) : glm::vec3(0.20f, 0.20f, 0.45f);
-    DrawString(nightText, pX + 0.020f, pY + 0.042f, 0.023f, nightCol, uiProgram, uiVAO, uiVBO);
+    // DAY / NIGHT COUNTER & THREAT LEVEL
+    std::string timeText;
+    glm::vec3 timeCol;
+    if (isNightTime) {
+        timeText = "NOCHE " + std::to_string(nightCount) + (isBloodMoon ? " [LUNA DE SANGRE]" : " [AMENAZA NV." + std::to_string(nightCount) + "]");
+        timeCol = isBloodMoon ? glm::vec3(0.88f, 0.08f, 0.08f) : glm::vec3(0.20f, 0.20f, 0.50f);
+    } else {
+        timeText = "DIA " + std::to_string(dayCount) + " [AMENAZA NV." + std::to_string(nightCount) + "]";
+        timeCol = glm::vec3(0.70f, 0.45f, 0.10f); // Warm daytime sun gold
+    }
+    DrawString(timeText, pX + 0.020f, pY + 0.042f, 0.023f, timeCol, uiProgram, uiVAO, uiVBO);
 
     // Hotkey Hint [C] STATS
     std::string statHint = (stats.AvailableStatPoints > 0) ? "[C] PANEL (+PUNTOS!)" : "[C] PANEL ESTADISTICAS";
@@ -294,12 +303,47 @@ void UIRenderer::RenderHUD(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO,
                     DrawString("LEVEL UP!", ndcX - 0.11f, ndcY + 0.005f, 0.028f, glm::vec3(1.0f, 1.0f, 1.0f), uiProgram, uiVAO, uiVBO);
                 } else if (fn.IsExp) {
                     std::string expStr = "+" + std::to_string(fn.Value) + " EXP";
-                    DrawString(expStr, ndcX - 0.06f, ndcY, 0.028f, glm::vec3(0.20f, 0.85f, 0.95f), uiProgram, uiVAO, uiVBO);
+                    float dSize = 0.040f;
+                    float textW = FontRenderer::GetTextWidth(expStr, dSize);
+                    float textX = ndcX - textW * 0.5f;
+                    DrawString(expStr, textX + 0.003f, ndcY - 0.003f, dSize, glm::vec3(0.0f, 0.0f, 0.0f), uiProgram, uiVAO, uiVBO);
+                    DrawString(expStr, textX, ndcY, dSize, glm::vec3(0.25f, 0.90f, 1.0f), uiProgram, uiVAO, uiVBO);
+                } else if (fn.IsHeal) {
+                    // Curación de vida (Verde esmeralda luminoso con prefijo '+')
+                    std::string healStr = "+" + std::to_string(fn.Value) + " HP";
+                    float dSize = 0.058f;
+                    float textW = FontRenderer::GetTextWidth(healStr, dSize);
+                    float textX = ndcX - textW * 0.5f;
+                    DrawString(healStr, textX + 0.003f, ndcY - 0.003f, dSize, glm::vec3(0.0f, 0.20f, 0.05f), uiProgram, uiVAO, uiVBO);
+                    DrawString(healStr, textX, ndcY, dSize, glm::vec3(0.15f, 0.95f, 0.30f), uiProgram, uiVAO, uiVBO);
+                } else if (fn.IsMana) {
+                    // Restauración de maná (Azul cyan luminoso con prefijo '+')
+                    std::string manaStr = "+" + std::to_string(fn.Value) + " MP";
+                    float dSize = 0.058f;
+                    float textW = FontRenderer::GetTextWidth(manaStr, dSize);
+                    float textX = ndcX - textW * 0.5f;
+                    DrawString(manaStr, textX + 0.003f, ndcY - 0.003f, dSize, glm::vec3(0.0f, 0.05f, 0.25f), uiProgram, uiVAO, uiVBO);
+                    DrawString(manaStr, textX, ndcY, dSize, glm::vec3(0.20f, 0.65f, 1.0f), uiProgram, uiVAO, uiVBO);
+                } else if (fn.IsPlayerDamage) {
+                    // Daño recibido por el jugador (Rojo carmesí con signo '-')
+                    std::string dmgStr = "-" + std::to_string(fn.Value);
+                    float dSize = 0.056f;
+                    float textW = FontRenderer::GetTextWidth(dmgStr, dSize);
+                    float textX = ndcX - textW * 0.5f;
+                    // Sombra de alto contraste
+                    DrawString(dmgStr, textX + 0.003f, ndcY - 0.003f, dSize, glm::vec3(0.15f, 0.0f, 0.0f), uiProgram, uiVAO, uiVBO);
+                    DrawString(dmgStr, textX, ndcY, dSize, glm::vec3(1.0f, 0.12f, 0.12f), uiProgram, uiVAO, uiVBO);
                 } else {
-                    glm::vec3 col = fn.IsCrit ? glm::vec3(1.0f, 0.88f, 0.15f) : glm::vec3(0.95f, 0.22f, 0.18f);
-                    float dSize = fn.IsCrit ? 0.040f : 0.030f;
+                    // Daño saliente infligido a los mobs (Blanco pulido o Dorado Crítico)
                     std::string dmgStr = std::to_string(fn.Value);
-                    DrawString(dmgStr, ndcX - 0.025f, ndcY, dSize, col, uiProgram, uiVAO, uiVBO);
+                    float dSize = fn.IsCrit ? 0.076f : 0.052f;
+                    float textW = FontRenderer::GetTextWidth(dmgStr, dSize);
+                    float textX = ndcX - textW * 0.5f;
+
+                    glm::vec3 col = fn.IsCrit ? glm::vec3(1.0f, 0.88f, 0.10f) : glm::vec3(1.0f, 1.0f, 0.95f);
+                    // Sombra de alto contraste
+                    DrawString(dmgStr, textX + 0.003f, ndcY - 0.003f, dSize, glm::vec3(0.08f, 0.08f, 0.08f), uiProgram, uiVAO, uiVBO);
+                    DrawString(dmgStr, textX, ndcY, dSize, col, uiProgram, uiVAO, uiVBO);
                 }
             }
         }
@@ -716,6 +760,38 @@ void UIRenderer::RenderPauseMenu(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, f
     bool hovered = (mouseNdcX >= btnX && mouseNdcX <= btnX + btnW && mouseNdcY >= btnY && mouseNdcY <= btnY + btnH);
 
     DrawWin98Button(uiProgram, uiVAO, uiVBO, btnX, btnY, btnW, btnH, "REANUDAR PARTIDA (ESC)", hovered, 0.024f);
+}
+
+void UIRenderer::RenderGameOverScreen(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float deathTimer) {
+    // 1. Red dark vignette / blood curtain
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, -1.0f, -1.0f, 2.0f, 2.0f, glm::vec3(0.18f, 0.02f, 0.02f));
+
+    float mW = 1.05f, mH = 0.65f;
+    float mX = -mW * 0.5f, mY = -mH * 0.5f;
+
+    DrawWin98Window(uiProgram, uiVAO, uiVBO, mX, mY, mW, mH, "*** ERROR FATAL: COLAPSO VITAL EN 0x0000DEAD ***", false);
+
+    // Inner dark terminal box
+    float boxPad = 0.025f;
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, mX + boxPad, mY + 0.13f, mW - boxPad * 2.0f, mH - 0.22f, glm::vec3(0.04f, 0.02f, 0.02f));
+
+    DrawString("HAS MUERTO", mX + 0.38f, mY + mH - 0.14f, 0.040f, glm::vec3(0.95f, 0.15f, 0.15f), uiProgram, uiVAO, uiVBO);
+    DrawString("Tu fuerza vital ha descendido a 0. Las sombras te han consumido.", mX + 0.08f, mY + mH - 0.23f, 0.021f, glm::vec3(0.85f, 0.75f, 0.70f), uiProgram, uiVAO, uiVBO);
+    DrawString("Causa de fallo: Daño letal recibido en combate.", mX + 0.08f, mY + mH - 0.30f, 0.020f, glm::vec3(0.65f, 0.55f, 0.50f), uiProgram, uiVAO, uiVBO);
+    DrawString("Estado de memoria: Entidad biologica fuera de linea.", mX + 0.08f, mY + mH - 0.37f, 0.020f, glm::vec3(0.50f, 0.50f, 0.55f), uiProgram, uiVAO, uiVBO);
+
+    // Pulsing respawn prompt
+    float pulse = 0.5f + 0.5f * sin(deathTimer * 6.0f);
+    glm::vec3 pulseColor = glm::mix(glm::vec3(0.20f, 0.90f, 0.35f), glm::vec3(1.0f, 1.0f, 0.40f), pulse);
+
+    float btnW = 0.76f, btnH = 0.085f;
+    float btnX = mX + (mW - btnW) * 0.5f;
+    float btnY = mY + 0.025f;
+
+    // Dibujar boton sin texto duplicado interno
+    DrawWin98Button(uiProgram, uiVAO, uiVBO, btnX, btnY, btnW, btnH, "", true, 0.024f);
+    // Unico texto centrado y pulsante
+    DrawString("[ESPACIO / CLICK] RENACER EN EL CAMPAMENTO", btnX + 0.045f, btnY + 0.028f, 0.022f, pulseColor, uiProgram, uiVAO, uiVBO);
 }
 
 bool UIRenderer::HandlePauseMenuClick(float mouseNdcX, float mouseNdcY, bool& resumeRequested) {

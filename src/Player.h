@@ -34,8 +34,15 @@ public:
     glm::vec3 GetCameraPosition();
     glm::vec3 GetWeaponOffset(); // For rendering the weapon
     glm::vec3 GetTorchPosition() const;
+    bool AreBothHandsOccupied() const;
     void ToggleCameraMode() { IsThirdPerson = !IsThirdPerson; }
-    void ToggleTorch() { HasTorchActive = !HasTorchActive; }
+    void ToggleTorch() { 
+        if (AreBothHandsOccupied()) {
+            HasTorchActive = false;
+            return;
+        }
+        HasTorchActive = !HasTorchActive; 
+    }
 
     // Torch State (Off-hand left hand)
     bool HasTorchActive = true;
@@ -105,9 +112,32 @@ public:
     void TakeDamage(int dmg, DamageNumberSystem& damageNumbers, struct FatalErrorPopup* fatalError = nullptr, bool shadowAegis = false);
     void UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<class EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<class WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers, class Dragon* dragon = nullptr);
 
+    // Death & Respawn
+    bool IsDead() const { return m_isDead; }
+    void Respawn(glm::vec3 spawnPos = glm::vec3(0.0f, 15.0f, 0.0f));
+    float DeathTimer = 0.0f;
+
+    // Equipment Visuals & 3D Preview
+    void UpdateEquipmentVisuals(const std::string& mainHandId, const std::string& chestId, const std::string& headId, const std::string& offHandId, const std::string& legsId = "", const std::string& feetId = "", const std::string& glovesId = "");
+    void RenderPreview(GLuint shaderProgram, const glm::mat4& modelMatrix);
+    const std::string& GetEquippedMainHand() const { return m_equippedMainHandId; }
+
 private:
     void updateCameraVectors();
     float getTerrainHeight(float x, float z);
+
+    bool m_isDead = false;
+    std::string m_equippedMainHandId = "";
+    std::string m_equippedChestId = "";
+    std::string m_equippedHeadId = "";
+    std::string m_equippedOffHandId = "";
+    std::string m_equippedLegsId = "";
+    std::string m_equippedFeetId = "";
+    std::string m_equippedGlovesId = "";
+    bool m_fpMeshNeedsRebuild = true;
+    GLuint m_fpVAO = 0;
+    GLuint m_fpVBO = 0;
+    size_t m_fpVertexCount = 0;
 
     // Combat State
     float m_attackTimer = 0.0f;
@@ -117,6 +147,7 @@ private:
     bool m_attackHitDone = false;
     bool m_isBlocking = false;
     int m_attackCombo = 0;
+    int m_activeAttackHand = 0; // 0 = mano derecha, 1 = mano izquierda (empuñadura dual)
 
     // 3D Model Resources
     std::vector<BoxDef> m_baseBoxes;

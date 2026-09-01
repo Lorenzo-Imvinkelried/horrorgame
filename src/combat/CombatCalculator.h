@@ -13,15 +13,7 @@ public:
     static AttackDamageResult CalculatePlayerAttack(int rawAttack, float critChance, float critMult, int targetDefense, int targetEvasion) {
         AttackDamageResult result;
 
-        // 1. Evasion / Hit check
-        int rollHit = rand() % 100;
-        int hitThreshold = std::clamp(85 - targetEvasion, 20, 100);
-        if (rollHit > hitThreshold) {
-            result.IsHit = false;
-            result.Damage = 0;
-            return result;
-        }
-
+        // 1. Guaranteed hit on physical melee contact (No phantom misses)
         result.IsHit = true;
 
         // 2. Damage Variance (±10%)

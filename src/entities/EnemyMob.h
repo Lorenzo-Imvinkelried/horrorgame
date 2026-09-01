@@ -70,7 +70,10 @@ public:
     bool IsRemovable() const { return m_state == EnemyState::DEAD && m_deathTimer > 4.5f; }
     bool HasDroppedLoot() const { return m_lootDropped; }
     void SetLootDropped(bool d) { m_lootDropped = d; }
+    void SetDead() { m_state = EnemyState::DEAD; m_currentHp = 0; m_deathTimer = 5.0f; }
     int GetNightLevel() const { return m_nightLevel; }
+    int GetDefense() const { return m_defense; }
+    int GetEvasion() const { return m_evasion; }
 
 private:
     // Submódulos de IA (EnemyMobAI.cpp)

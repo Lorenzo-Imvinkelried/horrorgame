@@ -1,0 +1,10 @@
+# Dragonslayer Greatsword Model (2-Handed Colossal Sword oriented along +Z)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  0.0 -0.16   0.120 0.120 0.12   0 0 0   0.65 0.15 0.12  DRAGON_SKULL
+BOX  0.0  0.0  0.08   0.070 0.070 0.34   0 0 0   0.25 0.10 0.08  GRIP_HIDE
+BOX  0.0  0.0  0.28   0.100 0.480 0.10   0 0 0   0.70 0.20 0.15  JAW_GUARD
+BOX  0.0  0.0  0.95   0.045 0.220 1.25   0 0 0   0.25 0.22 0.25  CORE_STEEL
+BOX  0.0  0.0  0.95   0.055 0.080 1.05   0 0 0   1.00 0.35 0.08  MAGMA_RUNES
+BOX  0.0  0.12 0.95   0.025 0.040 1.25   0 0 0   0.85 0.75 0.70  SERRATION_TOP
+BOX  0.0 -0.12 0.95   0.025 0.040 1.25   0 0 0   0.85 0.75 0.70  SERRATION_BOT
+BOX  0.0  0.0  1.62   0.030 0.160 0.18   0 0 0   0.90 0.80 0.75  DRAGON_TIP

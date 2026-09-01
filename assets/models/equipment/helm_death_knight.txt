@@ -1,0 +1,7 @@
+# Death Knight Helmet Model (Black Skull Helm with Glowing Eyes)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0   1.58 -0.01   0.34 0.36 0.36   0 0 0    0.12 0.12 0.15  SKULL_HELM
+BOX -0.08  1.58  0.18   0.06 0.04 0.03   0 0 0    0.15 0.85 1.00  GLOW_EYE_L
+BOX  0.08  1.58  0.18   0.06 0.04 0.03   0 0 0    0.15 0.85 1.00  GLOW_EYE_R
+BOX -0.15  1.78 -0.05   0.06 0.18 0.06   0 0 0.25 0.22 0.22 0.28  HORN_L
+BOX  0.15  1.78 -0.05   0.06 0.18 0.06   0 0 -0.25 0.22 0.22 0.28 HORN_R

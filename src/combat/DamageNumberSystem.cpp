@@ -51,16 +51,82 @@ void DamageNumberSystem::initMesh() {
 
 void DamageNumberSystem::SpawnDamage(glm::vec3 pos, int damage, bool isCrit) {
     FloatingNumber fn;
-    fn.Pos = pos + glm::vec3((rand()%100/100.0f - 0.5f)*0.4f, 1.2f + (rand()%100/100.0f)*0.3f, (rand()%100/100.0f - 0.5f)*0.4f);
-    fn.Velocity = glm::vec3((rand()%100/100.0f - 0.5f)*0.6f, 2.2f + (rand()%100/100.0f)*0.8f, (rand()%100/100.0f - 0.5f)*0.6f);
-    fn.Color = isCrit ? glm::vec4(1.0f, 0.85f, 0.15f, 1.0f) : glm::vec4(1.0f, 0.25f, 0.20f, 1.0f);
-    fn.Scale = isCrit ? 0.42f : 0.28f;
+    float jitterX = (rand()%100/100.0f - 0.5f)*0.2f;
+    float jitterZ = (rand()%100/100.0f - 0.5f)*0.2f;
+    // Nace directamente en el centro del cuerpo/pecho del mob (Y + 1.0m)
+    fn.Pos = pos + glm::vec3(jitterX, 1.0f, jitterZ);
+    fn.Velocity = glm::vec3(0.0f, 1.2f, 0.0f);
+    fn.Color = isCrit ? glm::vec4(1.0f, 0.88f, 0.10f, 1.0f) : glm::vec4(1.0f, 1.0f, 0.95f, 1.0f);
+    fn.Scale = isCrit ? 0.60f : 0.42f;
     fn.Lifetime = isCrit ? 1.4f : 1.1f;
     fn.MaxLifetime = fn.Lifetime;
     fn.Value = damage;
     fn.IsCrit = isCrit;
     fn.IsExp = false;
     fn.IsLevelUp = false;
+    fn.IsPlayerDamage = false;
+    fn.IsHeal = false;
+    fn.IsMana = false;
+    m_numbers.push_back(fn);
+}
+
+void DamageNumberSystem::SpawnPlayerDamage(glm::vec3 playerPos, int damage, glm::vec3 camFront) {
+    FloatingNumber fn;
+    glm::vec3 forwardNoY = glm::normalize(glm::vec3(camFront.x, 0.0f, camFront.z));
+    if (glm::length(forwardNoY) < 0.001f) forwardNoY = glm::vec3(0, 0, -1);
+    glm::vec3 right = glm::normalize(glm::cross(forwardNoY, glm::vec3(0, 1, 0)));
+    float sideOffset = ((rand() % 100) / 100.0f - 0.5f) * 0.3f;
+
+    // Nace en el torso del jugador hacia el frente
+    fn.Pos = playerPos + forwardNoY * 0.7f + right * sideOffset + glm::vec3(0.0f, 1.1f, 0.0f);
+    fn.Velocity = glm::vec3(0.0f, 1.2f, 0.0f);
+    fn.Color = glm::vec4(1.0f, 0.12f, 0.12f, 1.0f);
+    fn.Scale = 0.50f;
+    fn.Lifetime = 1.4f;
+    fn.MaxLifetime = fn.Lifetime;
+    fn.Value = damage;
+    fn.IsCrit = false;
+    fn.IsExp = false;
+    fn.IsLevelUp = false;
+    fn.IsPlayerDamage = true;
+    fn.IsHeal = false;
+    fn.IsMana = false;
+    m_numbers.push_back(fn);
+}
+
+void DamageNumberSystem::SpawnHeal(glm::vec3 pos, int amount) {
+    FloatingNumber fn;
+    fn.Pos = pos + glm::vec3(0.0f, 1.3f, 0.0f);
+    fn.Velocity = glm::vec3(0.0f, 1.2f, 0.0f);
+    fn.Color = glm::vec4(0.15f, 0.95f, 0.30f, 1.0f); // Verde Esmeralda Radiante
+    fn.Scale = 0.54f;
+    fn.Lifetime = 1.3f;
+    fn.MaxLifetime = fn.Lifetime;
+    fn.Value = amount;
+    fn.IsCrit = false;
+    fn.IsExp = false;
+    fn.IsLevelUp = false;
+    fn.IsPlayerDamage = false;
+    fn.IsHeal = true;
+    fn.IsMana = false;
+    m_numbers.push_back(fn);
+}
+
+void DamageNumberSystem::SpawnMana(glm::vec3 pos, int amount) {
+    FloatingNumber fn;
+    fn.Pos = pos + glm::vec3(0.0f, 1.3f, 0.0f);
+    fn.Velocity = glm::vec3(0.0f, 1.2f, 0.0f);
+    fn.Color = glm::vec4(0.20f, 0.65f, 1.0f, 1.0f); // Azul Maná
+    fn.Scale = 0.54f;
+    fn.Lifetime = 1.3f;
+    fn.MaxLifetime = fn.Lifetime;
+    fn.Value = amount;
+    fn.IsCrit = false;
+    fn.IsExp = false;
+    fn.IsLevelUp = false;
+    fn.IsPlayerDamage = false;
+    fn.IsHeal = false;
+    fn.IsMana = true;
     m_numbers.push_back(fn);
 }
 
@@ -76,6 +142,9 @@ void DamageNumberSystem::SpawnExp(glm::vec3 pos, int exp) {
     fn.IsCrit = false;
     fn.IsExp = true;
     fn.IsLevelUp = false;
+    fn.IsPlayerDamage = false;
+    fn.IsHeal = false;
+    fn.IsMana = false;
     m_numbers.push_back(fn);
 }
 

@@ -37,7 +37,9 @@ public:
                    float dangerLevel,
                    float globalTime,
                    int nightCount = 1,
-                   bool isBloodMoon = false);
+                   bool isBloodMoon = false,
+                   int dayCount = 1,
+                   bool isNightTime = false);
 
     void RenderCharacterPanel(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, 
                               const PlayerStats& stats,
@@ -62,6 +64,8 @@ public:
 
     void RenderPauseMenu(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX = -999.0f, float mouseNdcY = -999.0f);
 
+    void RenderGameOverScreen(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float deathTimer);
+
     // Mouse Click Handlers
     static bool HandleCharacterPanelClick(float mouseNdcX, float mouseNdcY, PlayerStats& stats, bool& closeRequested);
     static bool HandleFatalErrorClick(float mouseNdcX, float mouseNdcY, FatalErrorPopup& popup);
@@ -82,10 +86,10 @@ public:
 
     static void RenderCursor(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY);
     static void DrawCrosshair(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float size = 0.012f, float thickness = 0.003f, glm::vec3 color = glm::vec3(0.9f, 0.9f, 0.9f));
+    static void drawColoredQuad(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float x, float y, float w, float h, glm::vec3 color);
 
 private:
     static void pushQuad(std::vector<float>& data, float x, float y, float w, float h);
-    static void drawColoredQuad(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float x, float y, float w, float h, glm::vec3 color);
     static void drawDigit(int d, float x, float y, float size, glm::vec3 color, GLuint uiProgram, GLuint uiVAO, GLuint uiVBO);
     static void drawNumber(int num, float x, float y, float size, glm::vec3 color, GLuint uiProgram, GLuint uiVAO, GLuint uiVBO);
     static void drawGlyph(char c, float x, float y, float size, glm::vec3 color, GLuint uiProgram, GLuint uiVAO, GLuint uiVBO);

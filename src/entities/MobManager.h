@@ -20,6 +20,7 @@ class ParticleSystem;
 class DamageNumberSystem;
 class ItemDropSystem;
 class ProjectileSystem;
+class TargetingSystem;
 struct FatalErrorPopup;
 
 class MobManager {
@@ -31,13 +32,15 @@ public:
     void Update(float deltaTime, Player& player, ChunkManager& chunkManager, ScentSystem& scentSystem,
                 WindSystem& windSystem, ParticleSystem& particles, DamageNumberSystem& damageNumbers,
                 ItemDropSystem& itemDropSystem, ProjectileSystem& projectiles, float globalTime,
-                float dayCycleTime, int nightCount, bool isBloodMoon, FatalErrorPopup* fatalError);
+                float dayCycleTime, int nightCount, bool isBloodMoon, FatalErrorPopup* fatalError,
+                TargetingSystem* targeting = nullptr);
 
     void Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint textureID, float globalTime);
     void RenderDebug(GLuint shaderProgram);
 
     void SpawnNightMonsters(glm::vec3 playerPos, int count);
     void DespawnNightMonsters();
+    void MaintainWorldPopulation(glm::vec3 playerPos, int nightCount, bool isBloodMoon, bool isNight);
 
     std::vector<std::unique_ptr<Monster>>& GetMonsters() { return m_monsters; }
     std::vector<std::unique_ptr<EnemyMob>>& GetEnemyMobs() { return m_enemyMobs; }
@@ -60,5 +63,6 @@ private:
 
     float m_highestDangerLevel = 0.0f;
     float m_dragonRoarTimer = 25.0f;
+    float m_populationTimer = 0.0f;
     bool m_wasNight = false;
 };

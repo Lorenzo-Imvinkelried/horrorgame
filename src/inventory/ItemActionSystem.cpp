@@ -32,7 +32,7 @@ ItemActionResult ItemActionSystem::ExecuteUse(const ItemInstance& instance, Item
                     int actualHealed = player.Stats.CurrentHP - oldHP;
 
                     if (context.damageNumbers) {
-                        context.damageNumbers->SpawnDamage(player.Position + glm::vec3(0, 1.8f, 0), actualHealed, true);
+                        context.damageNumbers->SpawnHeal(player.Position, actualHealed);
                     }
                     if (context.particles) {
                         for (int i = 0; i < 16; ++i) {
@@ -51,7 +51,7 @@ ItemActionResult ItemActionSystem::ExecuteUse(const ItemInstance& instance, Item
                     player.Stats.CurrentMP = std::min(player.Stats.MaxMP, player.Stats.CurrentMP + manaAmount);
 
                     if (context.damageNumbers) {
-                        context.damageNumbers->SpawnDamage(player.Position + glm::vec3(0, 1.8f, 0), manaAmount, false);
+                        context.damageNumbers->SpawnMana(player.Position, manaAmount);
                     }
                     if (context.particles) {
                         for (int i = 0; i < 16; ++i) {

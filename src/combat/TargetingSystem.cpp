@@ -130,15 +130,17 @@ void TargetingSystem::Update(float deltaTime, glm::vec3 playerPos, bool manualIn
 
     if (HasTarget()) {
         if (!IsTargetAlive()) {
-            m_autoApproaching = false;
+            ClearTarget();
+            return;
         }
 
         glm::vec3 tPos = GetTargetPosition();
         float dist = glm::distance(glm::vec2(playerPos.x, playerPos.z), glm::vec2(tPos.x, tPos.z));
 
-        // Leash range
-        if (dist > 180.0f) {
+        // Leash range (clear if target moves beyond fog distance)
+        if (dist > 75.0f) {
             ClearTarget();
+            return;
         }
     }
 
@@ -146,7 +148,7 @@ void TargetingSystem::Update(float deltaTime, glm::vec3 playerPos, bool manualIn
 }
 
 void TargetingSystem::RenderTargetRing(GLuint shaderProgram) {
-    if (!HasTarget() || m_ringVAO == 0) return;
+    if (!HasTarget() || !IsTargetAlive() || m_ringVAO == 0) return;
 
     glm::vec3 targetPos = GetTargetPosition();
     float groundY = WorldGenerator::GetHeight(targetPos.x, targetPos.z) + 0.08f;

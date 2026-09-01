@@ -44,9 +44,17 @@ public:
 
     bool IsShadowAegisActive() const { return m_shadowAegisTimer > 0.0f; }
 
+    float GetBloodBurstCooldown() const { return m_cdBloodBurst; }
+    float GetShadowAegisCooldown() const { return m_cdShadowAegis; }
+    float GetArcaneBeamCooldown() const { return m_cdArcaneBeam; }
+
+    float GetRCooldown() const { return m_cdBloodBurst; }
+    float GetTCooldown() const { return m_cdShadowAegis; }
+    float GetYCooldown() const { return m_cdArcaneBeam; }
+
+    // Backward-compatibility aliases
     float GetQCooldown() const { return m_cdBloodBurst; }
     float GetECooldown() const { return m_cdShadowAegis; }
-    float GetRCooldown() const { return m_cdArcaneBeam; }
 
 private:
     float m_cdBloodBurst = 0.0f;

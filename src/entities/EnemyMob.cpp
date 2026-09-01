@@ -37,57 +37,57 @@ EnemyMob::EnemyMob(glm::vec3 spawnPos, EnemyType type, int nightLevel)
     switch (m_type) {
         case EnemyType::CORRUPTED_WARRIOR:
             m_scale = 1.05f;
-            m_maxHp = (int)(140 * nightScale);
-            m_defense = 8 + (m_nightLevel - 1) * 2;
+            m_maxHp = (int)(260 * nightScale);
+            m_defense = 14 + (m_nightLevel - 1) * 3;
             m_evasion = 8;
             break;
         case EnemyType::BERSERKER_WARRIOR:
             m_scale = 1.15f;
-            m_maxHp = (int)(210 * nightScale);
-            m_defense = 6 + (m_nightLevel - 1) * 2;
-            m_evasion = 12;
+            m_maxHp = (int)(420 * nightScale);
+            m_defense = 12 + (m_nightLevel - 1) * 3;
+            m_evasion = 15;
             break;
         case EnemyType::DEATH_KNIGHT:
             m_scale = 1.22f;
-            m_maxHp = (int)(280 * nightScale);
-            m_defense = 16 + (m_nightLevel - 1) * 3;
-            m_evasion = 4;
+            m_maxHp = (int)(580 * nightScale);
+            m_defense = 26 + (m_nightLevel - 1) * 4;
+            m_evasion = 6;
             break;
         case EnemyType::SHADOW_ASSASSIN:
             m_scale = 0.95f;
-            m_maxHp = (int)(115 * nightScale);
-            m_defense = 4 + (m_nightLevel - 1) * 2;
-            m_evasion = 25;
+            m_maxHp = (int)(220 * nightScale);
+            m_defense = 8 + (m_nightLevel - 1) * 2;
+            m_evasion = 35; // 35% de esquiva de golpes del jugador
             break;
         case EnemyType::SKELETON_ARCHER:
             m_scale = 1.0f;
-            m_maxHp = (int)(95 * nightScale);
-            m_defense = 4 + (m_nightLevel - 1) * 2;
-            m_evasion = 15;
+            m_maxHp = (int)(180 * nightScale);
+            m_defense = 8 + (m_nightLevel - 1) * 2;
+            m_evasion = 20;
             break;
         case EnemyType::NEUTRAL_GIANT:
             m_scale = 2.75f;
-            m_maxHp = (int)(480 * nightScale);
-            m_defense = 14 + (m_nightLevel - 1) * 2;
+            m_maxHp = (int)(980 * nightScale);
+            m_defense = 24 + (m_nightLevel - 1) * 3;
             m_evasion = 3;
             break;
         case EnemyType::DARK_MAGE:
             m_scale = 1.0f;
-            m_maxHp = (int)(85 * nightScale);
-            m_defense = 3;
-            m_evasion = 12;
+            m_maxHp = (int)(170 * nightScale);
+            m_defense = 6 + (m_nightLevel - 1) * 2;
+            m_evasion = 18;
             break;
         case EnemyType::TREANT:
             m_scale = 1.95f;
-            m_maxHp = (int)(380 * nightScale);
-            m_defense = 15 + (m_nightLevel - 1) * 2;
+            m_maxHp = (int)(750 * nightScale);
+            m_defense = 22 + (m_nightLevel - 1) * 3;
             m_evasion = 2;
             break;
         case EnemyType::VAMPIRE:
             m_scale = 1.10f;
-            m_maxHp = (int)(175 * nightScale);
-            m_defense = 6 + (m_nightLevel - 1) * 2;
-            m_evasion = 18;
+            m_maxHp = (int)(340 * nightScale);
+            m_defense = 12 + (m_nightLevel - 1) * 3;
+            m_evasion = 24;
             break;
     }
     m_currentHp = m_maxHp;

@@ -18,6 +18,7 @@
 #include "FootprintSystem.h"
 #include "inventory/InventorySystem.h"
 #include "inventory/LootManager.h"
+#include "inventory/ItemRegistry.h"
 #include "RenderPipeline.h"
 #include "InputManager.h"
 #include "WorldGenerator.h"
@@ -140,7 +141,8 @@ bool GameApp::Init() {
                                                    *app->m_itemDropSystem, *app->m_skinningSystem,
                                                    *app->m_spellSystem, *app->m_mobManager,
                                                    *app->m_horrorProps, *app->m_damageNumbers,
-                                                   *app->m_particles, *app->m_scentSystem);
+                                                   *app->m_particles, *app->m_scentSystem,
+                                                   *app->m_targeting, *app->m_projectiles);
             }
         }
     });
@@ -363,8 +365,11 @@ void GameApp::updateGameLogic(float deltaTime) {
     m_spellSystem->Update(deltaTime, *m_player, *m_particles);
     m_weatherSystem->Update(deltaTime, m_dayCycleTime, m_player->Position, glm::vec3(windDir.x, 0, windDir.y), *m_particles);
 
-    // 4. Day / Night cycle progression
+    // 4. Day / Night cycle progression (240s per day)
     m_dayCycleTime += deltaTime;
+    if (m_dayCycleTime >= 240.0f) {
+        m_dayCycleTime = fmod(m_dayCycleTime, 240.0f);
+    }
 
     // 5. Buildings
     m_buildingSystem->Update(deltaTime, m_player->Position, *m_particles);
@@ -409,7 +414,8 @@ void GameApp::updateGameLogic(float deltaTime) {
                          *m_windSystem, *m_particles, *m_damageNumbers,
                          *m_itemDropSystem, *m_projectiles, m_globalTime,
                          m_dayCycleTime, m_weatherSystem->GetNightCount(),
-                         m_weatherSystem->IsBloodMoon(), &m_inputManager->GetFatalError());
+                         m_weatherSystem->IsBloodMoon(), &m_inputManager->GetFatalError(),
+                         m_targeting.get());
 
     // 9. Particles & Floating Numbers
     m_particles->Update(deltaTime);
@@ -449,7 +455,8 @@ void GameApp::UpdateFrame() {
                                           *m_itemDropSystem, *m_skinningSystem,
                                           *m_spellSystem, *m_mobManager,
                                           *m_horrorProps, *m_damageNumbers,
-                                          *m_particles, *m_scentSystem);
+                                          *m_particles, *m_scentSystem,
+                                          *m_targeting, *m_projectiles);
         }
     }
 
@@ -483,6 +490,19 @@ void GameApp::UpdateFrame() {
     bool rightIsPressed = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
     bool hasFocus = (glfwGetWindowAttrib(m_window, GLFW_FOCUSED) != 0);
 #endif
+
+    // Sync equipped 3D armor & weapon visuals on player model
+    if (m_player && m_inventory) {
+        const auto& eq = m_inventory->GetEquipment();
+        std::string mh = eq.HasEquipped(EquipSlot::MAIN_HAND) ? ItemRegistry::Get().Get(eq.GetEquipped(EquipSlot::MAIN_HAND).id).stringId : "";
+        std::string ch = eq.HasEquipped(EquipSlot::CHEST) ? ItemRegistry::Get().Get(eq.GetEquipped(EquipSlot::CHEST).id).stringId : "";
+        std::string hd = eq.HasEquipped(EquipSlot::HEAD) ? ItemRegistry::Get().Get(eq.GetEquipped(EquipSlot::HEAD).id).stringId : "";
+        std::string oh = eq.HasEquipped(EquipSlot::OFF_HAND) ? ItemRegistry::Get().Get(eq.GetEquipped(EquipSlot::OFF_HAND).id).stringId : "";
+        std::string lg = eq.HasEquipped(EquipSlot::LEGS) ? ItemRegistry::Get().Get(eq.GetEquipped(EquipSlot::LEGS).id).stringId : "";
+        std::string ft = eq.HasEquipped(EquipSlot::FEET) ? ItemRegistry::Get().Get(eq.GetEquipped(EquipSlot::FEET).id).stringId : "";
+        std::string gl = eq.HasEquipped(EquipSlot::GLOVES) ? ItemRegistry::Get().Get(eq.GetEquipped(EquipSlot::GLOVES).id).stringId : "";
+        m_player->UpdateEquipmentVisuals(mh, ch, hd, oh, lg, ft, gl);
+    }
 
     // Player keyboard movement (WASD)
     if (!m_inputManager->IsGamePaused()) {
@@ -555,7 +575,10 @@ void GameApp::UpdateFrame() {
     m_renderPipeline->RenderUI2D(*m_player, *m_inventory, *m_targeting,
                                  *m_damageNumbers, *m_weatherSystem,
                                  *m_mobManager, *m_inputManager,
-                                 m_globalTime, m_currentFPS);
+                                 m_globalTime, m_currentFPS,
+                                 *m_spellSystem, *m_structureSystem,
+                                 *m_itemDropSystem, *m_skinningSystem,
+                                 *m_horrorProps);
 
 #ifndef __EMSCRIPTEN__
     m_window.display();

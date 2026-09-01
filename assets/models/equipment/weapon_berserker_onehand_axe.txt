@@ -1,0 +1,11 @@
+# Berserker Hand Axe Model (1-Handed Waraxe rotated 180 on long axis so edge strikes forward)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  0.00  0.08   0.065 0.065 0.22   0 0 0   0.55 0.12 0.10  GRIP
+BOX  0.0  0.00 -0.05   0.080 0.080 0.06   0 0 0   0.50 0.38 0.22  POMMEL
+BOX  0.0  0.00  0.28   0.050 0.050 0.42   0 0 0   0.35 0.18 0.10  SHAFT
+BOX  0.0  0.00  0.50   0.090 0.120 0.14   0 0 0   0.45 0.35 0.20  SOCKET
+BOX  0.0 -0.18  0.50   0.030 0.28  0.24   0 0 0   0.65 0.25 0.20  BLADE
+BOX  0.0 -0.28  0.50   0.018 0.30  0.26   0 0 0   0.92 0.92 0.95  EDGE
+BOX  0.0  0.12  0.50   0.030 0.12  0.06   0 0 0   0.45 0.35 0.20  SPIKE
+BOX -0.055 0.00 0.50   0.030 0.07  0.07   0 0 0   0.75 0.60 0.25  SKULL_R
+BOX  0.055 0.00 0.50   0.030 0.07  0.07   0 0 0   0.75 0.60 0.25  SKULL_L

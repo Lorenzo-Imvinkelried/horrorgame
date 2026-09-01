@@ -1,0 +1,10 @@
+# Death Knight Greatsword Model (Colossal Gothic Frost Claymore)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0  0.0  0.08   0.08 0.08 0.38   0 0 0   0.10 0.10 0.12  HILT
+BOX  0.0  0.0 -0.13   0.12 0.12 0.12   0 0 0   0.15 0.15 0.20  SKULL_POMMEL
+BOX  0.0  0.0  0.30   0.10 0.54 0.10   0 0 0   0.20 0.22 0.28  GOTHIC_GUARD
+BOX  0.0  0.0  0.30   0.12 0.12 0.12   0 0 0   0.15 0.85 1.00  SOUL_GEM
+BOX  0.0  0.0  0.90   0.05 0.22 0.80   0 0 0   0.18 0.20 0.26  OBSIDIAN_BLADE1
+BOX  0.0  0.0  0.90   0.06 0.05 0.65   0 0 0   0.20 0.85 1.00  RUNE_INLAY
+BOX  0.0  0.0  1.50   0.04 0.18 0.70   0 0 0   0.22 0.24 0.30  OBSIDIAN_BLADE2
+BOX  0.0  0.0  1.95   0.03 0.10 0.30   0 0 0   0.25 0.28 0.35  DEMON_TIP

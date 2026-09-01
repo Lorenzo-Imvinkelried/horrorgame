@@ -30,7 +30,8 @@ public:
                         ItemDropSystem& itemDropSystem, SkinningSystem& skinningSystem,
                         SpellSystem& spellSystem, MobManager& mobManager,
                         HorrorPropsSystem& horrorProps, DamageNumberSystem& damageNumbers,
-                        ParticleSystem& particles, ScentSystem& scentSystem);
+                        ParticleSystem& particles, ScentSystem& scentSystem,
+                        TargetingSystem& targeting, ProjectileSystem& projectiles);
 
     void UpdateMouseAndLook(float deltaTime, float curMouseX, float curMouseY,
                            bool leftIsPressed, bool rightIsPressed,

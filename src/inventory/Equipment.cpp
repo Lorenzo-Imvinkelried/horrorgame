@@ -59,6 +59,19 @@ EquipSlot Equipment::resolveTargetSlot(const ItemDefinition& def, EquipSlot pref
         if (!HasEquipped(EquipSlot::RING_2)) return EquipSlot::RING_2;
         return EquipSlot::RING_1; // Por defecto reemplaza el anillo 1
     }
+    // Separación de armas de 1 mano vs 2 manos:
+    if (def.isTwoHanded && preferredSlot == EquipSlot::OFF_HAND) {
+        return EquipSlot::NONE; // Las armas de 2 manos nunca van en la mano secundaria
+    }
+    // Armas de 1 mano: se pueden equipar en MAIN_HAND o en OFF_HAND para empuñadura dual
+    if (def.equipSlot == EquipSlot::MAIN_HAND && !def.isTwoHanded) {
+        if (preferredSlot == EquipSlot::OFF_HAND && !IsMainHandTwoHanded()) {
+            return EquipSlot::OFF_HAND;
+        }
+        if (preferredSlot == EquipSlot::NONE && HasEquipped(EquipSlot::MAIN_HAND) && !HasEquipped(EquipSlot::OFF_HAND) && !IsMainHandTwoHanded()) {
+            return EquipSlot::OFF_HAND;
+        }
+    }
     return def.equipSlot;
 }
 

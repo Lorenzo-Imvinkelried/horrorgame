@@ -73,6 +73,10 @@ void EnemyMob::updateMeleeAI(float deltaTime, glm::vec3 playerPos, Player* playe
         else if (m_type == EnemyType::CORRUPTED_WARRIOR) m_speed = 5.4f;
         else m_speed = 4.2f; // Death Knight
         
+        float vertDiff = playerPos.y - m_pos.y;
+        float dist3D = glm::distance(m_pos, playerPos);
+        bool playerReachable = (vertDiff <= 2.0f && vertDiff >= -2.5f && dist3D <= 3.2f);
+
         if (d2D > 2.4f && m_attackAnimProgress <= 0.0f) {
             m_pos.x += toP.x * m_speed * deltaTime;
             m_pos.z += toP.y * m_speed * deltaTime;
@@ -80,8 +84,8 @@ void EnemyMob::updateMeleeAI(float deltaTime, glm::vec3 playerPos, Player* playe
         } else {
             m_speed = 0.0f;
 
-            // Iniciar animación de ataque con espada/hacha/mandoble
-            if (m_attackCooldown <= 0.0f && m_attackAnimProgress <= 0.0f && player != nullptr) {
+            // Iniciar animación de ataque solo si el jugador está al alcance cuerpo a cuerpo (no arriba de un árbol)
+            if (m_attackCooldown <= 0.0f && m_attackAnimProgress <= 0.0f && player != nullptr && playerReachable) {
                 m_attackAnimProgress = 0.01f;
             }
 
@@ -90,35 +94,35 @@ void EnemyMob::updateMeleeAI(float deltaTime, glm::vec3 playerPos, Player* playe
                 float prevProgress = m_attackAnimProgress;
                 m_attackAnimProgress += deltaTime * 2.2f;
 
-                // En el clímax del tajo (progreso 50%), asesta el impacto y daño
-                if (prevProgress < 0.50f && m_attackAnimProgress >= 0.50f && player != nullptr) {
-                    int baseDmg = 20;
-                    float cd = 1.5f;
+                // En el clímax del tajo (progreso 50%), asesta el impacto y daño solo si sigue al alcance vertical
+                if (prevProgress < 0.50f && m_attackAnimProgress >= 0.50f && player != nullptr && playerReachable) {
+                    int baseDmg = 34;
+                    float cd = 1.3f;
 
                     if (m_type == EnemyType::BERSERKER_WARRIOR) {
-                        baseDmg = 26 + (rand() % 9);
-                        cd = 1.1f;
+                        baseDmg = 46 + (rand() % 14);
+                        cd = 0.95f;
                     } else if (m_type == EnemyType::DEATH_KNIGHT) {
-                        baseDmg = 36 + (rand() % 12);
-                        cd = 2.2f;
+                        baseDmg = 65 + (rand() % 18);
+                        cd = 1.8f;
                     } else if (m_type == EnemyType::SHADOW_ASSASSIN) {
-                        baseDmg = 18 + (rand() % 7);
-                        cd = 1.0f;
+                        baseDmg = 35 + (rand() % 10);
+                        cd = 0.85f;
                     } else if (m_type == EnemyType::VAMPIRE) {
-                        baseDmg = 24 + (rand() % 8);
-                        cd = 1.4f;
+                        baseDmg = 40 + (rand() % 12);
+                        cd = 1.2f;
                     } else {
-                        baseDmg = 20 + (rand() % 6);
-                        cd = 1.6f;
+                        baseDmg = 34 + (rand() % 10);
+                        cd = 1.3f;
                     }
 
-                    int scaledDmg = (int)(baseDmg * (1.0f + (m_nightLevel - 1) * 0.25f));
+                    int scaledDmg = (int)(baseDmg * (1.0f + (m_nightLevel - 1) * 0.28f));
                     m_attackCooldown = cd;
                     player->TakeDamage(scaledDmg, damageNumbers, nullptr, false);
 
                     if (m_type == EnemyType::VAMPIRE) {
-                        m_currentHp = std::min(m_maxHp, m_currentHp + scaledDmg);
-                        damageNumbers.SpawnDamage(m_pos + glm::vec3(0, 2.0f, 0), scaledDmg, true);
+                        m_currentHp = std::min(m_maxHp, m_currentHp + scaledDmg / 2);
+                        damageNumbers.SpawnDamage(m_pos + glm::vec3(0, 2.0f, 0), scaledDmg / 2, true);
                     }
 
                     glm::vec3 hitPos = playerPos + glm::vec3(0.0f, 1.2f, 0.0f);
@@ -170,7 +174,7 @@ void EnemyMob::updateArcherAI(float deltaTime, glm::vec3 playerPos, ParticleSyst
             glm::vec3 bowPos = m_pos + glm::vec3(0.24f, 1.2f, 0.2f);
             glm::vec3 playerChest = playerPos + glm::vec3(0.0f, 1.0f, 0.0f);
 
-            int archerDmg = (int)(18 * (1.0f + (m_nightLevel - 1) * 0.25f));
+            int archerDmg = (int)((28 + (rand() % 8)) * (1.0f + (m_nightLevel - 1) * 0.28f));
             projectiles.Spawn(bowPos, playerChest, 28.0f, archerDmg, glm::vec4(0.9f, 0.85f, 0.2f, 1.0f), false, ProjectileType::ARROW);
 
             for (int i = 0; i < 8; ++i) {
@@ -178,7 +182,7 @@ void EnemyMob::updateArcherAI(float deltaTime, glm::vec3 playerPos, ParticleSyst
                 particles.SpawnParticle(bowPos, pVel, glm::vec4(0.9f, 0.8f, 0.2f, 1.0f), 0.10f, 0.4f, 0.0f);
             }
 
-            m_attackCooldown = 1.8f;
+            m_attackCooldown = 1.5f;
         }
     } else {
         updateIdleWander(deltaTime);
@@ -212,15 +216,15 @@ void EnemyMob::updateMageAI(float deltaTime, glm::vec3 playerPos, ParticleSystem
             glm::vec3 staffOrbPos = m_pos + glm::vec3(0.32f, 2.08f, 0.15f);
             glm::vec3 playerChest = playerPos + glm::vec3(0.0f, 1.1f, 0.0f);
 
-            int mageDmg = (int)(16 * (1.0f + (m_nightLevel - 1) * 0.25f));
-            projectiles.Spawn(staffOrbPos, playerChest, 12.0f, mageDmg, glm::vec4(0.95f, 0.15f, 0.90f, 1.0f));
+            int mageDmg = (int)((34 + (rand() % 10)) * (1.0f + (m_nightLevel - 1) * 0.28f));
+            projectiles.Spawn(staffOrbPos, playerChest, 13.5f, mageDmg, glm::vec4(0.95f, 0.15f, 0.90f, 1.0f));
 
             for (int i = 0; i < 14; ++i) {
                 glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.0f, (rand()%100/50.0f + 0.2f)*2.5f, (rand()%100/50.0f - 1.0f)*2.0f);
                 particles.SpawnParticle(staffOrbPos, pVel, glm::vec4(1.0f, 0.4f, 1.0f, 1.0f), 0.14f, 0.6f, 0.0f);
             }
 
-            m_attackCooldown = 2.4f;
+            m_attackCooldown = 1.8f;
         }
     } else {
         updateIdleWander(deltaTime);
@@ -254,13 +258,17 @@ void EnemyMob::updateTreantAI(float deltaTime, glm::vec3 playerPos, Player* play
 
     m_speed = 2.4f;
 
+    float vertDiff = playerPos.y - m_pos.y;
+    float dist3D = glm::distance(m_pos, playerPos);
+    bool playerReachable = (vertDiff <= 2.8f && vertDiff >= -2.5f && dist3D <= 4.0f);
+
     if (d2D > 2.8f && m_attackAnimProgress <= 0.0f) {
         m_pos.x += toP.x * m_speed * deltaTime;
         m_pos.z += toP.y * m_speed * deltaTime;
         m_animTimer += deltaTime * 4.0f;
     } else {
         m_speed = 0.0f;
-        if (m_attackCooldown <= 0.0f && m_attackAnimProgress <= 0.0f && player != nullptr) {
+        if (m_attackCooldown <= 0.0f && m_attackAnimProgress <= 0.0f && player != nullptr && playerReachable) {
             m_attackAnimProgress = 0.01f;
         }
 
@@ -268,10 +276,10 @@ void EnemyMob::updateTreantAI(float deltaTime, glm::vec3 playerPos, Player* play
             float prev = m_attackAnimProgress;
             m_attackAnimProgress += deltaTime * 1.6f;
 
-            if (prev < 0.50f && m_attackAnimProgress >= 0.50f && player != nullptr) {
-                m_attackCooldown = 2.2f;
-                int baseDmg = 32 + (rand() % 10);
-                int scaledDmg = (int)(baseDmg * (1.0f + (m_nightLevel - 1) * 0.25f));
+            if (prev < 0.50f && m_attackAnimProgress >= 0.50f && player != nullptr && playerReachable) {
+                m_attackCooldown = 1.8f;
+                int baseDmg = 55 + (rand() % 15);
+                int scaledDmg = (int)(baseDmg * (1.0f + (m_nightLevel - 1) * 0.28f));
                 player->TakeDamage(scaledDmg, damageNumbers, nullptr, false);
 
                 glm::vec3 slamPos = m_pos + glm::vec3(toP.x * 1.5f, 0.2f, toP.y * 1.5f);
@@ -306,13 +314,17 @@ void EnemyMob::updateGiantAI(float deltaTime, glm::vec3 playerPos, Player* playe
 
     m_speed = 3.6f;
 
+    float vertDiff = playerPos.y - m_pos.y;
+    float dist3D = glm::distance(m_pos, playerPos);
+    bool playerReachable = (vertDiff <= 4.2f && vertDiff >= -3.0f && dist3D <= 5.2f);
+
     if (d2D > 3.2f && m_attackAnimProgress <= 0.0f) {
         m_pos.x += toP.x * m_speed * deltaTime;
         m_pos.z += toP.y * m_speed * deltaTime;
         m_animTimer += deltaTime * 5.0f;
     } else {
         m_speed = 0.0f;
-        if (m_attackCooldown <= 0.0f && m_attackAnimProgress <= 0.0f && player != nullptr) {
+        if (m_attackCooldown <= 0.0f && m_attackAnimProgress <= 0.0f && player != nullptr && playerReachable) {
             m_attackAnimProgress = 0.01f;
         }
 
@@ -320,10 +332,10 @@ void EnemyMob::updateGiantAI(float deltaTime, glm::vec3 playerPos, Player* playe
             float prev = m_attackAnimProgress;
             m_attackAnimProgress += deltaTime * 1.5f;
 
-            if (prev < 0.50f && m_attackAnimProgress >= 0.50f && player != nullptr) {
-                m_attackCooldown = 2.5f;
-                int baseDmg = 45 + (rand() % 15);
-                int scaledDmg = (int)(baseDmg * (1.0f + (m_nightLevel - 1) * 0.25f));
+            if (prev < 0.50f && m_attackAnimProgress >= 0.50f && player != nullptr && playerReachable) {
+                m_attackCooldown = 2.0f;
+                int baseDmg = 85 + (rand() % 25);
+                int scaledDmg = (int)(baseDmg * (1.0f + (m_nightLevel - 1) * 0.28f));
                 player->TakeDamage(scaledDmg, damageNumbers, nullptr, false);
 
                 glm::vec3 smashPos = m_pos + glm::vec3(toP.x * 2.0f, 0.2f, toP.y * 2.0f);

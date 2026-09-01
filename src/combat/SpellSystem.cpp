@@ -212,7 +212,7 @@ void SpellSystem::RenderHUDSpells(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO) 
         }
     };
 
-    drawSpellSlot(0, "[Q]", "ONDA SANGRE", m_cdBloodBurst, glm::vec3(0.85f, 0.15f, 0.15f));
-    drawSpellSlot(1, "[E]", "ESCUDO SOMBRA", m_cdShadowAegis, glm::vec3(0.55f, 0.20f, 0.85f));
-    drawSpellSlot(2, "[R]", "RAYO ARCANO", m_cdArcaneBeam, glm::vec3(0.15f, 0.65f, 0.95f));
+    drawSpellSlot(0, "[R]", "ONDA SANGRE", m_cdBloodBurst, glm::vec3(0.85f, 0.15f, 0.15f));
+    drawSpellSlot(1, "[T]", "ESCUDO SOMBRA", m_cdShadowAegis, glm::vec3(0.55f, 0.20f, 0.85f));
+    drawSpellSlot(2, "[Y]", "RAYO ARCANO", m_cdArcaneBeam, glm::vec3(0.15f, 0.65f, 0.95f));
 }

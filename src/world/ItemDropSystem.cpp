@@ -5,6 +5,7 @@
 #include "ParticleSystem.h"
 #include "WorldGenerator.h"
 #include "ModelLoader.h"
+#include "inventory/ItemModelRegistry.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
@@ -118,36 +119,6 @@ void ItemDropSystem::Update(float deltaTime, glm::vec3 playerPos, InventorySyste
             }
         }
 
-        // Atracción magnética si el jugador está muy cerca (< 1.8m) y ya pasó el pickupDelay
-        float distToPlayer = glm::distance(playerPos + glm::vec3(0, 0.8f, 0), it->position);
-        if (distToPlayer < 1.8f && it->pickupDelay <= 0.0f) {
-            // Recogida automática magnética
-            int remaining = 0;
-            bool added = inventory.GetInventory().AddInstance(it->instance, &remaining);
-            if (added) {
-                const ItemDefinition& def = ItemRegistry::Get().Get(it->instance.id);
-
-                // Partículas mágicas de recolección
-                glm::vec4 sparkCol = glm::vec4(0.2f, 0.95f, 0.35f, 1.0f);
-                if (def.rarity == ItemRarity::RARE) sparkCol = glm::vec4(0.2f, 0.5f, 1.0f, 1.0f);
-                else if (def.rarity == ItemRarity::EPIC) sparkCol = glm::vec4(0.8f, 0.2f, 0.95f, 1.0f);
-                else if (def.rarity == ItemRarity::LEGENDARY) sparkCol = glm::vec4(1.0f, 0.85f, 0.2f, 1.0f);
-
-                for (int i = 0; i < 16; ++i) {
-                    glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.0f, (rand()%100/50.0f + 0.4f)*2.4f, (rand()%100/50.0f - 1.0f)*2.0f);
-                    particles.SpawnParticle(it->position + glm::vec3(0, 0.3f, 0), pVel, sparkCol, 0.14f, 0.7f, -6.0f);
-                }
-
-                if (remaining > 0) {
-                    it->instance.quantity = static_cast<uint16_t>(remaining);
-                    ++it;
-                    continue;
-                } else {
-                    it = m_drops.erase(it);
-                    continue;
-                }
-            }
-        }
 
         // Partículas temáticas y haz de luz vertical continuo según rareza
         if ((rand() % 100) < 40) {
@@ -195,7 +166,7 @@ std::string ItemDropSystem::GetNearbyPrompt(glm::vec3 playerPos) const {
 
     if (bestDrop != nullptr) {
         const ItemDefinition& def = ItemRegistry::Get().Get(bestDrop->instance.id);
-        return "[F] RECOGER " + def.name + " (x" + std::to_string(bestDrop->instance.quantity) + ")";
+        return "[E] RECOGER " + def.name + " (x" + std::to_string(bestDrop->instance.quantity) + ")";
     }
 
     return "";
@@ -240,15 +211,13 @@ bool ItemDropSystem::TryCollectNearby(glm::vec3 playerPos, InventorySystem& inve
 }
 
 void ItemDropSystem::Render(GLuint shaderProgram, glm::vec3 cameraPos) {
-    if (m_drops.empty() || m_itemVAO == 0) return;
+    if (m_drops.empty()) return;
 
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ConformToTerrain"), 0);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
-
-    glBindVertexArray(m_itemVAO);
 
     for (const auto& drop : m_drops) {
         float bobOffset = sin(drop.bobTimer) * 0.12f;
@@ -260,7 +229,16 @@ void ItemDropSystem::Render(GLuint shaderProgram, glm::vec3 cameraPos) {
         model = glm::scale(model, glm::vec3(1.35f));
 
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
-        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_itemVertexCount));
+
+        const ItemDefinition& def = ItemRegistry::Get().Get(drop.instance.id);
+        const ItemMesh* mesh = ItemModelRegistry::Get().GetMesh(def.stringId);
+        if (mesh && mesh->vao != 0) {
+            glBindVertexArray(mesh->vao);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(mesh->vertexCount));
+        } else if (m_itemVAO != 0) {
+            glBindVertexArray(m_itemVAO);
+            glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(m_itemVertexCount));
+        }
     }
 
     glBindVertexArray(0);

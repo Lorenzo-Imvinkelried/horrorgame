@@ -1,0 +1,9 @@
+# Death Knight Armor Model (Gothic Spiked Black Plate)
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX  0.0   1.22  0.0    0.58 0.68 0.36   0 0 0    0.14 0.14 0.18  GOTHIC_TORSO
+BOX  0.0   1.28  0.19   0.18 0.18 0.04   0 0 0    0.15 0.85 1.00  CHEST_RUNE
+BOX -0.36  1.48  0.0    0.28 0.22 0.28   0 0 0.25 0.22 0.22 0.28  PAULDRON_L
+BOX  0.36  1.48  0.0    0.28 0.22 0.28   0 0 -0.25 0.22 0.22 0.28 PAULDRON_R
+BOX -0.38  1.60  0.0    0.08 0.22 0.08   0 0 0.30 0.15 0.85 1.00  SPIKE_L
+BOX  0.38  1.60  0.0    0.08 0.22 0.08   0 0 -0.30 0.15 0.85 1.00 SPIKE_R
+BOX  0.0   1.12 -0.19   0.55 0.88 0.06   0.08 0 0 0.08 0.12 0.22  DK_CAPE

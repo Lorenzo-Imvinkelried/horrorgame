@@ -49,6 +49,7 @@ public:
 
     // --- Renderizado e Interacción con UI (Inventario + Equipamiento) ---
     void RenderWindow(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY, const PlayerStats* playerStats = nullptr);
+    void Render3DItemSlots(GLuint shaderProgram, float globalTime, int screenW, int screenH, float mouseNdcX, float mouseNdcY);
     bool HandleMouseClick(float mouseNdcX, float mouseNdcY, Player* player, ParticleSystem* particles, DamageNumberSystem* damageNumbers, ItemDropSystem* itemDropSystem, bool& closeRequested);
     void UpdateDrag(float mouseNdcX, float mouseNdcY, bool isLeftMouseDown);
 
@@ -79,4 +80,15 @@ private:
     bool m_isDragging = false;
     float m_dragOffsetX = 0.0f;
     float m_dragOffsetY = 0.0f;
+
+    // Tooltip 3D de Inspección Interactiva (Estilo MU Online)
+    bool m_hasHoveredItem = false;
+    std::string m_hoveredItemStringId;
+    ItemId m_hoveredItemId = INVALID_ITEM_ID;
+    float m_hoveredMouseX = 0.0f;
+    float m_hoveredMouseY = 0.0f;
+    float m_tipShowcaseX = 0.0f;
+    float m_tipShowcaseY = 0.0f;
+    float m_tipShowcaseW = 0.0f;
+    float m_tipShowcaseH = 0.0f;
 };

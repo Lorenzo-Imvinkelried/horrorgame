@@ -207,10 +207,12 @@ void PassiveMob::Update(float deltaTime, glm::vec3 playerPos, Player* player, Pa
                 m_headGrazeAngle = -0.50f + sin(m_animTimer * 2.5f) * 0.40f;
             }
 
-            // Attack player in melee range
-            if (distToPlayer < 2.5f && m_attackCooldown <= 0.0f) {
+            // Attack player in melee range (solo si está al alcance vertical y no en un árbol)
+            float vertDiff = std::abs(playerPos.y - m_pos.y);
+            float dist3D = glm::distance(m_pos, playerPos);
+            if (distToPlayer < 2.5f && vertDiff <= 1.8f && dist3D <= 2.8f && m_attackCooldown <= 0.0f) {
                 if (player != nullptr) {
-                    player->TakeDamage(18, damageNumbers);
+                    player->TakeDamage(32, damageNumbers);
                 }
 
                 // Dark blood & necrotic miasma particles
@@ -221,7 +223,7 @@ void PassiveMob::Update(float deltaTime, glm::vec3 playerPos, Player* player, Pa
                     particles.SpawnParticle(hitPos, pVel * 0.6f, glm::vec4(0.08f, 0.02f, 0.10f, 1.0f), 0.18f, 1.1f, -4.0f);
                 }
 
-                m_attackCooldown = 1.6f; // Strike again shortly
+                m_attackCooldown = 1.3f; // Strike again shortly
             }
 
             m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
@@ -233,14 +235,16 @@ void PassiveMob::Update(float deltaTime, glm::vec3 playerPos, Player* player, Pa
     // =========================================================================
     // 2. ALPHA DEER: Headbutt Counter & Reposition Flee
     // =========================================================================
-    if (m_size == DeerSize::ALPHA && distToPlayer < 2.5f && m_attackCooldown <= 0.0f && m_state != PassiveMobState::DEAD) {
+    float alphaVert = std::abs(playerPos.y - m_pos.y);
+    float alphaDist3D = glm::distance(m_pos, playerPos);
+    if (m_size == DeerSize::ALPHA && distToPlayer < 2.5f && alphaVert <= 1.8f && alphaDist3D <= 2.8f && m_attackCooldown <= 0.0f && m_state != PassiveMobState::DEAD) {
         // Face player
         glm::vec2 toP = glm::normalize(glm::vec2(playerPos.x - m_pos.x, playerPos.z - m_pos.z));
         m_yaw = atan2(toP.x, toP.y);
 
         // Deliver Headbutt damage to player
         if (player != nullptr) {
-            player->TakeDamage(16, damageNumbers);
+            player->TakeDamage(26, damageNumbers);
         }
 
         // Spawn hit particles
@@ -378,9 +382,11 @@ bool PassiveMob::TakeDamage(int damage, glm::vec3 hitOrigin, ParticleSystem& par
         return false;
     }
 
-    // Alpha counterattack on hit if ready!
+    // Alpha counterattack on hit if ready (solo si está a su alcance y no en un árbol)!
     if (m_size == DeerSize::ALPHA && m_attackCooldown <= 0.0f && player != nullptr) {
-        player->TakeDamage(16, damageNumbers);
+        if (std::abs(player->Position.y - m_pos.y) <= 1.8f && glm::distance(m_pos, player->Position) <= 2.8f) {
+            player->TakeDamage(16, damageNumbers);
+        }
         m_attackCooldown = 4.0f;
     }
 

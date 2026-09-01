@@ -1,0 +1,6 @@
+# Iron Gauntlets
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+BOX -0.28  0.88 0.04   0.17 0.28 0.19  -0.15 0 0 0.62 0.62 0.68  GLOVES_FOREARM_L
+BOX  0.28  0.88 0.04   0.17 0.28 0.19  -0.15 0 0 0.62 0.62 0.68  GLOVES_FOREARM_R
+BOX -0.28  0.72 0.08   0.16 0.13 0.17   0 0 0    0.70 0.70 0.75  GLOVES_HAND_L
+BOX  0.28  0.72 0.08   0.16 0.13 0.17   0 0 0    0.70 0.70 0.75  GLOVES_HAND_R

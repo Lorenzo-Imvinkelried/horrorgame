@@ -14,6 +14,8 @@
 #include "entities/MobManager.h"
 #include "ParticleSystem.h"
 #include "inventory/InventorySystem.h"
+#include "combat/SpellSystem.h"
+#include "world/SkinningSystem.h"
 #include "InputManager.h"
 #include "WorldGenerator.h"
 #include "Config.h"
@@ -236,7 +238,7 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
 
     glUniform1i(glGetUniformLocation(m_shaderProgram, "u_IsNight"), isNightTime ? 1 : 0);
     glUniform1f(glGetUniformLocation(m_shaderProgram, "u_Darkness"), nightFactor * 0.95f);
-    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_TorchActive"), player.HasTorchActive ? 1 : 0);
+    glUniform1i(glGetUniformLocation(m_shaderProgram, "u_TorchActive"), (player.HasTorchActive && !player.AreBothHandsOccupied()) ? 1 : 0);
     glm::vec3 playerTorchPos = player.GetTorchPosition();
     glUniform3f(glGetUniformLocation(m_shaderProgram, "u_TorchPos"), playerTorchPos.x, playerTorchPos.y, playerTorchPos.z);
 
@@ -371,6 +373,8 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
 }
 
 void RenderPipeline::RenderPostProcess(int screenW, int screenH) {
+    m_windowW = screenW;
+    m_windowH = screenH;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, screenW, screenH);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -391,7 +395,10 @@ void RenderPipeline::RenderPostProcess(int screenW, int screenH) {
 void RenderPipeline::RenderUI2D(Player& player, InventorySystem& inventory,
                                 TargetingSystem& targeting, DamageNumberSystem& damageNumbers,
                                 WeatherSystem& weatherSystem, MobManager& mobManager,
-                                InputManager& inputMgr, float globalTime, int currentFPS)
+                                InputManager& inputMgr, float globalTime, int currentFPS,
+                                SpellSystem& spellSystem, StructureSystem& structureSystem,
+                                ItemDropSystem& itemDropSystem, SkinningSystem& skinningSystem,
+                                HorrorPropsSystem& horrorProps)
 {
     glDisable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
@@ -405,42 +412,73 @@ void RenderPipeline::RenderUI2D(Player& player, InventorySystem& inventory,
     }
 
     // 2. HUD (Vital Signs ECG Monitor, Exp Bar, Target Frame, Damage Floaters)
-    glm::mat4 viewProj = player.GetViewMatrix();
+    glm::mat4 hudView = inputMgr.IsDebugCam() ? glm::lookAt(inputMgr.GetFreeCamPos(), inputMgr.GetFreeCamPos() + inputMgr.GetFreeCamFront(), glm::vec3(0,1,0)) : player.GetViewMatrix();
+    glm::mat4 hudProj = glm::perspective(glm::radians(70.0f), (float)m_internalW / (float)m_internalH, 0.1f, 1000.0f);
+    glm::mat4 viewProj = hudProj * hudView;
     m_uiRenderer.RenderHUD(m_uiProgram, m_uiVAO, m_uiVBO, player.Stats, targeting,
                           damageNumbers, viewProj, mobManager.GetHighestDangerLevel(),
-                          globalTime, weatherSystem.GetNightCount(), weatherSystem.IsBloodMoon());
+                          globalTime, weatherSystem.GetNightCount(), weatherSystem.IsBloodMoon(),
+                          weatherSystem.GetDayCount(), weatherSystem.IsNight());
 
-    // 3. Quickbar Action Slots (1-4)
-    m_uiRenderer.RenderQuickbarHUD(m_uiProgram, m_uiVAO, m_uiVBO, inventory.GetInventory());
-
-    // 4. Drag & Drop Inventory Window
-    if (inventory.IsOpen()) {
-        inventory.RenderWindow(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY(), &player.Stats);
+    // 3. Interaction Prompts (Prioritized: Structures > Item Drops > Skinning > Horror Props)
+    std::string prompt = structureSystem.GetPrompt(player.Position);
+    if (prompt.empty()) prompt = itemDropSystem.GetNearbyPrompt(player.Position);
+    if (prompt.empty()) prompt = skinningSystem.GetPrompt(player.Position, mobManager.GetPassiveMobs());
+    if (prompt.empty()) prompt = horrorProps.GetNearbyPrompt(player.Position);
+    if (!prompt.empty() && !inputMgr.GetLoreModal().active && !inputMgr.IsBuildMode() && !inventory.IsOpen()) {
+        m_uiRenderer.RenderInteractionPrompt(m_uiProgram, m_uiVAO, m_uiVBO, prompt);
     }
 
-    // 5. Character Stats Allocation Panel [C]
+    // 4. Quickbar Action Slots (1-4)
+    m_uiRenderer.RenderQuickbarHUD(m_uiProgram, m_uiVAO, m_uiVBO, inventory.GetInventory());
+
+    // 5. Spell Hotbar HUD ([R], [T], [Y])
+    spellSystem.RenderHUDSpells(m_uiProgram, m_uiVAO, m_uiVBO);
+
+    // 6. Building Mode Interface
+    if (inputMgr.IsBuildMode()) {
+        m_uiRenderer.RenderBuildingHUD(m_uiProgram, m_uiVAO, m_uiVBO, (int)inputMgr.GetCurrentBuildType(), inputMgr.GetCurrentBuildYaw());
+    }
+
+    // 7. Stun Warning
+    if (player.StunTimer > 0.0f) {
+        m_uiRenderer.RenderStunWarning(m_uiProgram, m_uiVAO, m_uiVBO, player.StunTimer);
+    }
+
+    // 8. Drag & Drop Inventory Window
+    if (inventory.IsOpen()) {
+        inventory.RenderWindow(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY(), &player.Stats);
+        inventory.Render3DItemSlots(m_shaderProgram, globalTime, m_windowW, m_windowH, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
+    }
+
+    // 9. Character Stats Allocation Panel [C]
     if (inputMgr.IsCharacterPanelOpen()) {
         m_uiRenderer.RenderCharacterPanel(m_uiProgram, m_uiVAO, m_uiVBO, player.Stats, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
     }
 
-    // 6. Lore Document Modal
+    // 10. Lore Document Modal
     if (inputMgr.GetLoreModal().active) {
         m_uiRenderer.RenderLoreModal(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetLoreModal(),
                                     inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
     }
 
-    // 7. Fatal Error Popup
+    // 11. Fatal Error Popup
     if (inputMgr.GetFatalError().active) {
         m_uiRenderer.RenderFatalErrorModal(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetFatalError(),
                                           inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
     }
 
-    // 8. Pause Menu
+    // 12. Pause Menu
     if (inputMgr.IsGamePaused()) {
         m_uiRenderer.RenderPauseMenu(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
     }
 
-    // 9. Retro Cursor
+    // 13. Game Over Screen
+    if (player.IsDead()) {
+        m_uiRenderer.RenderGameOverScreen(m_uiProgram, m_uiVAO, m_uiVBO, player.DeathTimer);
+    }
+
+    // 14. Retro Cursor
     UIRenderer::RenderCursor(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
 
     glDisable(GL_BLEND);

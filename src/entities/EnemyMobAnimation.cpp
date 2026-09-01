@@ -19,10 +19,11 @@ void EnemyMob::updateModelMesh() {
     glm::vec3 hipPivotR( 0.14f, 0.75f, 0.0f);
 
     if (m_type == EnemyType::NEUTRAL_GIANT) {
-        shoulderPivotL = glm::vec3(-0.52f, 1.65f, 0.0f);
-        shoulderPivotR = glm::vec3( 0.52f, 1.65f, 0.0f);
-        hipPivotL = glm::vec3(-0.24f, 0.95f, 0.0f);
-        hipPivotR = glm::vec3( 0.24f, 0.95f, 0.0f);
+        float giantScale = 1.60f;
+        shoulderPivotL = glm::vec3(-0.28f, 1.30f, 0.0f) * giantScale;
+        shoulderPivotR = glm::vec3( 0.28f, 1.30f, 0.0f) * giantScale;
+        hipPivotL = glm::vec3(-0.13f, 0.82f, 0.0f) * giantScale;
+        hipPivotR = glm::vec3( 0.13f, 0.82f, 0.0f) * giantScale;
     } else if (m_type == EnemyType::TREANT) {
         shoulderPivotL = glm::vec3(-0.65f, 2.40f, 0.10f);
         shoulderPivotR = glm::vec3( 0.65f, 2.40f, 0.10f);
@@ -98,24 +99,38 @@ void EnemyMob::updateModelMesh() {
             finalColor = glm::mix(finalColor, glm::vec3(1.0f, 0.95f, 0.95f), 0.65f);
         }
 
-        // 1. Pierna Izquierda
-        if (box.Name == "LEG_L") {
+        // 1. Pierna Izquierda (y armaduras de pierna izquierda)
+        if (box.Name == "LEG_L" || (box.Name.find("_L") != std::string::npos && 
+            (box.Name.find("LEG") != std::string::npos || box.Name.find("BOOT") != std::string::npos || 
+             box.Name.find("THIGH") != std::string::npos || box.Name.find("SHIN") != std::string::npos || 
+             box.Name.find("FOOT") != std::string::npos || box.Name.find("GREAVE") != std::string::npos))) {
             glm::mat4 legM = glm::translate(glm::mat4(1.0f), hipPivotL) * glm::rotate(glm::mat4(1.0f), legSwing, glm::vec3(1,0,0)) * glm::translate(glm::mat4(1.0f), -hipPivotL) * M;
             transformedBoxes.push_back({ legM, finalColor });
         }
-        // 2. Pierna Derecha
-        else if (box.Name == "LEG_R") {
+        // 2. Pierna Derecha (y armaduras de pierna derecha)
+        else if (box.Name == "LEG_R" || (box.Name.find("_R") != std::string::npos && 
+            (box.Name.find("LEG") != std::string::npos || box.Name.find("BOOT") != std::string::npos || 
+             box.Name.find("THIGH") != std::string::npos || box.Name.find("SHIN") != std::string::npos || 
+             box.Name.find("FOOT") != std::string::npos || box.Name.find("GREAVE") != std::string::npos))) {
             glm::mat4 legM = glm::translate(glm::mat4(1.0f), hipPivotR) * glm::rotate(glm::mat4(1.0f), -legSwing, glm::vec3(1,0,0)) * glm::translate(glm::mat4(1.0f), -hipPivotR) * M;
             transformedBoxes.push_back({ legM, finalColor });
         }
-        // 3. Brazo Izquierdo + Armas de mano izquierda
-        else if (box.Name == "ARM_L" || box.Name == "SHIELD" || box.Name == "CLAW_L" || box.Name.find("AXE_L") != std::string::npos || box.Name.find("DAGGER_L") != std::string::npos || box.Name.find("BOW") != std::string::npos) {
+        // 3. Brazo Izquierdo + Armas de mano izquierda y guantes izquierdos
+        else if (box.Name == "ARM_L" || box.Name.find("SHIELD") != std::string::npos || box.Name == "CLAW_L" || 
+                 box.Name.find("AXE_L") != std::string::npos || box.Name.find("DAGGER_L") != std::string::npos || 
+                 box.Name.find("BOW") != std::string::npos || 
+                 (box.Name.find("_L") != std::string::npos && (box.Name.find("GLOVE") != std::string::npos || box.Name.find("GAUNTLET") != std::string::npos || box.Name.find("FOREARM") != std::string::npos || box.Name.find("HAND") != std::string::npos))) {
             glm::mat4 armRot = glm::rotate(glm::mat4(1.0f), leftArmRotZ, glm::vec3(0,0,1)) * glm::rotate(glm::mat4(1.0f), leftArmRotY, glm::vec3(0,1,0)) * glm::rotate(glm::mat4(1.0f), leftArmRotX, glm::vec3(1,0,0));
             glm::mat4 armM = glm::translate(glm::mat4(1.0f), shoulderPivotL) * armRot * glm::translate(glm::mat4(1.0f), -shoulderPivotL) * M;
             transformedBoxes.push_back({ armM, finalColor });
         }
-        // 4. Brazo Derecho + Armas de mano derecha (Espadas, Hachas, Mandobles, Garras, Mazas)
-        else if (box.Name == "ARM_R" || box.Name.find("SWORD") != std::string::npos || box.Name.find("AXE_R") != std::string::npos || box.Name.find("CLAYMORE") != std::string::npos || box.Name.find("DAGGER_R") != std::string::npos || box.Name.find("ARROW") != std::string::npos || box.Name == "CLUB" || box.Name.find("STAFF") != std::string::npos || box.Name == "ORB" || box.Name == "CLAW_R") {
+        // 4. Brazo Derecho + Armas de mano derecha (Espadas, Hachas, Mandobles, Garras, Mazas) y guantes derechos
+        else if (box.Name == "ARM_R" || box.Name.find("SWORD") != std::string::npos || box.Name.find("AXE_R") != std::string::npos || 
+                 box.Name.find("CLAYMORE") != std::string::npos || box.Name.find("DAGGER_R") != std::string::npos || 
+                 box.Name.find("ARROW") != std::string::npos || box.Name.find("CLUB") != std::string::npos || 
+                 box.Name.find("STAFF") != std::string::npos || box.Name.find("ORB") != std::string::npos || 
+                 box.Name == "CLAW_R" || 
+                 (box.Name.find("_R") != std::string::npos && (box.Name.find("GLOVE") != std::string::npos || box.Name.find("GAUNTLET") != std::string::npos || box.Name.find("FOREARM") != std::string::npos || box.Name.find("HAND") != std::string::npos))) {
             glm::mat4 armRot = glm::rotate(glm::mat4(1.0f), rightArmRotZ, glm::vec3(0,0,1)) * glm::rotate(glm::mat4(1.0f), rightArmRotY, glm::vec3(0,1,0)) * glm::rotate(glm::mat4(1.0f), rightArmRotX, glm::vec3(1,0,0));
             glm::mat4 armM = glm::translate(glm::mat4(1.0f), shoulderPivotR) * armRot * glm::translate(glm::mat4(1.0f), -shoulderPivotR) * M;
             transformedBoxes.push_back({ armM, finalColor });
