@@ -106,11 +106,37 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
             // In 3rd person use character facing, in 1st person use camera Front
             glm::vec3 forwardDir = IsThirdPerson ? glm::vec3(sin(glm::radians(ModelYaw)), 0.0f, cos(glm::radians(ModelYaw))) : Front;
 
+            // Robust Melee Hitbox Evaluator: Point-blank 360-degree guarantee + wide 130-degree frontal cleave + slope tolerance
+            auto isHitByMelee = [&](const glm::vec3& targetPos, float targetRadius) -> bool {
+                float dx = targetPos.x - Position.x;
+                float dz = targetPos.z - Position.z;
+                float dist2D = sqrt(dx * dx + dz * dz);
+                float dy = std::abs(targetPos.y - Position.y);
+
+                // Generous vertical tolerance for uneven slopes / height differences
+                if (dy > 4.5f) return false;
+
+                // 1. Point-Blank 360-degree hit guarantee (Always hits when close regardless of facing angle)
+                if (dist2D <= (2.8f + targetRadius)) {
+                    return true;
+                }
+
+                // 2. Forward arc cleave (Melee weapon reach up to 4.8m + radius)
+                if (dist2D <= (4.8f + targetRadius)) {
+                    glm::vec2 toTarget2D = (dist2D > 0.001f) ? glm::normalize(glm::vec2(dx, dz)) : glm::vec2(0.0f);
+                    glm::vec2 fwd2D = glm::normalize(glm::vec2(forwardDir.x, forwardDir.z));
+                    float dot = glm::dot(fwd2D, toTarget2D);
+                    if (dot >= -0.35f) { // 130-degree wide frontal attack arc
+                        return true;
+                    }
+                }
+                return false;
+            };
+
             // 0. Check Dragon
             if (dragon != nullptr && dragon->IsAlive() && !dragon->IsDying()) {
                 glm::vec3 dPos = dragon->GetPosition();
-                float dist = glm::distance(Position, dPos);
-                if (dist < (4.8f + dragon->GetRadius())) {
+                if (isHitByMelee(dPos, dragon->GetRadius() + 1.2f)) {
                     AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 12, 5);
                     if (dmgResult.IsHit) {
                         bool killed = dragon->TakeDamage(dmgResult.Damage, Position, particles, damageNumbers, this);
@@ -131,28 +157,23 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
             for (auto& mPtr : monsters) {
                 if (mPtr->IsDead()) continue;
                 glm::vec3 mPos = mPtr->GetPosition();
-                float dist = glm::distance(Position, mPos);
-                if (dist < 3.8f) {
-                    glm::vec3 toEnemy = glm::normalize(mPos - Position);
-                    float dot = glm::dot(forwardDir, toEnemy);
-                    if (dot > 0.0f || dist < 1.8f) { // Wide front arc & close combat guarantee
-                        AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 10, 5);
-                        if (dmgResult.IsHit) {
-                            mPtr->TakeDamage((float)dmgResult.Damage, false);
-                            damageNumbers.SpawnDamage(mPos, dmgResult.Damage, dmgResult.IsCrit);
+                if (isHitByMelee(mPos, 1.4f)) {
+                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 10, 5);
+                    if (dmgResult.IsHit) {
+                        mPtr->TakeDamage((float)dmgResult.Damage, false);
+                        damageNumbers.SpawnDamage(mPos, dmgResult.Damage, dmgResult.IsCrit);
 
-                            // Spawn impact blood / spark particles
-                            for (int i = 0; i < 24; ++i) {
-                                glm::vec3 pVel((rand()%100/50.0f - 1.0f)*3.5f, (rand()%100/50.0f + 0.3f)*4.0f, (rand()%100/50.0f - 1.0f)*3.5f);
-                                particles.SpawnParticle(mPos + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.85f, 0.05f, 0.05f, 1.0f), 0.14f, 0.85f, -9.8f);
-                            }
+                        // Spawn impact blood / spark particles
+                        for (int i = 0; i < 24; ++i) {
+                            glm::vec3 pVel((rand()%100/50.0f - 1.0f)*3.5f, (rand()%100/50.0f + 0.3f)*4.0f, (rand()%100/50.0f - 1.0f)*3.5f);
+                            particles.SpawnParticle(mPos + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.85f, 0.05f, 0.05f, 1.0f), 0.14f, 0.85f, -9.8f);
+                        }
 
-                            if (mPtr->IsDead()) {
-                                bool leveledUp = false;
-                                Stats.AddExp(85, leveledUp);
-                                damageNumbers.SpawnExp(mPos, 85);
-                                if (leveledUp) damageNumbers.SpawnLevelUp(Position);
-                            }
+                        if (mPtr->IsDead()) {
+                            bool leveledUp = false;
+                            Stats.AddExp(85, leveledUp);
+                            damageNumbers.SpawnExp(mPos, 85);
+                            if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
                     }
                 }
@@ -162,49 +183,39 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
             for (auto& wm : waterMonsters) {
                 if (!wm->IsAlive()) continue;
                 glm::vec3 wPos = wm->GetPosition();
-                float dist = glm::distance(Position, wPos);
-                if (dist < (3.8f + wm->GetRadius()) || wm->IsDragging()) {
-                    glm::vec3 toWm = (dist > 0.001f) ? glm::normalize(wPos - Position) : forwardDir;
-                    float dot = glm::dot(forwardDir, toWm);
-                    if (dot > 0.0f || dist < 2.2f || wm->IsDragging()) {
-                        AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 4, 10);
-                        if (dmgResult.IsHit) {
-                            bool killed = wm->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
-                            damageNumbers.SpawnDamage(wPos, dmgResult.Damage, dmgResult.IsCrit);
+                if (isHitByMelee(wPos, wm->GetRadius()) || wm->IsDragging()) {
+                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 4, 10);
+                    if (dmgResult.IsHit) {
+                        bool killed = wm->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
+                        damageNumbers.SpawnDamage(wPos, dmgResult.Damage, dmgResult.IsCrit);
 
-                            if (killed) {
-                                bool leveledUp = false;
-                                int expGain = wm->GetExpReward();
-                                Stats.AddExp(expGain, leveledUp);
-                                damageNumbers.SpawnExp(wPos, expGain);
-                                if (leveledUp) damageNumbers.SpawnLevelUp(Position);
-                            }
+                        if (killed) {
+                            bool leveledUp = false;
+                            int expGain = wm->GetExpReward();
+                            Stats.AddExp(expGain, leveledUp);
+                            damageNumbers.SpawnExp(wPos, expGain);
+                            if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
                     }
                 }
             }
 
-            // 3. Check enemy mobs (Corrupted Warriors, Neutral Giants, Dark Mages)
+            // 3. Check enemy mobs (Corrupted Warriors, Neutral Giants, Dark Mages, Archers)
             for (auto& enemyPtr : enemyMobs) {
                 if (!enemyPtr->IsAlive()) continue;
                 glm::vec3 ePos = enemyPtr->GetPosition();
-                float dist = glm::distance(Position, ePos);
-                if (dist < (3.8f + enemyPtr->GetRadius())) {
-                    glm::vec3 toEnemy = glm::normalize(ePos - Position);
-                    float dot = glm::dot(forwardDir, toEnemy);
-                    if (dot > 0.0f || dist < (1.8f + enemyPtr->GetRadius() * 0.5f)) {
-                        AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 6, 8);
-                        if (dmgResult.IsHit) {
-                            bool killed = enemyPtr->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
-                            damageNumbers.SpawnDamage(ePos, dmgResult.Damage, dmgResult.IsCrit);
+                if (isHitByMelee(ePos, enemyPtr->GetRadius())) {
+                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 6, 8);
+                    if (dmgResult.IsHit) {
+                        bool killed = enemyPtr->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
+                        damageNumbers.SpawnDamage(ePos, dmgResult.Damage, dmgResult.IsCrit);
 
-                            if (killed) {
-                                bool leveledUp = false;
-                                int expGain = enemyPtr->GetExpReward();
-                                Stats.AddExp(expGain, leveledUp);
-                                damageNumbers.SpawnExp(ePos, expGain);
-                                if (leveledUp) damageNumbers.SpawnLevelUp(Position);
-                            }
+                        if (killed) {
+                            bool leveledUp = false;
+                            int expGain = enemyPtr->GetExpReward();
+                            Stats.AddExp(expGain, leveledUp);
+                            damageNumbers.SpawnExp(ePos, expGain);
+                            if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
                     }
                 }
@@ -214,24 +225,18 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
             for (auto& mobPtr : passiveMobs) {
                 if (!mobPtr->IsAlive()) continue;
                 glm::vec3 mobPos = mobPtr->GetPosition();
-                float dist = glm::distance(Position, mobPos);
-                if (dist < (3.8f + mobPtr->GetRadius())) {
-                    glm::vec3 toMob = glm::normalize(mobPos - Position);
-                    float dot = glm::dot(forwardDir, toMob);
-                    if (dot > 0.0f || dist < 1.8f) { // Close quarters guarantee
-                        AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 4, 12);
-                        if (dmgResult.IsHit) {
-                            bool killed = mobPtr->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
-                            damageNumbers.SpawnDamage(mobPos, dmgResult.Damage, dmgResult.IsCrit);
+                if (isHitByMelee(mobPos, mobPtr->GetRadius())) {
+                    AttackDamageResult dmgResult = CombatCalculator::CalculatePlayerAttack(Stats.Attack, Stats.CritChance, Stats.CritMultiplier, 4, 12);
+                    if (dmgResult.IsHit) {
+                        bool killed = mobPtr->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
+                        damageNumbers.SpawnDamage(mobPos, dmgResult.Damage, dmgResult.IsCrit);
 
-                            // EXP is ONLY granted when the mob is killed!
-                            if (killed) {
-                                bool leveledUp = false;
-                                int expGain = mobPtr->GetExpReward();
-                                Stats.AddExp(expGain, leveledUp);
-                                damageNumbers.SpawnExp(mobPos, expGain);
-                                if (leveledUp) damageNumbers.SpawnLevelUp(Position);
-                            }
+                        if (killed) {
+                            bool leveledUp = false;
+                            int expGain = mobPtr->GetExpReward();
+                            Stats.AddExp(expGain, leveledUp);
+                            damageNumbers.SpawnExp(mobPos, expGain);
+                            if (leveledUp) damageNumbers.SpawnLevelUp(Position);
                         }
                     }
                 }
