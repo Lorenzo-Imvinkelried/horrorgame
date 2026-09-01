@@ -8,7 +8,17 @@ namespace ShaderLoader {
 
 GLuint Load(const char* vertPath, const char* fragPath) {
     auto loadFile = [](const char* path) -> std::string {
-        FILE* f = fopen(path, "rb");
+        std::vector<std::string> candidates = {
+            std::string(path),
+            "../" + std::string(path),
+            "../../" + std::string(path),
+            "bin/" + std::string(path)
+        };
+        FILE* f = nullptr;
+        for (const auto& c : candidates) {
+            f = fopen(c.c_str(), "rb");
+            if (f) break;
+        }
         if (!f) return std::string("");
         fseek(f, 0, SEEK_END);
         long len = ftell(f);
