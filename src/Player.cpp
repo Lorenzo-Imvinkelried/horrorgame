@@ -764,11 +764,29 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
         }
         spaceWasPressed = spaceIsPressed;
         
-    } else {
-        if (PlatformInput::IsKeyPressed(PlatformInput::W) || PlatformInput::IsKeyPressed(PlatformInput::Up)) { moveDir += flatFront; }
-        if (PlatformInput::IsKeyPressed(PlatformInput::S) || PlatformInput::IsKeyPressed(PlatformInput::Down)) { moveDir -= flatFront; }
-        if (PlatformInput::IsKeyPressed(PlatformInput::A) || PlatformInput::IsKeyPressed(PlatformInput::Left)) { moveDir -= flatRight; }
-        if (PlatformInput::IsKeyPressed(PlatformInput::D) || PlatformInput::IsKeyPressed(PlatformInput::Right)) { moveDir += flatRight; }
+        bool keyW = PlatformInput::IsKeyPressed(PlatformInput::W) || PlatformInput::IsKeyPressed(PlatformInput::Up);
+        bool keyS = PlatformInput::IsKeyPressed(PlatformInput::S) || PlatformInput::IsKeyPressed(PlatformInput::Down);
+        bool keyA = PlatformInput::IsKeyPressed(PlatformInput::A) || PlatformInput::IsKeyPressed(PlatformInput::Left);
+        bool keyD = PlatformInput::IsKeyPressed(PlatformInput::D) || PlatformInput::IsKeyPressed(PlatformInput::Right);
+
+        static glm::vec3 s_latchedBackDir(0.0f);
+        static bool s_isBackLatched = false;
+
+        if (keyS && !keyW) {
+            if (!s_isBackLatched) {
+                glm::vec3 intendedDir = -flatFront;
+                if (keyA) intendedDir -= flatRight;
+                if (keyD) intendedDir += flatRight;
+                s_latchedBackDir = glm::normalize(intendedDir);
+                s_isBackLatched = true;
+            }
+            moveDir = s_latchedBackDir;
+        } else {
+            s_isBackLatched = false;
+            if (keyW) { moveDir += flatFront; }
+            if (keyA) { moveDir -= flatRight; }
+            if (keyD) { moveDir += flatRight; }
+        }
 
         if (PlatformInput::IsKeyPressed(PlatformInput::Space)) {
             if (treeNear) {
@@ -795,18 +813,14 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
             while (diff < -180.0f) diff += 360.0f;
             ModelYaw += diff * glm::clamp(deltaTime * 14.0f, 0.0f, 1.0f);
 
-            // In 3rd Person: Camera smoothly tracks behind player movement when walking forward/steering (W, W+A, W+D)
-            // When moving backwards (S), camera stays stable to prevent feedback spin loops and allow kiting/retreating
+            // In 3rd Person: Camera smoothly rotates and tracks behind player movement direction in all directions (W, A, S, D)
             if (IsThirdPerson && !IsFreeOrbiting) {
-                float forwardAlignment = glm::dot(moveDir, flatFront);
-                if (forwardAlignment > 0.25f) {
-                    float desiredCamYaw = glm::degrees(atan2(moveDir.z, moveDir.x));
-                    float camDiff = desiredCamYaw - Yaw;
-                    while (camDiff > 180.0f) camDiff -= 360.0f;
-                    while (camDiff < -180.0f) camDiff += 360.0f;
-                    Yaw += camDiff * glm::clamp(deltaTime * 4.0f, 0.0f, 1.0f);
-                    updateCameraVectors();
-                }
+                float desiredCamYaw = glm::degrees(atan2(moveDir.z, moveDir.x));
+                float camDiff = desiredCamYaw - Yaw;
+                while (camDiff > 180.0f) camDiff -= 360.0f;
+                while (camDiff < -180.0f) camDiff += 360.0f;
+                Yaw += camDiff * glm::clamp(deltaTime * 4.5f, 0.0f, 1.0f);
+                updateCameraVectors();
             }
 
             // Footprints
