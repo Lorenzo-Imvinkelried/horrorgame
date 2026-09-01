@@ -81,6 +81,7 @@ public:
                            GLuint uiProgram, GLuint uiVAO, GLuint uiVBO);
 
     static void RenderCursor(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float mouseNdcX, float mouseNdcY);
+    static void DrawCrosshair(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float size = 0.012f, float thickness = 0.003f, glm::vec3 color = glm::vec3(0.9f, 0.9f, 0.9f));
 
 private:
     static void pushQuad(std::vector<float>& data, float x, float y, float w, float h);

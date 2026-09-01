@@ -733,3 +733,8 @@ bool UIRenderer::HandlePauseMenuClick(float mouseNdcX, float mouseNdcY, bool& re
     return false;
 }
 
+void UIRenderer::DrawCrosshair(GLuint uiProgram, GLuint uiVAO, GLuint uiVBO, float size, float thickness, glm::vec3 color) {
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, -thickness * 0.5f, -size, thickness, size * 2.0f, color);
+    drawColoredQuad(uiProgram, uiVAO, uiVBO, -size, -thickness * 0.5f, size * 2.0f, thickness, color);
+}
+

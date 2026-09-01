@@ -96,6 +96,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/combat
     src/world
     src/graphics
+    src/render
     src/ui
     src/inventory
 )

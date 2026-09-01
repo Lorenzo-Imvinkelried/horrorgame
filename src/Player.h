@@ -18,7 +18,7 @@ class ParticleSystem;
 
 class Player {
 public:
-    Player(glm::vec3 startPos);
+    Player(glm::vec3 startPos = glm::vec3(0.0f, 15.0f, 0.0f));
     ~Player();
 
     void ProcessMouseMovement(float xoffset, float yoffset);
