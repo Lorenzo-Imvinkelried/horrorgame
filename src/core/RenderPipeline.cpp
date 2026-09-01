@@ -183,6 +183,12 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     glBindFramebuffer(GL_FRAMEBUFFER, m_fbo);
     glViewport(0, 0, m_internalW, m_internalH);
 
+    // RESTORE 3D PIPELINE STATES
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+
     const float dayCycleLength = 240.0f;
     float cycleNormalized = fmod(dayCycleTime, dayCycleLength) / dayCycleLength;
     float nightFactor = 0.0f;
