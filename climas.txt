@@ -1,0 +1,47 @@
+================================================================================
+                    VRAM DUNGEON - GUIA DE CLIMAS (config.json)
+================================================================================
+
+Para configurar con que clima arranca el juego, edita el campo "initialWeather"
+en el archivo config.json (por ejemplo: "initialWeather": "CLEAR_SUNNY").
+
+--------------------------------------------------------------------------------
+LISTA DE CLIMAS DISPONIBLES:
+--------------------------------------------------------------------------------
+
+1. "CLEAR_SUNNY" (o "CLEAR", "SUNNY", "DESPEJADO")
+   - Cielo despejado y luminoso con sol radiante de día y luna de noche.
+   - Niebla suave a la distancia estilo PS1.
+   - Sin precipitaciones.
+
+2. "OVERCAST" (o "NUBLADO")
+   - Cielo encapotado y atmósfera densa y grisácea.
+   - Mayor densidad de niebla en el horizonte.
+
+3. "MYSTIC_FOG" (o "FOG", "NIEBLA", "NIEBLA_MISTICA")
+   - Niebla mística densa con tinte cian/turquesa sobrenatural.
+   - Esporas de polen bioluminiscentes flotantes que emiten destellos.
+
+4. "LIGHT_RAIN" (o "RAIN", "LLUVIA", "LLUVIA_SUAVE", "STORM")
+   - Lluvia continua optimizada con viento.
+   - Niebla azulada tormentosa y relámpagos periódicos en el cielo.
+
+5. "EMBER_WIND" (o "EMBER", "CENIZAS", "BRIZA_DE_CENIZAS")
+   - Viento cálido con partículas de cenizas ardientes y luciérnagas doradas.
+   - Horizonte con tinte anaranjado tenue.
+
+6. "BLOOD_MOON_STORM" (o "BLOOD_MOON", "LUNA_DE_SANGRE")
+   - Cielo carmesí de pesadilla con luna de sangre gigante.
+   - Lluvia de cenizas ardientes rojas y relámpagos carmesí.
+   - Mobs más agresivos y mayor dificultad.
+
+--------------------------------------------------------------------------------
+EJEMPLO EN config.json:
+--------------------------------------------------------------------------------
+{
+  "isNight": false,
+  "initialWeather": "CLEAR_SUNNY",
+  "darkness": 0.16,
+  "flashlightEnabled": true
+}
+================================================================================

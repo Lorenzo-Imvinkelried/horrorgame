@@ -25,6 +25,8 @@
 #include "core/PlatformInput.h"
 
 #include <iostream>
+#include <fstream>
+#include <sstream>
 #include <ctime>
 #include <cmath>
 #include <algorithm>
@@ -185,8 +187,124 @@ bool GameApp::Init() {
     m_footprints = std::make_unique<FootprintSystem>();
     m_inventory = std::make_unique<InventorySystem>();
 
+    loadConfigFile();
     initWorld();
     return true;
+}
+
+void GameApp::loadConfigFile() {
+    std::vector<std::string> paths = {
+        "config.json",
+        "../config.json",
+        "../../config.json",
+        "bin/config.json"
+    };
+
+    std::string foundPath = "";
+    for (const auto& p : paths) {
+        std::ifstream file(p);
+        if (file.is_open()) {
+            foundPath = p;
+            file.close();
+            break;
+        }
+    }
+
+    if (foundPath.empty()) {
+        std::cout << "[Config] config.json no encontrado, usando valores por defecto." << std::endl;
+        return;
+    }
+
+    std::ifstream file(foundPath);
+    if (!file.is_open()) return;
+
+    std::cout << "[Config] Cargando configuracion desde: " << foundPath << std::endl;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.find("initialWeather") != std::string::npos || line.find("weather") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), '\"'), valStr.end());
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ' '), valStr.end());
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), '\r'), valStr.end());
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), '\n'), valStr.end());
+                if (m_weatherSystem && !valStr.empty()) {
+                    m_weatherSystem->SetStateFromString(valStr);
+                    std::cout << "[Config] Clima inicial configurado: " << m_weatherSystem->GetWeatherName() << " (" << valStr << ")" << std::endl;
+                }
+            }
+        }
+        if (line.find("isNight") != std::string::npos) {
+            if (line.find("true") != std::string::npos) {
+                m_dayCycleTime = 135.0f; // Night time
+            } else if (line.find("false") != std::string::npos) {
+                m_dayCycleTime = 25.0f; // Day time
+            }
+        }
+        if (line.find("flashlightEnabled") != std::string::npos && m_player) {
+            if (line.find("true") != std::string::npos) {
+                m_player->HasTorchActive = true;
+            } else if (line.find("false") != std::string::npos) {
+                m_player->HasTorchActive = false;
+            }
+        }
+        if (line.find("baseFreqX") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::Terrain::BaseFreqX;
+            }
+        }
+        if (line.find("baseFreqZ") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::Terrain::BaseFreqZ;
+            }
+        }
+        if (line.find("baseAmplitude") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::Terrain::BaseAmplitude;
+            }
+        }
+        if (line.find("detailFreqX") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::Terrain::DetailFreqX;
+            }
+        }
+        if (line.find("detailFreqZ") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::Terrain::DetailFreqZ;
+            }
+        }
+        if (line.find("detailAmplitude") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::Terrain::DetailAmplitude;
+            }
+        }
+    }
 }
 
 void GameApp::initWorld() {

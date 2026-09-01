@@ -2,6 +2,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <vector>
+#include <string>
 
 class ParticleSystem;
 
@@ -28,6 +29,8 @@ public:
     glm::vec3 GetAdjustedFog(glm::vec3 baseFog) const;
 
     WeatherState GetState() const { return m_state; }
+    void SetState(WeatherState state) { m_state = state; m_weatherTimer = 0.0f; }
+    void SetStateFromString(const std::string& name);
     int GetNightCount() const { return m_dayCounter; }
     const char* GetWeatherName() const;
 

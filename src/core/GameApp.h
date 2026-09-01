@@ -44,6 +44,7 @@ public:
 
 private:
     void initWorld();
+    void loadConfigFile();
     void updateGameLogic(float deltaTime);
 
     static GameApp* s_instance;

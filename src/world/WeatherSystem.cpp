@@ -193,6 +193,25 @@ void WeatherSystem::Update(float deltaTime, float dayCycleTime, glm::vec3 player
     }
 }
 
+void WeatherSystem::SetStateFromString(const std::string& name) {
+    std::string upper = name;
+    std::transform(upper.begin(), upper.end(), upper.begin(), ::toupper);
+    if (upper == "CLEAR_SUNNY" || upper == "CLEAR" || upper == "SUNNY" || upper == "DESPEJADO") {
+        m_state = WeatherState::CLEAR_SUNNY;
+    } else if (upper == "OVERCAST" || upper == "NUBLADO") {
+        m_state = WeatherState::OVERCAST;
+    } else if (upper == "MYSTIC_FOG" || upper == "FOG" || upper == "NIEBLA" || upper == "NIEBLA_MISTICA") {
+        m_state = WeatherState::MYSTIC_FOG;
+    } else if (upper == "LIGHT_RAIN" || upper == "RAIN" || upper == "LLUVIA" || upper == "LLUVIA_SUAVE" || upper == "STORM") {
+        m_state = WeatherState::LIGHT_RAIN;
+    } else if (upper == "EMBER_WIND" || upper == "EMBER" || upper == "CENIZAS" || upper == "BRIZA_DE_CENIZAS") {
+        m_state = WeatherState::EMBER_WIND;
+    } else if (upper == "BLOOD_MOON_STORM" || upper == "BLOOD_MOON" || upper == "LUNA_DE_SANGRE") {
+        m_state = WeatherState::BLOOD_MOON_STORM;
+    }
+    m_weatherTimer = 0.0f;
+}
+
 void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 cameraPos, float dayCycleTime, float globalTime) {
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
 
@@ -201,6 +220,7 @@ void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 camera
     glUniform1f(glGetUniformLocation(shaderProgram, "u_WindStrength"), 0.0f);
     glUniform1f(glGetUniformLocation(shaderProgram, "u_Alpha"), 1.0f);
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 1); // Emisivo brillante sin sombra
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 3); // Passthrough directo de color de vértices (evita que la niebla lo tape a la distancia)
 
     bool isNight = (dayCycleTime >= 120.0f && dayCycleTime <= 228.0f);
 
@@ -216,19 +236,19 @@ void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 camera
         }
 
         float sunAngle = sunProgress * 3.14159265f; // Arco de este a oeste
-        glm::vec3 sunDir = glm::normalize(glm::vec3(cos(sunAngle) * 0.90f, sin(sunAngle), 0.28f));
-        glm::vec3 sunPos = cameraPos + sunDir * 155.0f;
+        glm::vec3 sunDir = glm::normalize(glm::vec3(cosf(sunAngle) * 0.85f, std::max(0.20f, sinf(sunAngle)), 0.35f));
+        glm::vec3 sunPos = cameraPos + sunDir * 125.0f;
 
         glm::vec3 toCam = glm::normalize(cameraPos - sunPos);
-        float yaw = atan2(toCam.x, toCam.z);
-        float pitch = -asin(std::clamp(toCam.y, -0.999f, 0.999f));
+        float yaw = atan2f(toCam.x, toCam.z);
+        float pitch = -asinf(std::clamp(toCam.y, -0.999f, 0.999f));
 
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, sunPos);
         model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::rotate(model, globalTime * 0.25f, glm::vec3(0.0f, 0.0f, 1.0f)); // Rotación suave de los rayos solares
-        model = glm::scale(model, glm::vec3(1.35f));
+        model = glm::rotate(model, globalTime * 0.20f, glm::vec3(0.0f, 0.0f, 1.0f)); // Rotación suave de rayos solares
+        model = glm::scale(model, glm::vec3(2.6f));
 
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
         glBindVertexArray(m_sunVAO);
@@ -241,18 +261,18 @@ void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 camera
     if (isNight && m_moonVAO != 0) {
         float moonProgress = (dayCycleTime - 120.0f) / 108.0f;
         float moonAngle = moonProgress * 3.14159265f;
-        glm::vec3 moonDir = glm::normalize(glm::vec3(cos(moonAngle) * 0.90f, sin(moonAngle), -0.28f));
-        glm::vec3 moonPos = cameraPos + moonDir * 155.0f;
+        glm::vec3 moonDir = glm::normalize(glm::vec3(cosf(moonAngle) * 0.85f, std::max(0.20f, sinf(moonAngle)), -0.35f));
+        glm::vec3 moonPos = cameraPos + moonDir * 125.0f;
 
         glm::vec3 toCam = glm::normalize(cameraPos - moonPos);
-        float yaw = atan2(toCam.x, toCam.z);
-        float pitch = -asin(std::clamp(toCam.y, -0.999f, 0.999f));
+        float yaw = atan2f(toCam.x, toCam.z);
+        float pitch = -asinf(std::clamp(toCam.y, -0.999f, 0.999f));
 
         glm::mat4 model = glm::mat4(1.0f);
         model = glm::translate(model, moonPos);
         model = glm::rotate(model, yaw, glm::vec3(0.0f, 1.0f, 0.0f));
         model = glm::rotate(model, pitch, glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(IsBloodMoon() ? 1.60f : 1.25f));
+        model = glm::scale(model, glm::vec3(IsBloodMoon() ? 3.2f : 2.5f));
 
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(model));
         glBindVertexArray(m_moonVAO);
@@ -260,6 +280,7 @@ void WeatherSystem::RenderCelestialBodies(GLuint shaderProgram, glm::vec3 camera
     }
 
     glUniform1i(glGetUniformLocation(shaderProgram, "u_ParticleMode"), 0);
+    glUniform1i(glGetUniformLocation(shaderProgram, "u_IsDebug"), 0);
     glBindVertexArray(0);
 }
 

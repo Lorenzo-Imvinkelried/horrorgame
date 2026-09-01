@@ -1,5 +1,6 @@
 {
   "isNight": false,
+  "initialWeather": "CLEAR_SUNNY",
   "darkness": 0.16,
   "flashlightEnabled": true,
   "monsterCount": 0,
