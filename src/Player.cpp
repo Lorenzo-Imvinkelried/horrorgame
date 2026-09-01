@@ -763,7 +763,7 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
             Velocity.z = toPlayer.z * currentSpeed * 0.8f;
         }
         spaceWasPressed = spaceIsPressed;
-        
+    } else {
         bool keyW = PlatformInput::IsKeyPressed(PlatformInput::W) || PlatformInput::IsKeyPressed(PlatformInput::Up);
         bool keyS = PlatformInput::IsKeyPressed(PlatformInput::S) || PlatformInput::IsKeyPressed(PlatformInput::Down);
         bool keyA = PlatformInput::IsKeyPressed(PlatformInput::A) || PlatformInput::IsKeyPressed(PlatformInput::Left);
