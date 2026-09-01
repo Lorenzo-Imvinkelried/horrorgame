@@ -161,6 +161,7 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
 
 void MobManager::Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint textureID, float globalTime) {
     // 1. Birds & Critters
+    glBindTexture(GL_TEXTURE_2D, textureID);
     m_birds.Render(shaderProgram);
     m_critters.Render(shaderProgram);
 

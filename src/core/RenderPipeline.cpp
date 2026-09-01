@@ -132,17 +132,11 @@ void RenderPipeline::initTextures() {
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    // Procedural Detail Noise Texture
-    const int TEX_SIZE = 64;
-    unsigned char texData[TEX_SIZE * TEX_SIZE * 3];
-    for (int i = 0; i < TEX_SIZE * TEX_SIZE * 3; ++i) {
-        texData[i] = (unsigned char)(rand() % 256);
-    }
+    // Procedural Detail Noise Texture (Original PS1 Grain)
+    std::vector<unsigned char> textureData = WorldGenerator::GenerateNoiseTexture(64, 64);
     glGenTextures(1, &m_textureID);
     glBindTexture(GL_TEXTURE_2D, m_textureID);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, TEX_SIZE, TEX_SIZE, 0, GL_RGB, GL_UNSIGNED_BYTE, texData);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 64, 64, 0, GL_RGB, GL_UNSIGNED_BYTE, textureData.data());
     glGenerateMipmap(GL_TEXTURE_2D);
 }
 
@@ -245,7 +239,7 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     glUniform3f(glGetUniformLocation(m_shaderProgram, "u_FogColor"), fogCol.r, fogCol.g, fogCol.b);
 
     glm::mat4 view = inputMgr.IsDebugCam() ? glm::lookAt(inputMgr.GetFreeCamPos(), inputMgr.GetFreeCamPos() + inputMgr.GetFreeCamFront(), glm::vec3(0,1,0)) : player.GetViewMatrix();
-    glm::mat4 proj = glm::perspective(glm::radians(75.0f), (float)m_internalW / (float)m_internalH, 0.1f, 1000.0f);
+    glm::mat4 proj = glm::perspective(glm::radians(70.0f), (float)m_internalW / (float)m_internalH, 0.1f, 1000.0f);
 
     glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_View"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(m_shaderProgram, "u_Projection"), 1, GL_FALSE, glm::value_ptr(proj));
@@ -273,7 +267,9 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     chunkManager.RenderTrees(m_shaderProgram, m_trunkVAO, m_leavesVAO, m_trunkVertexCount, m_leavesVertexCount, player.Position);
 
     // 2. World Structures & Placed Buildings
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
     structureSystem.Render(m_shaderProgram, activeCamPos);
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
     buildingSystem.Render(m_shaderProgram, activeCamPos);
 
     // 3. Build Ghost Preview
@@ -284,6 +280,7 @@ void RenderPipeline::RenderScene3D(float deltaTime, float globalTime, float dayC
     // 4. Horror Props
     std::vector<glm::vec4> nearbyTreesForProps;
     chunkManager.GetTreesInRange(player.Position, 85.0f, nearbyTreesForProps);
+    glBindTexture(GL_TEXTURE_2D, m_textureID);
     horrorProps.Render(m_shaderProgram, nearbyTreesForProps, globalTime, windDir);
 
     // 5. Ground Loot Pouches
