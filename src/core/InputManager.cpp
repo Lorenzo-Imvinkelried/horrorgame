@@ -22,6 +22,7 @@
 
 #ifdef __EMSCRIPTEN__
 #include <GLFW/glfw3.h>
+#include <emscripten/html5.h>
 #else
 #include <SFML/Window/Keyboard.hpp>
 #endif
@@ -323,16 +324,24 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
     m_lastMouseY = curMouseY;
 
 #ifdef __EMSCRIPTEN__
-    static float virtualMouseX = (float)screenW * 0.5f;
-    static float virtualMouseY = (float)screenH * 0.5f;
+    static float virtualMouseX = 0.0f;
+    static float virtualMouseY = 0.0f;
     static bool s_firstVirtual = true;
     if (s_firstVirtual) {
         virtualMouseX = (float)screenW * 0.5f;
         virtualMouseY = (float)screenH * 0.5f;
         s_firstVirtual = false;
     }
-    virtualMouseX += xoff;
-    virtualMouseY -= yoff;
+
+    EmscriptenPointerlockChangeEvent plStatus;
+    bool hasPL = (emscripten_get_pointerlock_status(&plStatus) == EMSCRIPTEN_RESULT_SUCCESS && plStatus.isActive);
+    if (hasPL) {
+        virtualMouseX += xoff;
+        virtualMouseY -= yoff;
+    } else {
+        virtualMouseX = curMouseX;
+        virtualMouseY = curMouseY;
+    }
     virtualMouseX = std::clamp(virtualMouseX, 0.0f, (float)screenW);
     virtualMouseY = std::clamp(virtualMouseY, 0.0f, (float)screenH);
 

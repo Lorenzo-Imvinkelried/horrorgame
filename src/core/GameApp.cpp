@@ -35,6 +35,56 @@
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #include <emscripten/html5.h>
+
+static double s_webMouseX = 640.0;
+static double s_webMouseY = 360.0;
+static bool s_webLeftPressed = false;
+static bool s_webRightPressed = false;
+static bool s_webHasPointerLock = false;
+
+static EM_BOOL onWebMouseMove(int eventType, const EmscriptenMouseEvent* e, void* userData) {
+    if (s_webHasPointerLock) {
+        s_webMouseX += (double)e->movementX;
+        s_webMouseY += (double)e->movementY;
+    } else {
+        s_webMouseX = (double)e->targetX;
+        s_webMouseY = (double)e->targetY;
+    }
+    PlatformInput::s_WebMousePos = glm::vec2((float)s_webMouseX, (float)s_webMouseY);
+    return EM_FALSE;
+}
+
+static EM_BOOL onWebMouseDown(int eventType, const EmscriptenMouseEvent* e, void* userData) {
+    if (e->button == 0) {
+        s_webLeftPressed = true;
+        PlatformInput::s_WebLeftPressed = true;
+    }
+    if (e->button == 2) {
+        s_webRightPressed = true;
+        PlatformInput::s_WebRightPressed = true;
+    }
+    return EM_FALSE;
+}
+
+static EM_BOOL onWebMouseUp(int eventType, const EmscriptenMouseEvent* e, void* userData) {
+    if (e->button == 0) {
+        s_webLeftPressed = false;
+        PlatformInput::s_WebLeftPressed = false;
+    }
+    if (e->button == 2) {
+        s_webRightPressed = false;
+        PlatformInput::s_WebRightPressed = false;
+    }
+    return EM_FALSE;
+}
+
+static EM_BOOL onWebPointerLockChange(int eventType, const EmscriptenPointerlockChangeEvent* e, void* userData) {
+    s_webHasPointerLock = (e->isActive != 0);
+    if (GameApp::GetInstance() && GameApp::GetInstance()->GetInputManager()) {
+        GameApp::GetInstance()->GetInputManager()->ResetMouse();
+    }
+    return EM_FALSE;
+}
 #endif
 
 GameApp* GameApp::s_instance = nullptr;
@@ -138,6 +188,14 @@ bool GameApp::Init() {
     }
 
     emscripten_set_canvas_element_size("#canvas", m_windowWidth, m_windowHeight);
+    s_webMouseX = (double)m_windowWidth * 0.5;
+    s_webMouseY = (double)m_windowHeight * 0.5;
+    PlatformInput::s_WebMousePos = glm::vec2((float)s_webMouseX, (float)s_webMouseY);
+
+    emscripten_set_mousemove_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, false, onWebMouseMove);
+    emscripten_set_mousedown_callback("#canvas", nullptr, false, onWebMouseDown);
+    emscripten_set_mouseup_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, nullptr, false, onWebMouseUp);
+    emscripten_set_pointerlockchange_callback(EMSCRIPTEN_EVENT_TARGET_DOCUMENT, nullptr, false, onWebPointerLockChange);
 
     glfwSetKeyCallback(m_window, [](GLFWwindow*, int key, int scancode, int action, int mods) {
         if (action == GLFW_PRESS && GameApp::GetInstance()) {
@@ -525,13 +583,11 @@ void GameApp::UpdateFrame() {
         }
     }
 
-    double mx = 0, my = 0;
-    glfwGetCursorPos(m_window, &mx, &my);
-    float curMouseX = (float)mx;
-    float curMouseY = (float)my;
-    bool leftIsPressed = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS;
-    bool rightIsPressed = glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS;
-    bool hasFocus = (glfwGetWindowAttrib(m_window, GLFW_FOCUSED) != 0);
+    float curMouseX = (float)s_webMouseX;
+    float curMouseY = (float)s_webMouseY;
+    bool leftIsPressed = s_webLeftPressed || (glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS);
+    bool rightIsPressed = s_webRightPressed || (glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS);
+    bool hasFocus = true;
 #endif
 
     // Sync equipped 3D armor & weapon visuals on player model

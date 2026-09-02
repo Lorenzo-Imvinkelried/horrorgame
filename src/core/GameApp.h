@@ -41,6 +41,7 @@ public:
     void UpdateFrame();
 
     static GameApp* GetInstance() { return s_instance; }
+    InputManager* GetInputManager() const { return m_inputManager.get(); }
 
 private:
     void initWorld();

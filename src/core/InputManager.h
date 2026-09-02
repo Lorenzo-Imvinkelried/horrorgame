@@ -69,6 +69,7 @@ public:
 
     float GetMouseNdcX() const { return m_mouseNdcX; }
     float GetMouseNdcY() const { return m_mouseNdcY; }
+    void ResetMouse() { m_firstMouse = true; }
 
     FatalErrorPopup& GetFatalError() { return m_fatalError; }
     LoreDocumentModal& GetLoreModal() { return m_loreModal; }

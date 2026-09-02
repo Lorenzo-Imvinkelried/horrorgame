@@ -57,21 +57,24 @@ public:
         RightBtn = GLFW_MOUSE_BUTTON_RIGHT
     };
 
+    static inline bool s_WebLeftPressed = false;
+    static inline bool s_WebRightPressed = false;
+    static inline glm::vec2 s_WebMousePos = glm::vec2(640.0f, 360.0f);
+
     static bool IsKeyPressed(Key key) {
         if (!s_Window) return false;
         return glfwGetKey(s_Window, (int)key) == GLFW_PRESS;
     }
 
     static bool IsMouseButtonPressed(MouseButton btn) {
+        if (btn == LeftBtn && s_WebLeftPressed) return true;
+        if (btn == RightBtn && s_WebRightPressed) return true;
         if (!s_Window) return false;
         return glfwGetMouseButton(s_Window, (int)btn) == GLFW_PRESS;
     }
 
     static glm::vec2 GetMousePos() {
-        if (!s_Window) return glm::vec2(0.0f);
-        double x, y;
-        glfwGetCursorPos(s_Window, &x, &y);
-        return glm::vec2((float)x, (float)y);
+        return s_WebMousePos;
     }
 };
 
