@@ -14,7 +14,8 @@ enum class TargetType {
     MONSTER,
     ENEMY_MOB,
     WATER_MONSTER,
-    DRAGON
+    DRAGON,
+    BASE_MOB
 };
 
 class PassiveMob;
@@ -22,6 +23,7 @@ class Monster;
 class EnemyMob;
 class WaterMonster;
 class Dragon;
+class BaseMob;
 
 class TargetingSystem {
 public:
@@ -87,7 +89,18 @@ public:
         m_monsterTarget = nullptr;
         m_enemyTarget = nullptr;
         m_waterTarget = nullptr;
+        m_baseMobTarget = nullptr;
         m_targetType = TargetType::DRAGON;
+    }
+
+    void SelectMob(BaseMob* mob) {
+        m_baseMobTarget = mob;
+        m_passiveTarget = nullptr;
+        m_monsterTarget = nullptr;
+        m_enemyTarget = nullptr;
+        m_waterTarget = nullptr;
+        m_dragonTarget = nullptr;
+        m_targetType = TargetType::BASE_MOB;
     }
 
     void ClearTarget() {
@@ -97,6 +110,7 @@ public:
         m_enemyTarget = nullptr;
         m_waterTarget = nullptr;
         m_dragonTarget = nullptr;
+        m_baseMobTarget = nullptr;
         m_autoApproaching = false;
     }
 
@@ -110,6 +124,7 @@ public:
     EnemyMob* GetEnemyTarget() const { return m_enemyTarget; }
     WaterMonster* GetWaterTarget() const { return m_waterTarget; }
     Dragon* GetDragonTarget() const { return m_dragonTarget; }
+    BaseMob* GetBaseMobTarget() const { return m_baseMobTarget; }
 
     void SetAutoApproaching(bool autoApproach) {
         m_autoApproaching = autoApproach;
@@ -135,9 +150,10 @@ private:
     TargetType m_targetType;
     PassiveMob* m_passiveTarget;
     Monster* m_monsterTarget;
-    EnemyMob* m_enemyTarget;
-    WaterMonster* m_waterTarget;
-    Dragon* m_dragonTarget;
+    EnemyMob* m_enemyTarget = nullptr;
+    WaterMonster* m_waterTarget = nullptr;
+    Dragon* m_dragonTarget = nullptr;
+    BaseMob* m_baseMobTarget = nullptr;
     bool m_autoApproaching;
     float m_ringAngle;
 

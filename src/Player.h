@@ -110,7 +110,7 @@ public:
     bool IsAttacking() const { return m_attackTimer > 0.0f; }
     bool IsBlocking() const { return m_isBlocking; }
     void TakeDamage(int dmg, DamageNumberSystem& damageNumbers, struct FatalErrorPopup* fatalError = nullptr, bool shadowAegis = false);
-    void UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<class EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<class WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers, class Dragon* dragon = nullptr);
+    void UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<class EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<class WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers, class Dragon* dragon = nullptr, std::vector<std::unique_ptr<class BaseMob>>* baseMobs = nullptr);
 
     // Death & Respawn
     bool IsDead() const { return m_isDead; }

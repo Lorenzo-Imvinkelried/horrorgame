@@ -513,7 +513,8 @@ void GameApp::updateGameLogic(float deltaTime) {
     // 10. Melee Combat Check
     m_player->UpdateCombat(deltaTime, m_mobManager->GetMonsters(), m_mobManager->GetPassiveMobs(),
                            m_mobManager->GetEnemyMobs(), m_mobManager->GetWaterMonsters(),
-                           *m_particles, *m_damageNumbers, &m_mobManager->GetDragon());
+                           *m_particles, *m_damageNumbers, &m_mobManager->GetDragon(),
+                           &m_mobManager->GetBaseMobs());
 
     // 11. Targeting assist
     m_targeting->Update(deltaTime, m_player->Position, false);

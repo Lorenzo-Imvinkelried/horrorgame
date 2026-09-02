@@ -93,6 +93,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     src/core
     src/core/glad_shim
     src/entities
+    src/entities/mobs
     src/combat
     src/world
     src/graphics

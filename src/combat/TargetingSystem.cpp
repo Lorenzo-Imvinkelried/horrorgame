@@ -5,6 +5,7 @@
 #include "WaterMonster.h"
 #include "entities/Dragon.h"
 #include "WorldGenerator.h"
+#include "mobs/BaseMob.h"
 
 void TargetingSystem::initRingMesh() {
     if (m_ringVAO != 0) return;
@@ -75,6 +76,9 @@ glm::vec3 TargetingSystem::GetTargetPosition() const {
     if (m_targetType == TargetType::DRAGON && m_dragonTarget) {
         return m_dragonTarget->GetPosition();
     }
+    if (m_targetType == TargetType::BASE_MOB && m_baseMobTarget) {
+        return m_baseMobTarget->GetPosition();
+    }
     return glm::vec3(0.0f);
 }
 
@@ -84,6 +88,7 @@ std::string TargetingSystem::GetTargetName() const {
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetName();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetName();
     if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetName();
+    if (m_targetType == TargetType::BASE_MOB && m_baseMobTarget) return m_baseMobTarget->GetName();
     return "";
 }
 
@@ -93,6 +98,7 @@ int TargetingSystem::GetTargetLevel() const {
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetLevel();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetLevel();
     if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetLevel();
+    if (m_targetType == TargetType::BASE_MOB && m_baseMobTarget) return m_baseMobTarget->GetLevel();
     return 1;
 }
 
@@ -102,6 +108,7 @@ int TargetingSystem::GetTargetCurrentHP() const {
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetCurrentHP();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetCurrentHP();
     if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetCurrentHP();
+    if (m_targetType == TargetType::BASE_MOB && m_baseMobTarget) return m_baseMobTarget->GetCurrentHP();
     return 0;
 }
 
@@ -111,6 +118,7 @@ int TargetingSystem::GetTargetMaxHP() const {
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->GetMaxHP();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->GetMaxHP();
     if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->GetMaxHP();
+    if (m_targetType == TargetType::BASE_MOB && m_baseMobTarget) return m_baseMobTarget->GetMaxHP();
     return 100;
 }
 
@@ -120,6 +128,7 @@ bool TargetingSystem::IsTargetAlive() const {
     if (m_targetType == TargetType::ENEMY_MOB && m_enemyTarget) return m_enemyTarget->IsAlive();
     if (m_targetType == TargetType::WATER_MONSTER && m_waterTarget) return m_waterTarget->IsAlive();
     if (m_targetType == TargetType::DRAGON && m_dragonTarget) return m_dragonTarget->IsAlive();
+    if (m_targetType == TargetType::BASE_MOB && m_baseMobTarget) return m_baseMobTarget->IsAlive();
     return false;
 }
 

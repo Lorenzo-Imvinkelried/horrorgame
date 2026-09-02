@@ -11,6 +11,7 @@
 #include "entities/Dragon.h"
 #include "BirdSystem.h"
 #include "CritterSystem.h"
+#include "mobs/BaseMob.h"
 
 class Player;
 class ChunkManager;
@@ -44,6 +45,7 @@ public:
 
     std::vector<std::unique_ptr<Monster>>& GetMonsters() { return m_monsters; }
     std::vector<std::unique_ptr<EnemyMob>>& GetEnemyMobs() { return m_enemyMobs; }
+    std::vector<std::unique_ptr<BaseMob>>& GetBaseMobs() { return m_baseMobs; }
     std::vector<std::unique_ptr<PassiveMob>>& GetPassiveMobs() { return m_passiveMobs; }
     std::vector<std::unique_ptr<WaterMonster>>& GetWaterMonsters() { return m_waterMonsters; }
     Dragon& GetDragon() { return m_dragon; }
@@ -53,6 +55,7 @@ public:
     float GetHighestDangerLevel() const { return m_highestDangerLevel; }
 
 private:
+    std::vector<std::unique_ptr<BaseMob>> m_baseMobs;
     std::vector<std::unique_ptr<Monster>> m_monsters;
     std::vector<std::unique_ptr<EnemyMob>> m_enemyMobs;
     std::vector<std::unique_ptr<PassiveMob>> m_passiveMobs;

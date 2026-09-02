@@ -89,13 +89,6 @@ EnemyMob::EnemyMob(glm::vec3 spawnPos, EnemyType type, int nightLevel)
             m_defense = 12 + (m_nightLevel - 1) * 3;
             m_evasion = 24;
             break;
-        case EnemyType::TRAINING_DUMMY:
-            m_scale = 1.0f;
-            m_maxHp = 1000000;
-            m_defense = 0;
-            m_evasion = 0;
-            m_speed = 0.0f;
-            break;
     }
     m_currentHp = m_maxHp;
 
@@ -151,9 +144,7 @@ bool EnemyMob::TakeDamage(int damage, glm::vec3 hitOrigin, ParticleSystem& parti
     m_showHpBarTimer = 5.0f;
 
     // Enrage / Despertar según tipo
-    if (m_type == EnemyType::TRAINING_DUMMY) {
-        m_state = EnemyState::IDLE;
-    } else if (m_type == EnemyType::NEUTRAL_GIANT) {
+    if (m_type == EnemyType::NEUTRAL_GIANT) {
         m_isEnraged = true;
     } else if (m_type == EnemyType::TREANT) {
         m_isAwakened = true;
@@ -162,7 +153,7 @@ bool EnemyMob::TakeDamage(int damage, glm::vec3 hitOrigin, ParticleSystem& parti
     }
 
     glm::vec3 hitPos = m_pos + glm::vec3(0.0f, 1.2f * m_scale, 0.0f);
-    glm::vec4 bloodCol = (m_type == EnemyType::TRAINING_DUMMY) ? glm::vec4(1.0f, 0.90f, 0.20f, 1.0f) : ((m_type == EnemyType::TREANT) ? glm::vec4(0.28f, 0.50f, 0.18f, 1.0f) : ((m_type == EnemyType::NEUTRAL_GIANT) ? glm::vec4(0.48f, 0.40f, 0.25f, 1.0f) : glm::vec4(0.80f, 0.05f, 0.05f, 1.0f)));
+    glm::vec4 bloodCol = (m_type == EnemyType::TREANT) ? glm::vec4(0.28f, 0.50f, 0.18f, 1.0f) : ((m_type == EnemyType::NEUTRAL_GIANT) ? glm::vec4(0.48f, 0.40f, 0.25f, 1.0f) : glm::vec4(0.80f, 0.05f, 0.05f, 1.0f));
 
     for (int i = 0; i < 18; ++i) {
         glm::vec3 pVel((rand()%100/50.0f - 1.0f)*3.0f, (rand()%100/50.0f + 0.3f)*3.5f, (rand()%100/50.0f - 1.0f)*3.0f);
@@ -170,11 +161,6 @@ bool EnemyMob::TakeDamage(int damage, glm::vec3 hitOrigin, ParticleSystem& parti
     }
 
     if (m_currentHp <= 0) {
-        if (m_type == EnemyType::TRAINING_DUMMY) {
-            m_currentHp = m_maxHp;
-            m_state = EnemyState::IDLE;
-            return false;
-        }
         m_currentHp = 0;
         m_state = EnemyState::DEAD;
         m_deathTimer = 0.0f;
@@ -199,7 +185,6 @@ std::string EnemyMob::GetName() const {
         case EnemyType::DARK_MAGE:         return "Mago Sombrio";
         case EnemyType::TREANT:            return "Arbol Viviente";
         case EnemyType::VAMPIRE:           return "Vampiro Sanguinario";
-        case EnemyType::TRAINING_DUMMY:    return "DUMMY DE PRUEBAS (1.000.000 HP)";
     }
     return "Enemigo";
 }
@@ -207,7 +192,6 @@ std::string EnemyMob::GetName() const {
 int EnemyMob::GetLevel() const {
     int base = 3;
     switch (m_type) {
-        case EnemyType::TRAINING_DUMMY:    return 99;
         case EnemyType::CORRUPTED_WARRIOR: base = 4; break;
         case EnemyType::BERSERKER_WARRIOR: base = 6; break;
         case EnemyType::DEATH_KNIGHT:      base = 8; break;
@@ -234,7 +218,6 @@ int EnemyMob::GetExpReward() const {
         case EnemyType::DARK_MAGE:         base = 100; break;
         case EnemyType::TREANT:            base = 280; break;
         case EnemyType::VAMPIRE:           base = 190; break;
-        case EnemyType::TRAINING_DUMMY:    return 0;
     }
     return (int)(base * nightScale);
 }

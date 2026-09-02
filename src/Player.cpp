@@ -135,8 +135,9 @@ void Player::Respawn(glm::vec3 spawnPos) {
 #include "EnemyMob.h"
 #include "WaterMonster.h"
 #include "entities/Dragon.h"
+#include "mobs/BaseMob.h"
 
-void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers, Dragon* dragon) {
+void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>& monsters, std::vector<std::unique_ptr<PassiveMob>>& passiveMobs, std::vector<std::unique_ptr<EnemyMob>>& enemyMobs, std::vector<std::unique_ptr<WaterMonster>>& waterMonsters, ParticleSystem& particles, DamageNumberSystem& damageNumbers, Dragon* dragon, std::vector<std::unique_ptr<BaseMob>>* baseMobs) {
     if (StunTimer > 0.0f) {
         StunTimer -= deltaTime;
         m_isBlocking = false;
@@ -165,7 +166,7 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
             int maxHits = isTwoHanded ? 2 : 1; // 1-handed weapons hit strictly 1 target; 2-handed weapons can cleave at most 2 directly in blade sweep
 
             struct HitCandidate {
-                enum class TargetType { DRAGON, MONSTER, WATER_MONSTER, ENEMY_MOB, PASSIVE_MOB } type;
+                enum class TargetType { DRAGON, MONSTER, WATER_MONSTER, ENEMY_MOB, PASSIVE_MOB, BASE_MOB } type;
                 void* ptr = nullptr;
                 glm::vec3 pos;
                 float radius;
@@ -231,6 +232,13 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
             for (auto& mobPtr : passiveMobs) {
                 if (mobPtr->IsAlive()) {
                     evaluateCandidate(mobPtr.get(), HitCandidate::TargetType::PASSIVE_MOB, mobPtr->GetPosition(), mobPtr->GetRadius(), 4, 12);
+                }
+            }
+            if (baseMobs != nullptr) {
+                for (auto& mobPtr : *baseMobs) {
+                    if (mobPtr->IsAlive()) {
+                        evaluateCandidate(mobPtr.get(), HitCandidate::TargetType::BASE_MOB, mobPtr->GetPosition(), mobPtr->GetRadius(), mobPtr->GetDefense(), mobPtr->GetEvasion());
+                    }
                 }
             }
 
@@ -300,6 +308,17 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
                         if (killed) {
                             bool leveledUp = false;
                             int expGain = pm->GetExpReward();
+                            Stats.AddExp(expGain, leveledUp);
+                            damageNumbers.SpawnExp(cand.pos, expGain);
+                            if (leveledUp) damageNumbers.SpawnLevelUp(Position);
+                        }
+                    } else if (cand.type == HitCandidate::TargetType::BASE_MOB) {
+                        BaseMob* mob = static_cast<BaseMob*>(cand.ptr);
+                        bool killed = mob->TakeDamage(dmgResult.Damage, Position, particles, this, damageNumbers);
+                        damageNumbers.SpawnDamage(cand.pos, dmgResult.Damage, dmgResult.IsCrit);
+                        if (killed) {
+                            bool leveledUp = false;
+                            int expGain = mob->GetExpReward();
                             Stats.AddExp(expGain, leveledUp);
                             damageNumbers.SpawnExp(cand.pos, expGain);
                             if (leveledUp) damageNumbers.SpawnLevelUp(Position);

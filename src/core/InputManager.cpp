@@ -7,6 +7,7 @@
 #include "world/SkinningSystem.h"
 #include "combat/SpellSystem.h"
 #include "entities/MobManager.h"
+#include "mobs/BaseMob.h"
 #include "world/HorrorPropsSystem.h"
 #include "combat/DamageNumberSystem.h"
 #include "ParticleSystem.h"
@@ -477,7 +478,7 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
             }
 
             float closestHitDist = 65.0f;
-            enum class ClickedType { NONE, DRAGON, ENEMY, MONSTER, WATER, PASSIVE } clickedType = ClickedType::NONE;
+            enum class ClickedType { NONE, DRAGON, ENEMY, MONSTER, WATER, PASSIVE, BASE_MOB } clickedType = ClickedType::NONE;
             void* clickedPtr = nullptr;
 
             auto testRaySphere = [&](const glm::vec3& center, float radius, ClickedType type, void* ptr) {
@@ -496,6 +497,11 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
                 }
             };
 
+            for (auto& baseMob : mobManager.GetBaseMobs()) {
+                if (baseMob->IsAlive()) {
+                    testRaySphere(baseMob->GetPosition() + glm::vec3(0, 1.0f, 0), baseMob->GetRadius() + 0.6f, ClickedType::BASE_MOB, baseMob.get());
+                }
+            }
             if (mobManager.GetDragon().IsAlive() && !mobManager.GetDragon().IsDying()) {
                 testRaySphere(mobManager.GetDragon().GetPosition() + glm::vec3(0, 1.8f, 0), mobManager.GetDragon().GetRadius() + 1.2f, ClickedType::DRAGON, &mobManager.GetDragon());
             }
@@ -521,6 +527,7 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
             }
 
             if (clickedType == ClickedType::DRAGON) targeting.SelectDragon((Dragon*)clickedPtr);
+            else if (clickedType == ClickedType::BASE_MOB) targeting.SelectMob((BaseMob*)clickedPtr);
             else if (clickedType == ClickedType::ENEMY) targeting.SelectEnemy((EnemyMob*)clickedPtr);
             else if (clickedType == ClickedType::MONSTER) targeting.SelectMonster((Monster*)clickedPtr);
             else if (clickedType == ClickedType::WATER) targeting.SelectWaterMonster((WaterMonster*)clickedPtr);

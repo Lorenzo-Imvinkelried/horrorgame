@@ -11,6 +11,7 @@
 #include "Config.h"
 #include "ui/UIRenderer.h"
 #include "combat/TargetingSystem.h"
+#include "mobs/dummy/DummyMob.h"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -23,18 +24,19 @@ void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
     m_enemyMobs.clear();
     m_waterMonsters.clear();
     m_monsters.clear();
+    m_baseMobs.clear();
 
-    // Spawn Dummy de Pruebas (1.000.000 HP) cerca del jugador para testeo de combate
+    // Spawn DummyMob desacoplado y polimorfico (1.000.000 HP)
     float dummyAngle = 0.785f; // Frente a la vista del jugador
     float dummyDist = 4.5f;
     float dummyX = playerPos.x + cos(dummyAngle) * dummyDist;
     float dummyZ = playerPos.z + sin(dummyAngle) * dummyDist;
     float dummyY = WorldGenerator::GetHeight(dummyX, dummyZ);
-    m_enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(dummyX, dummyY, dummyZ), EnemyType::TRAINING_DUMMY, 99));
+    m_baseMobs.push_back(std::make_unique<DummyMob>(glm::vec3(dummyX, dummyY, dummyZ)));
 
     if (!Config::Gameplay::SpawnMobs) {
         m_dragon.SetActive(false);
-        std::cout << "[MobManager] Spawning de Mobs regulares DESACTIVADO (Dummy de Pruebas presente)." << std::endl;
+        std::cout << "[MobManager] Spawning de Mobs regulares DESACTIVADO (DummyMob presente)." << std::endl;
         return;
     }
     m_dragon.SetActive(true);
@@ -127,24 +129,24 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
 
     if (!Config::Gameplay::SpawnMobs) {
         m_passiveMobs.clear();
+        m_enemyMobs.clear();
         m_waterMonsters.clear();
         m_monsters.clear();
         m_dragon.SetActive(false);
 
-        // Mantener únicamente el Dummy de pruebas si spawnMobs está desactivado
-        m_enemyMobs.erase(std::remove_if(m_enemyMobs.begin(), m_enemyMobs.end(),
-            [](const std::unique_ptr<EnemyMob>& e) {
-                return e->GetType() != EnemyType::TRAINING_DUMMY;
-            }), m_enemyMobs.end());
-
-        for (auto& dummy : m_enemyMobs) {
-            dummy->Update(deltaTime, player.Position, &player, particles, damageNumbers, projectiles);
+        for (auto& mob : m_baseMobs) {
+            mob->Update(deltaTime, player.Position, &player, particles, damageNumbers, projectiles);
         }
 
         m_birds.Update(deltaTime, player.Position, m_monsters);
         m_birds.CleanupDistantBirds(player.Position, 80.0f);
         m_critters.Update(deltaTime, player.Position);
         return;
+    }
+
+    // 0. Base Mobs Polimorficos (DummyMob, etc.)
+    for (auto& mob : m_baseMobs) {
+        mob->Update(deltaTime, player.Position, &player, particles, damageNumbers, projectiles);
     }
 
     // Spawning / despawning shadow monsters across night transitions
@@ -241,7 +243,6 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
 
     m_enemyMobs.erase(std::remove_if(m_enemyMobs.begin(), m_enemyMobs.end(),
         [&](const std::unique_ptr<EnemyMob>& e) {
-            if (e->GetType() == EnemyType::TRAINING_DUMMY) return false;
             if (!e->IsAlive()) {
                 bool rem = e->IsRemovable() && e->HasDroppedLoot();
                 if (rem && targeting && targeting->GetEnemyTarget() == e.get()) targeting->ClearTarget();
@@ -249,6 +250,13 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
             }
             return glm::distance(player.Position, e->GetPosition()) > 180.0f;
         }), m_enemyMobs.end());
+
+    m_baseMobs.erase(std::remove_if(m_baseMobs.begin(), m_baseMobs.end(),
+        [&](const std::unique_ptr<BaseMob>& mob) {
+            bool rem = mob->IsRemovable();
+            if (rem && targeting && targeting->GetBaseMobTarget() == mob.get()) targeting->ClearTarget();
+            return rem;
+        }), m_baseMobs.end());
 
     m_waterMonsters.erase(std::remove_if(m_waterMonsters.begin(), m_waterMonsters.end(),
         [&](const std::unique_ptr<WaterMonster>& wm) {
@@ -387,16 +395,16 @@ void MobManager::Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint tex
     m_birds.Render(shaderProgram);
     m_critters.Render(shaderProgram);
 
-    if (!Config::Gameplay::SpawnMobs) {
-        for (auto& enemy : m_enemyMobs) {
-            if (enemy->GetType() == EnemyType::TRAINING_DUMMY && enemy->IsAlive()) {
-                glBindTexture(GL_TEXTURE_2D, textureID);
-                enemy->Render(shaderProgram);
-                enemy->RenderHealthBar(shaderProgram, activeCamPos);
-            }
+    // 2. Base Mobs Polimorficos (DummyMob, etc.)
+    for (auto& mob : m_baseMobs) {
+        if (mob->IsAlive()) {
+            glBindTexture(GL_TEXTURE_2D, textureID);
+            mob->Render(shaderProgram);
+            mob->RenderHealthBar(shaderProgram, activeCamPos);
         }
-        return;
     }
+
+    if (!Config::Gameplay::SpawnMobs) return;
 
     // 2. Passive Forest Animals (Render alive OR dead unskinned deer)
     glBindTexture(GL_TEXTURE_2D, textureID);
