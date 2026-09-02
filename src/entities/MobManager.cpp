@@ -203,8 +203,14 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
             if (d > m_highestDangerLevel) m_highestDangerLevel = d;
         }
 
-        // Ataque cuerpo a cuerpo del monstruo de las sombras al estar en rango
-        if (dist <= 2.3f && s_shadowAttackTimer <= 0.0f && !player.IsDead()) {
+        // Ataque cuerpo a cuerpo del monstruo de las sombras al estar en rango (incluso en pendientes)
+        float playerFeetY = player.Position.y - 1.6f;
+        float mobFeetY = m->GetPosition().y;
+        float groundDiff = playerFeetY - mobFeetY;
+        float d2D = glm::distance(glm::vec2(player.Position.x, player.Position.z), glm::vec2(m->GetPosition().x, m->GetPosition().z));
+        bool isClimbingTree = player.IsClimbing;
+
+        if (d2D <= 2.6f && !isClimbingTree && groundDiff <= 2.5f && groundDiff >= -2.8f && s_shadowAttackTimer <= 0.0f && !player.IsDead()) {
             s_shadowAttackTimer = 1.15f;
             int dmg = 22 + (nightCount * 4);
             player.TakeDamage(dmg, damageNumbers);

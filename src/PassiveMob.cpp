@@ -207,10 +207,15 @@ void PassiveMob::Update(float deltaTime, glm::vec3 playerPos, Player* player, Pa
                 m_headGrazeAngle = -0.50f + sin(m_animTimer * 2.5f) * 0.40f;
             }
 
-            // Attack player in melee range (solo si está al alcance vertical y no en un árbol)
-            float vertDiff = std::abs(playerPos.y - m_pos.y);
-            float dist3D = glm::distance(m_pos, playerPos);
-            if (distToPlayer < 2.5f && vertDiff <= 1.8f && dist3D <= 2.8f && m_attackCooldown <= 0.0f) {
+            // Attack player in melee range (solo si está al alcance y no en un árbol)
+            float playerFeetY = playerPos.y - 1.6f;
+            float groundDiff = playerFeetY - m_pos.y;
+            glm::vec3 mobChest = m_pos + glm::vec3(0.0f, 1.0f, 0.0f);
+            glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.6f, 0.0f);
+            float distBody = glm::distance(mobChest, playerChest);
+            bool isClimbingTree = (player != nullptr && player->IsClimbing);
+
+            if (distToPlayer < 2.8f && !isClimbingTree && groundDiff <= 2.5f && groundDiff >= -2.8f && distBody <= 3.6f && m_attackCooldown <= 0.0f) {
                 if (player != nullptr) {
                     player->TakeDamage(32, damageNumbers);
                 }
@@ -235,9 +240,14 @@ void PassiveMob::Update(float deltaTime, glm::vec3 playerPos, Player* player, Pa
     // =========================================================================
     // 2. ALPHA DEER: Headbutt Counter & Reposition Flee
     // =========================================================================
-    float alphaVert = std::abs(playerPos.y - m_pos.y);
-    float alphaDist3D = glm::distance(m_pos, playerPos);
-    if (m_size == DeerSize::ALPHA && distToPlayer < 2.5f && alphaVert <= 1.8f && alphaDist3D <= 2.8f && m_attackCooldown <= 0.0f && m_state != PassiveMobState::DEAD) {
+    float playerFeetY = playerPos.y - 1.6f;
+    float groundDiff = playerFeetY - m_pos.y;
+    glm::vec3 mobChest = m_pos + glm::vec3(0.0f, 1.0f, 0.0f);
+    glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.6f, 0.0f);
+    float distBody = glm::distance(mobChest, playerChest);
+    bool isClimbingTree = (player != nullptr && player->IsClimbing);
+
+    if (m_size == DeerSize::ALPHA && distToPlayer < 2.8f && !isClimbingTree && groundDiff <= 2.5f && groundDiff >= -2.8f && distBody <= 3.6f && m_attackCooldown <= 0.0f && m_state != PassiveMobState::DEAD) {
         // Face player
         glm::vec2 toP = glm::normalize(glm::vec2(playerPos.x - m_pos.x, playerPos.z - m_pos.z));
         m_yaw = atan2(toP.x, toP.y);

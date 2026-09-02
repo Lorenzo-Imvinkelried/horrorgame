@@ -180,9 +180,10 @@ void Player::UpdateCombat(float deltaTime, std::vector<std::unique_ptr<Monster>>
                 float dx = targetPos.x - Position.x;
                 float dz = targetPos.z - Position.z;
                 float dist2D = sqrt(dx * dx + dz * dz);
-                float dy = std::abs(targetPos.y - Position.y);
+                float playerFeetY = Position.y - 1.6f;
+                float dy = std::abs(targetPos.y - playerFeetY);
 
-                // Vertical tolerance: must be within striking reach
+                // Vertical tolerance: must be within striking reach (up to 2.8m ground difference on slopes)
                 if (dy > 2.8f) return;
 
                 // Max physical reach

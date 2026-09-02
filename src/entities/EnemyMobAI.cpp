@@ -73,9 +73,17 @@ void EnemyMob::updateMeleeAI(float deltaTime, glm::vec3 playerPos, Player* playe
         else if (m_type == EnemyType::CORRUPTED_WARRIOR) m_speed = 5.4f;
         else m_speed = 4.2f; // Death Knight
         
-        float vertDiff = playerPos.y - m_pos.y;
-        float dist3D = glm::distance(m_pos, playerPos);
-        bool playerReachable = (vertDiff <= 2.0f && vertDiff >= -2.5f && dist3D <= 3.2f);
+        // Altura del suelo y alcance en pendiente
+        float playerFeetY = playerPos.y - 1.6f; // playerPos está a los ojos (+1.6m sobre el suelo)
+        float groundDiff = playerFeetY - m_pos.y;
+        glm::vec3 mobChest = m_pos + glm::vec3(0.0f, 1.0f * m_scale, 0.0f);
+        glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.6f, 0.0f);
+        float distBody = glm::distance(mobChest, playerChest);
+        bool isClimbingTree = (player != nullptr && player->IsClimbing);
+
+        // Alcanzable en pendiente natural (hasta 2.6m de elevacion de terreno y 3.8m de distancia de cuerpo).
+        // Si el jugador esta trepando un arbol o en la copa (>2.8m), no lo puede alcanzar.
+        bool playerReachable = !isClimbingTree && (groundDiff <= 2.6f && groundDiff >= -3.0f && distBody <= 3.8f);
 
         if (d2D > 2.4f && m_attackAnimProgress <= 0.0f) {
             m_pos.x += toP.x * m_speed * deltaTime;
@@ -258,9 +266,13 @@ void EnemyMob::updateTreantAI(float deltaTime, glm::vec3 playerPos, Player* play
 
     m_speed = 2.4f;
 
-    float vertDiff = playerPos.y - m_pos.y;
-    float dist3D = glm::distance(m_pos, playerPos);
-    bool playerReachable = (vertDiff <= 2.8f && vertDiff >= -2.5f && dist3D <= 4.0f);
+    float playerFeetY = playerPos.y - 1.6f;
+    float groundDiff = playerFeetY - m_pos.y;
+    glm::vec3 mobChest = m_pos + glm::vec3(0.0f, 2.0f, 0.0f);
+    glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.6f, 0.0f);
+    float distBody = glm::distance(mobChest, playerChest);
+    bool isClimbingTree = (player != nullptr && player->IsClimbing);
+    bool playerReachable = !isClimbingTree && (groundDiff <= 3.8f && groundDiff >= -3.5f && distBody <= 4.8f);
 
     if (d2D > 2.8f && m_attackAnimProgress <= 0.0f) {
         m_pos.x += toP.x * m_speed * deltaTime;
@@ -314,9 +326,13 @@ void EnemyMob::updateGiantAI(float deltaTime, glm::vec3 playerPos, Player* playe
 
     m_speed = 3.6f;
 
-    float vertDiff = playerPos.y - m_pos.y;
-    float dist3D = glm::distance(m_pos, playerPos);
-    bool playerReachable = (vertDiff <= 4.2f && vertDiff >= -3.0f && dist3D <= 5.2f);
+    float playerFeetY = playerPos.y - 1.6f;
+    float groundDiff = playerFeetY - m_pos.y;
+    glm::vec3 mobChest = m_pos + glm::vec3(0.0f, 2.8f, 0.0f);
+    glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.6f, 0.0f);
+    float distBody = glm::distance(mobChest, playerChest);
+    bool isClimbingTree = (player != nullptr && player->IsClimbing);
+    bool playerReachable = !isClimbingTree && (groundDiff <= 5.0f && groundDiff >= -4.0f && distBody <= 6.2f);
 
     if (d2D > 3.2f && m_attackAnimProgress <= 0.0f) {
         m_pos.x += toP.x * m_speed * deltaTime;
