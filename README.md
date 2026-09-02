@@ -53,6 +53,10 @@ Para compilar y correr este proyecto en otra PC (Windows), necesitarás instalar
 *   `libs/`: Archivos .zip de dependencias (generados por `download_deps.ps1`).
 *   `cmake/`: Scripts adicionales de CMake (si los hubiera).
 
-## Notas
+## Notas y Reglas de Producción
 
 *   Este proyecto usa **FetchContent** de CMake apuntando a archivos locales en `libs/`, por lo que es **obligatorio** correr `download_deps.ps1` al menos una vez antes de configurar CMake.
+*   **Reglas de Pantalla y Despliegue Web (Ver [AGENTS.md](AGENTS.md)):**
+    *   **NO** añadir filtros visuales no solicitados (scanlines CRT, aberración cromática u overlays) que perjudiquen la lectura de las fuentes pixel art.
+    *   Mantener el canvas y contenedor web al 100% dinámico y responsive.
+    *   No alterar el sistema de captura de mouse y cursor en navegador.
