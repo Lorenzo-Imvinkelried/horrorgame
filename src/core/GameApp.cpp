@@ -413,11 +413,17 @@ void GameApp::loadConfigFile() {
                 std::cout << "[Config] Puntos de estadisticas iniciales: " << Config::Gameplay::StartingStatPoints << std::endl;
             }
         }
-        if (line.find("spawnMobs") != std::string::npos || line.find("mobsEnabled") != std::string::npos || line.find("enableMobs") != std::string::npos) {
-            if (line.find("false") != std::string::npos) {
+        std::string lowerLine = line;
+        std::transform(lowerLine.begin(), lowerLine.end(), lowerLine.begin(), ::tolower);
+        if (lowerLine.find("spawnmobs") != std::string::npos ||
+            lowerLine.find("spanmobs") != std::string::npos ||
+            lowerLine.find("spawn_mobs") != std::string::npos ||
+            lowerLine.find("mobsenabled") != std::string::npos ||
+            lowerLine.find("enablemobs") != std::string::npos) {
+            if (lowerLine.find("false") != std::string::npos || lowerLine.find(": false") != std::string::npos) {
                 Config::Gameplay::SpawnMobs = false;
                 std::cout << "[Config] Spawning de Mobs DESACTIVADO (Modo testing)" << std::endl;
-            } else if (line.find("true") != std::string::npos) {
+            } else if (lowerLine.find("true") != std::string::npos || lowerLine.find(": true") != std::string::npos) {
                 Config::Gameplay::SpawnMobs = true;
                 std::cout << "[Config] Spawning de Mobs ACTIVADO" << std::endl;
             }
