@@ -1,6 +1,6 @@
 {
   "startingStatPoints": 50000000,
-  "spawnMobs": true,
+  "spawnMobs": false,
   "isNight": false,
   "initialWeather": "CLEAR_SUNNY",
   "fogDensity": 0.009,

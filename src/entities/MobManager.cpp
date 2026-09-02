@@ -24,9 +24,17 @@ void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
     m_waterMonsters.clear();
     m_monsters.clear();
 
+    // Spawn Dummy de Pruebas (1.000.000 HP) cerca del jugador para testeo de combate
+    float dummyAngle = 0.785f; // Frente a la vista del jugador
+    float dummyDist = 4.5f;
+    float dummyX = playerPos.x + cos(dummyAngle) * dummyDist;
+    float dummyZ = playerPos.z + sin(dummyAngle) * dummyDist;
+    float dummyY = WorldGenerator::GetHeight(dummyX, dummyZ);
+    m_enemyMobs.push_back(std::make_unique<EnemyMob>(glm::vec3(dummyX, dummyY, dummyZ), EnemyType::TRAINING_DUMMY, 99));
+
     if (!Config::Gameplay::SpawnMobs) {
         m_dragon.SetActive(false);
-        std::cout << "[MobManager] Spawning de Mobs DESACTIVADO por configuracion." << std::endl;
+        std::cout << "[MobManager] Spawning de Mobs regulares DESACTIVADO (Dummy de Pruebas presente)." << std::endl;
         return;
     }
     m_dragon.SetActive(true);
@@ -119,10 +127,20 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
 
     if (!Config::Gameplay::SpawnMobs) {
         m_passiveMobs.clear();
-        m_enemyMobs.clear();
         m_waterMonsters.clear();
         m_monsters.clear();
         m_dragon.SetActive(false);
+
+        // Mantener únicamente el Dummy de pruebas si spawnMobs está desactivado
+        m_enemyMobs.erase(std::remove_if(m_enemyMobs.begin(), m_enemyMobs.end(),
+            [](const std::unique_ptr<EnemyMob>& e) {
+                return e->GetType() != EnemyType::TRAINING_DUMMY;
+            }), m_enemyMobs.end());
+
+        for (auto& dummy : m_enemyMobs) {
+            dummy->Update(deltaTime, player.Position, &player, particles, damageNumbers, projectiles);
+        }
+
         m_birds.Update(deltaTime, player.Position, m_monsters);
         m_birds.CleanupDistantBirds(player.Position, 80.0f);
         m_critters.Update(deltaTime, player.Position);
@@ -223,6 +241,7 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
 
     m_enemyMobs.erase(std::remove_if(m_enemyMobs.begin(), m_enemyMobs.end(),
         [&](const std::unique_ptr<EnemyMob>& e) {
+            if (e->GetType() == EnemyType::TRAINING_DUMMY) return false;
             if (!e->IsAlive()) {
                 bool rem = e->IsRemovable() && e->HasDroppedLoot();
                 if (rem && targeting && targeting->GetEnemyTarget() == e.get()) targeting->ClearTarget();
@@ -368,7 +387,16 @@ void MobManager::Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint tex
     m_birds.Render(shaderProgram);
     m_critters.Render(shaderProgram);
 
-    if (!Config::Gameplay::SpawnMobs) return;
+    if (!Config::Gameplay::SpawnMobs) {
+        for (auto& enemy : m_enemyMobs) {
+            if (enemy->GetType() == EnemyType::TRAINING_DUMMY && enemy->IsAlive()) {
+                glBindTexture(GL_TEXTURE_2D, textureID);
+                enemy->Render(shaderProgram);
+                enemy->RenderHealthBar(shaderProgram, activeCamPos);
+            }
+        }
+        return;
+    }
 
     // 2. Passive Forest Animals (Render alive OR dead unskinned deer)
     glBindTexture(GL_TEXTURE_2D, textureID);

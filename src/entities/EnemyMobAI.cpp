@@ -15,6 +15,12 @@ void EnemyMob::pickWanderTarget() {
 }
 
 void EnemyMob::updateAI(float deltaTime, glm::vec3 playerPos, Player* player, ParticleSystem& particles, DamageNumberSystem& damageNumbers, ProjectileSystem& projectiles) {
+    if (m_type == EnemyType::TRAINING_DUMMY) {
+        m_state = EnemyState::IDLE;
+        m_speed = 0.0f;
+        return;
+    }
+
     switch (m_type) {
         case EnemyType::CORRUPTED_WARRIOR:
         case EnemyType::BERSERKER_WARRIOR:

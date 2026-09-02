@@ -9,8 +9,8 @@ void EnemyMob::updateModelMesh() {
     transformedBoxes.reserve(m_baseBoxes.size());
 
     float legSwing = (m_speed > 0.1f) ? sin(m_animTimer) * 0.48f : 0.0f;
-    float armSwing = (m_speed > 0.1f) ? sin(m_animTimer) * 0.40f : sin(m_animTimer * 1.5f) * 0.05f;
-    float torsoBob = (m_speed > 0.1f) ? std::abs(sin(m_animTimer * 2.0f)) * 0.04f : sin(m_animTimer * 1.2f) * 0.02f;
+    float armSwing = (m_type == EnemyType::TRAINING_DUMMY) ? 0.0f : ((m_speed > 0.1f) ? sin(m_animTimer) * 0.40f : sin(m_animTimer * 1.5f) * 0.05f);
+    float torsoBob = (m_type == EnemyType::TRAINING_DUMMY) ? 0.0f : ((m_speed > 0.1f) ? std::abs(sin(m_animTimer * 2.0f)) * 0.04f : sin(m_animTimer * 1.2f) * 0.02f);
 
     // Pivotes de articulaciones según escala y anatomía
     glm::vec3 shoulderPivotL(-0.30f, 1.25f, 0.0f);

@@ -286,4 +286,21 @@ void EnemyMob::initMeshes() {
         m_baseBoxes.push_back({ glm::vec3(-0.12f, 0.45f, 0.0f), glm::vec3(0.14f, 0.85f, 0.14f), glm::vec3(0.0f), glm::vec3(0.10f, 0.08f, 0.12f), "LEG_L" });
         m_baseBoxes.push_back({ glm::vec3( 0.12f, 0.45f, 0.0f), glm::vec3(0.14f, 0.85f, 0.14f), glm::vec3(0.0f), glm::vec3(0.10f, 0.08f, 0.12f), "LEG_R" });
     }
+    else if (m_type == EnemyType::TRAINING_DUMMY) {
+        // Modelo del Jugador pero con color llamativo (Amarillo Oro / Neón vibrante de maniquí de entrenamiento)
+        AttachModel(m_baseBoxes, "assets/models/equipment/player_body.txt", glm::vec3(0.0f), glm::vec3(1.0f), "");
+        for (auto& b : m_baseBoxes) {
+            if (b.Name.find("EYE") != std::string::npos || b.Name.find("MASK") != std::string::npos) {
+                b.Color = glm::vec3(0.0f, 0.95f, 1.0f); // Ojos cian neón
+            } else if (b.Name.find("HEAD") != std::string::npos || b.Name.find("HAIR") != std::string::npos) {
+                b.Color = glm::vec3(1.0f, 0.90f, 0.15f); // Cabeza amarilla brillante
+            } else if (b.Name.find("BELT") != std::string::npos || b.Name.find("PELVIS") != std::string::npos) {
+                b.Color = glm::vec3(1.0f, 0.45f, 0.05f); // Cinturón naranja brillante
+            } else if (b.Name.find("BOOT") != std::string::npos || b.Name.find("FOOT") != std::string::npos) {
+                b.Color = glm::vec3(0.85f, 0.25f, 0.10f); // Pies rojo anaranjado
+            } else {
+                b.Color = glm::vec3(1.0f, 0.85f, 0.15f); // Cuerpo oro/amarillo neón llamativo
+            }
+        }
+    }
 }

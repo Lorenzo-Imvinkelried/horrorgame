@@ -19,7 +19,8 @@ enum class EnemyType {
     NEUTRAL_GIANT,
     DARK_MAGE,
     TREANT,
-    VAMPIRE
+    VAMPIRE,
+    TRAINING_DUMMY
 };
 
 enum class EnemyState {
