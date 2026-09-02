@@ -44,6 +44,17 @@ public:
     bool IsDead() const { return m_state == DragonState::DEAD; }
     bool HasDroppedLoot() const { return m_lootDropped; }
     void SetLootDropped(bool d) { m_lootDropped = d; }
+    void SetActive(bool active) {
+        if (!active) {
+            m_currentHp = 0;
+            m_state = DragonState::DEAD;
+            m_lootDropped = true;
+        } else {
+            m_currentHp = m_maxHp;
+            m_state = DragonState::PATROL_SKY;
+            m_lootDropped = false;
+        }
+    }
 
 private:
     void initMeshes();

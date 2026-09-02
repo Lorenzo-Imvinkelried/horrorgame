@@ -50,6 +50,7 @@ namespace Config {
     
     namespace Gameplay {
         inline int StartingStatPoints = 5; // Puntos de estadisticas iniciales para repartir en el Panel de Personaje (C)
+        inline bool SpawnMobs = true; // Habilita o deshabilita el spawn de cualquier mob en el juego (testing sin mobs)
         constexpr float PlayerSpeed = 6.0f;
         constexpr float DebugCamSpeed = 60.0f;
         constexpr float MonsterSpeed = 6.8f; // Initial value (Slightly faster than player)

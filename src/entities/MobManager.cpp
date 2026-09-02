@@ -19,8 +19,19 @@ MobManager::MobManager() {}
 MobManager::~MobManager() {}
 
 void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
-    // 1. Passive & Hostile Forest Deer (Fawns, Adults, Alphas, Demonic)
     m_passiveMobs.clear();
+    m_enemyMobs.clear();
+    m_waterMonsters.clear();
+    m_monsters.clear();
+
+    if (!Config::Gameplay::SpawnMobs) {
+        m_dragon.SetActive(false);
+        std::cout << "[MobManager] Spawning de Mobs DESACTIVADO por configuracion." << std::endl;
+        return;
+    }
+    m_dragon.SetActive(true);
+
+    // 1. Passive & Hostile Forest Deer (Fawns, Adults, Alphas, Demonic)
     for (int i = 0; i < 14; ++i) {
         float angle = (float)(rand() % 360) * 0.017453f;
         float dist = 20.0f + (rand() % 45);
@@ -76,6 +87,8 @@ void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
 }
 
 void MobManager::SpawnNightMonsters(glm::vec3 playerPos, int count) {
+    if (!Config::Gameplay::SpawnMobs) return;
+
     float minRad = 32.0f;
     float maxRad = 55.0f;
     int diff = std::max(10, (int)(maxRad - minRad));
@@ -103,6 +116,18 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
     float cycleNorm = fmod(dayCycleTime, 240.0f) / 240.0f;
     if (cycleNorm < 0.0f) cycleNorm += 1.0f;
     bool isNight = (cycleNorm >= 0.50f && cycleNorm <= 0.88f);
+
+    if (!Config::Gameplay::SpawnMobs) {
+        m_passiveMobs.clear();
+        m_enemyMobs.clear();
+        m_waterMonsters.clear();
+        m_monsters.clear();
+        m_dragon.SetActive(false);
+        m_birds.Update(deltaTime, player.Position, m_monsters);
+        m_birds.CleanupDistantBirds(player.Position, 80.0f);
+        m_critters.Update(deltaTime, player.Position);
+        return;
+    }
 
     // Spawning / despawning shadow monsters across night transitions
     if (isNight && !m_wasNight) {
@@ -229,6 +254,8 @@ void MobManager::Update(float deltaTime, Player& player, ChunkManager& chunkMana
 }
 
 void MobManager::MaintainWorldPopulation(glm::vec3 playerPos, int nightCount, bool isBloodMoon, bool isNight) {
+    if (!Config::Gameplay::SpawnMobs) return;
+
     // 1. Maintain Passive Deer Population (~12-16 living deer within 100m)
     int aliveDeer = 0;
     for (auto& d : m_passiveMobs) {
@@ -340,6 +367,8 @@ void MobManager::Render(GLuint shaderProgram, glm::vec3 activeCamPos, GLuint tex
     glBindTexture(GL_TEXTURE_2D, textureID);
     m_birds.Render(shaderProgram);
     m_critters.Render(shaderProgram);
+
+    if (!Config::Gameplay::SpawnMobs) return;
 
     // 2. Passive Forest Animals (Render alive OR dead unskinned deer)
     glBindTexture(GL_TEXTURE_2D, textureID);
