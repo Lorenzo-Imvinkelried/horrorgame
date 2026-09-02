@@ -1,4 +1,5 @@
 {
+  "startingStatPoints": 5,
   "isNight": false,
   "initialWeather": "CLEAR_SUNNY",
   "fogDensity": 0.009,

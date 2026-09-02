@@ -1,5 +1,6 @@
 #include "UIRenderer.h"
 #include "FontRenderer.h"
+#include "core/PlatformInput.h"
 #include <cmath>
 #include <algorithm>
 
@@ -409,7 +410,7 @@ void UIRenderer::RenderCharacterPanel(GLuint uiProgram, GLuint uiVAO, GLuint uiV
     if (stats.AvailableStatPoints > 0) {
         drawColoredQuad(uiProgram, uiVAO, uiVBO, ptsBoxX, ptsBoxY, ptsBoxW, ptsBoxH, glm::vec3(0.92f, 0.82f, 0.25f));
         drawColoredQuad(uiProgram, uiVAO, uiVBO, ptsBoxX + 0.003f, ptsBoxY + 0.003f, ptsBoxW - 0.006f, ptsBoxH - 0.006f, glm::vec3(0.18f, 0.14f, 0.04f));
-        std::string ptsStr = "! PUNTOS DISPONIBLES: " + std::to_string(stats.AvailableStatPoints) + " (HAZ CLICK EN [+]) !";
+        std::string ptsStr = "! PUNTOS DISPONIBLES: " + std::to_string(stats.AvailableStatPoints) + " (SHIFT=+10, CTRL=+100) !";
         DrawString(ptsStr, ptsBoxX + 0.025f, ptsBoxY + 0.022f, 0.026f, glm::vec3(1.0f, 0.90f, 0.20f), uiProgram, uiVAO, uiVBO);
     } else {
         drawColoredQuad(uiProgram, uiVAO, uiVBO, ptsBoxX, ptsBoxY, ptsBoxW, ptsBoxH, glm::vec3(0.35f, 0.35f, 0.38f));
@@ -486,13 +487,21 @@ bool UIRenderer::HandleCharacterPanelClick(float mouseNdcX, float mouseNdcY, Pla
     float btnX = pX + 0.045f;
     float attrStep = 0.095f;
 
+    int allocStep = 1;
+    if (PlatformInput::IsKeyPressed(PlatformInput::LeftShift) || PlatformInput::IsKeyPressed(PlatformInput::RightShift)) {
+        allocStep = 10;
+    }
+    if (PlatformInput::IsKeyPressed(PlatformInput::LeftCtrl) || PlatformInput::IsKeyPressed(PlatformInput::RightCtrl)) {
+        allocStep = 100;
+    }
+
     for (int i = 0; i < 4; ++i) {
         float bY = rowY - 0.015f;
         if (mouseNdcX >= btnX && mouseNdcX <= btnX + btnW && mouseNdcY >= bY && mouseNdcY <= bY + btnH) {
-            if (i == 0) return stats.AllocateStrength();
-            if (i == 1) return stats.AllocateAgility();
-            if (i == 2) return stats.AllocateVitality();
-            if (i == 3) return stats.AllocateIntelligence();
+            if (i == 0) return stats.AllocateStrength(allocStep);
+            if (i == 1) return stats.AllocateAgility(allocStep);
+            if (i == 2) return stats.AllocateVitality(allocStep);
+            if (i == 3) return stats.AllocateIntelligence(allocStep);
         }
         rowY -= attrStep;
     }

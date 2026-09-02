@@ -5,13 +5,14 @@
 #include <iostream>
 
 #include "inventory/ItemTypes.h"
+#include "Config.h"
 
 struct PlayerStats {
     // Progression
     int Level = 1;
     int CurrentExp = 0;
     int NextLevelExp = 100;
-    int AvailableStatPoints = 3; // Available points to distribute
+    int AvailableStatPoints = Config::Gameplay::StartingStatPoints; // Available points to distribute
 
     // Core Primary Attributes (src_rpgarena_logic)
     int Strength = 10;     // Boosts Physical Damage
@@ -48,43 +49,47 @@ struct PlayerStats {
         return 1.0f + std::max(0, Agility - 8) * 0.05f;
     }
 
-    bool AllocateStrength() {
+    bool AllocateStrength(int count = 1) {
         if (AvailableStatPoints > 0) {
-            AvailableStatPoints--;
-            Strength++;
+            int toAlloc = std::min(count, AvailableStatPoints);
+            AvailableStatPoints -= toAlloc;
+            Strength += toAlloc;
             RecalculateStats();
             return true;
         }
         return false;
     }
 
-    bool AllocateAgility() {
+    bool AllocateAgility(int count = 1) {
         if (AvailableStatPoints > 0) {
-            AvailableStatPoints--;
-            Agility++;
+            int toAlloc = std::min(count, AvailableStatPoints);
+            AvailableStatPoints -= toAlloc;
+            Agility += toAlloc;
             RecalculateStats();
             return true;
         }
         return false;
     }
 
-    bool AllocateVitality() {
+    bool AllocateVitality(int count = 1) {
         if (AvailableStatPoints > 0) {
-            AvailableStatPoints--;
-            Vitality++;
+            int toAlloc = std::min(count, AvailableStatPoints);
+            AvailableStatPoints -= toAlloc;
+            Vitality += toAlloc;
             RecalculateStats();
-            CurrentHP = std::min(CurrentHP + 5, MaxHP);
+            CurrentHP = std::min(CurrentHP + 5 * toAlloc, MaxHP);
             return true;
         }
         return false;
     }
 
-    bool AllocateIntelligence() {
+    bool AllocateIntelligence(int count = 1) {
         if (AvailableStatPoints > 0) {
-            AvailableStatPoints--;
-            Intelligence++;
+            int toAlloc = std::min(count, AvailableStatPoints);
+            AvailableStatPoints -= toAlloc;
+            Intelligence += toAlloc;
             RecalculateStats();
-            CurrentMP = std::min(CurrentMP + 5, MaxMP);
+            CurrentMP = std::min(CurrentMP + 5 * toAlloc, MaxMP);
             return true;
         }
         return false;

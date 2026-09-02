@@ -49,7 +49,11 @@ public:
         Numpad1 = GLFW_KEY_KP_1,
         Numpad2 = GLFW_KEY_KP_2,
         Numpad3 = GLFW_KEY_KP_3,
-        Numpad4 = GLFW_KEY_KP_4
+        Numpad4 = GLFW_KEY_KP_4,
+        LeftShift = GLFW_KEY_LEFT_SHIFT,
+        RightShift = GLFW_KEY_RIGHT_SHIFT,
+        LeftCtrl = GLFW_KEY_LEFT_CONTROL,
+        RightCtrl = GLFW_KEY_RIGHT_CONTROL
     };
 
     enum MouseButton {
@@ -125,7 +129,11 @@ public:
         Numpad1 = sf::Keyboard::Numpad1,
         Numpad2 = sf::Keyboard::Numpad2,
         Numpad3 = sf::Keyboard::Numpad3,
-        Numpad4 = sf::Keyboard::Numpad4
+        Numpad4 = sf::Keyboard::Numpad4,
+        LeftShift = sf::Keyboard::LShift,
+        RightShift = sf::Keyboard::RShift,
+        LeftCtrl = sf::Keyboard::LControl,
+        RightCtrl = sf::Keyboard::RControl
     };
 
     enum MouseButton {

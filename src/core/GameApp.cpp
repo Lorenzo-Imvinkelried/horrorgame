@@ -403,6 +403,16 @@ void GameApp::loadConfigFile() {
                 ss >> Config::World::FogDistEnd;
             }
         }
+        if (line.find("startingStatPoints") != std::string::npos || line.find("statPoints") != std::string::npos || line.find("initialStatPoints") != std::string::npos) {
+            size_t colon = line.find(":");
+            if (colon != std::string::npos) {
+                std::string valStr = line.substr(colon + 1);
+                valStr.erase(std::remove(valStr.begin(), valStr.end(), ','), valStr.end());
+                std::stringstream ss(valStr);
+                ss >> Config::Gameplay::StartingStatPoints;
+                std::cout << "[Config] Puntos de estadisticas iniciales: " << Config::Gameplay::StartingStatPoints << std::endl;
+            }
+        }
     }
 }
 
@@ -411,6 +421,7 @@ void GameApp::initWorld() {
     float pz = (float)(rand() % 160 - 80);
     float py = WorldGenerator::GetHeight(px, pz) + 1.0f;
     m_player = std::make_unique<Player>(glm::vec3(px, py, pz));
+    m_player->Stats.AvailableStatPoints = Config::Gameplay::StartingStatPoints;
 
     m_chunkManager->SetBirdSystem(&m_mobManager->GetBirds());
     m_chunkManager->Init();

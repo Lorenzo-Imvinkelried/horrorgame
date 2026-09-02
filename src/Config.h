@@ -49,6 +49,7 @@ namespace Config {
     }
     
     namespace Gameplay {
+        inline int StartingStatPoints = 5; // Puntos de estadisticas iniciales para repartir en el Panel de Personaje (C)
         constexpr float PlayerSpeed = 6.0f;
         constexpr float DebugCamSpeed = 60.0f;
         constexpr float MonsterSpeed = 6.8f; // Initial value (Slightly faster than player)

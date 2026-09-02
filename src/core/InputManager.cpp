@@ -234,7 +234,10 @@ void InputManager::HandleKeyPress(int key, Player& player, InventorySystem& inve
             if (m_isBuildMode) {
                 m_currentBuildType = BuildingType::WALL;
             } else if (m_isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
-                if (player.Stats.AllocateStrength()) {
+                int allocStep = 1;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftShift) || PlatformInput::IsKeyPressed(PlatformInput::RightShift)) allocStep = 10;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftCtrl) || PlatformInput::IsKeyPressed(PlatformInput::RightCtrl)) allocStep = 100;
+                if (player.Stats.AllocateStrength(allocStep)) {
                     for (int i = 0; i < 18; ++i) {
                         glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
                         particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.30f, 0.25f, 1.0f), 0.15f, 0.8f, -9.8f);
@@ -250,7 +253,10 @@ void InputManager::HandleKeyPress(int key, Player& player, InventorySystem& inve
             if (m_isBuildMode) {
                 m_currentBuildType = BuildingType::ROOF;
             } else if (m_isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
-                if (player.Stats.AllocateAgility()) {
+                int allocStep = 1;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftShift) || PlatformInput::IsKeyPressed(PlatformInput::RightShift)) allocStep = 10;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftCtrl) || PlatformInput::IsKeyPressed(PlatformInput::RightCtrl)) allocStep = 100;
+                if (player.Stats.AllocateAgility(allocStep)) {
                     for (int i = 0; i < 18; ++i) {
                         glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
                         particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.25f, 0.95f, 0.40f, 1.0f), 0.15f, 0.8f, -9.8f);
@@ -266,7 +272,10 @@ void InputManager::HandleKeyPress(int key, Player& player, InventorySystem& inve
             if (m_isBuildMode) {
                 m_currentBuildType = BuildingType::TORCH;
             } else if (m_isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
-                if (player.Stats.AllocateVitality()) {
+                int allocStep = 1;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftShift) || PlatformInput::IsKeyPressed(PlatformInput::RightShift)) allocStep = 10;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftCtrl) || PlatformInput::IsKeyPressed(PlatformInput::RightCtrl)) allocStep = 100;
+                if (player.Stats.AllocateVitality(allocStep)) {
                     for (int i = 0; i < 18; ++i) {
                         glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
                         particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.95f, 0.85f, 0.20f, 1.0f), 0.15f, 0.8f, -9.8f);
@@ -281,7 +290,10 @@ void InputManager::HandleKeyPress(int key, Player& player, InventorySystem& inve
 
         case GameKey::Num4:
             if (m_isCharacterPanelOpen && player.Stats.AvailableStatPoints > 0) {
-                if (player.Stats.AllocateIntelligence()) {
+                int allocStep = 1;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftShift) || PlatformInput::IsKeyPressed(PlatformInput::RightShift)) allocStep = 10;
+                if (PlatformInput::IsKeyPressed(PlatformInput::LeftCtrl) || PlatformInput::IsKeyPressed(PlatformInput::RightCtrl)) allocStep = 100;
+                if (player.Stats.AllocateIntelligence(allocStep)) {
                     for (int i = 0; i < 18; ++i) {
                         glm::vec3 pVel((rand()%100/50.0f - 1.0f)*2.5f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.5f);
                         particles.SpawnParticle(player.Position + glm::vec3(0, 1.2f, 0), pVel, glm::vec4(0.35f, 0.65f, 0.95f, 1.0f), 0.15f, 0.8f, -9.8f);
