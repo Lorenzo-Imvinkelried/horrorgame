@@ -110,10 +110,15 @@ bool GameApp::Init() {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
     glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_ES_API);
 
-    double screenW = 1280, screenH = 720;
+    double screenW = 0, screenH = 0;
     emscripten_get_element_css_size("#canvas", &screenW, &screenH);
-    if (screenW <= 0) screenW = 1280;
-    if (screenH <= 0) screenH = 720;
+    if (screenW < 320 || screenH < 240) {
+        emscripten_get_element_css_size("#game-container", &screenW, &screenH);
+    }
+    if (screenW < 320 || screenH < 240) {
+        screenW = 1280;
+        screenH = 720;
+    }
     m_windowWidth = (int)screenW;
     m_windowHeight = (int)screenH;
 
@@ -131,6 +136,8 @@ bool GameApp::Init() {
         std::cerr << "Failed to initialize GLAD WebGL2" << std::endl;
         return false;
     }
+
+    emscripten_set_canvas_element_size("#canvas", m_windowWidth, m_windowHeight);
 
     glfwSetKeyCallback(m_window, [](GLFWwindow*, int key, int scancode, int action, int mods) {
         if (action == GLFW_PRESS && GameApp::GetInstance()) {
@@ -165,7 +172,11 @@ bool GameApp::Init() {
 
     // Instantiating Subsystems NOW that OpenGL context is valid
     m_renderPipeline = std::make_unique<RenderPipeline>();
-    if (!m_renderPipeline->Init(Config::Graphics::InternalWidth, Config::Graphics::InternalHeight)) {
+    float initAspect = (float)m_windowWidth / (float)m_windowHeight;
+    int initBaseH = Config::Graphics::InternalHeight;
+    int initBaseW = (int)round((float)initBaseH * initAspect);
+    if (initBaseW % 2 != 0) initBaseW++;
+    if (!m_renderPipeline->Init(initBaseW, initBaseH)) {
         std::cerr << "Failed to initialize RenderPipeline" << std::endl;
         return false;
     }
@@ -445,6 +456,17 @@ void GameApp::UpdateFrame() {
     sf::Event event;
     while (m_window.pollEvent(event)) {
         if (event.type == sf::Event::Closed) m_window.close();
+        if (event.type == sf::Event::Resized) {
+            m_windowWidth = event.size.width;
+            m_windowHeight = event.size.height;
+            if (m_renderPipeline && m_windowWidth > 0 && m_windowHeight > 0) {
+                float aspect = (float)m_windowWidth / (float)m_windowHeight;
+                int baseH = Config::Graphics::InternalHeight;
+                int baseW = (int)round((float)baseH * aspect);
+                if (baseW % 2 != 0) baseW++;
+                m_renderPipeline->ResizeFBO(baseW, baseH);
+            }
+        }
         if (event.type == sf::Event::LostFocus && m_inputManager) m_inputManager->SetGamePaused(true);
         if (event.type == sf::Event::MouseWheelScrolled && m_player) {
             m_player->ProcessMouseScroll(event.mouseWheelScroll.delta);
@@ -482,6 +504,27 @@ void GameApp::UpdateFrame() {
     }
 
     glfwPollEvents();
+
+    // Dynamically adjust canvas buffer & internal FBO aspect ratio whenever screen/window changes
+    double cssW = 0, cssH = 0;
+    emscripten_get_element_css_size("#canvas", &cssW, &cssH);
+    int targetW = (int)cssW;
+    int targetH = (int)cssH;
+    if (targetW >= 320 && targetH >= 240 && (targetW != m_windowWidth || targetH != m_windowHeight)) {
+        m_windowWidth = targetW;
+        m_windowHeight = targetH;
+        emscripten_set_canvas_element_size("#canvas", m_windowWidth, m_windowHeight);
+        glfwSetWindowSize(m_window, m_windowWidth, m_windowHeight);
+
+        if (m_renderPipeline) {
+            float aspect = (float)m_windowWidth / (float)m_windowHeight;
+            int baseH = Config::Graphics::InternalHeight;
+            int baseW = (int)round((float)baseH * aspect);
+            if (baseW % 2 != 0) baseW++;
+            m_renderPipeline->ResizeFBO(baseW, baseH);
+        }
+    }
+
     double mx = 0, my = 0;
     glfwGetCursorPos(m_window, &mx, &my);
     float curMouseX = (float)mx;
