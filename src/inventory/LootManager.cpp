@@ -134,11 +134,11 @@ LootTable LootManager::GetEnemyLoot(EnemyType type, int nightLevel) {
                     const char* leatherPool[] = {
                         "iron_hatchet",
                         "steel_shortsword",
-                        "armor_leather",
-                        "helm_leather",
-                        "armor_leather_pants",
-                        "armor_leather_boots",
-                        "armor_leather_gloves",
+                        "leather_armor",
+                        "leather_cap",
+                        "leather_pants",
+                        "leather_boots",
+                        "leather_gloves",
                         "iron_shield"
                     };
                     int pick = rand() % 8;
@@ -201,7 +201,27 @@ LootTable LootManager::GetDeerLoot(DeerSize size) {
 
 LootTable LootManager::GetChestLoot(int chestTier) {
     LootTable table;
-    // Tirada garantizada en ruleta ponderada según tier
+
+    if (chestTier >= 2) {
+        // Botín Superior del Gran Cofre de la Torre Ancestral
+        table.AddGuaranteedByString("potion_health", 3, 5);
+        table.AddGuaranteedByString("potion_mana", 2, 4);
+        table.AddGuaranteedByString("arcane_scroll", 1, 2);
+
+        // Equipamiento exclusivo épico y raro
+        table.AddWeightedRollByString("paladin_longsword", 30, 1, 1);
+        table.AddWeightedRollByString("dragonslayer_greatsword", 22, 1, 1);
+        table.AddWeightedRollByString("executioner_axe", 25, 1, 1);
+        table.AddWeightedRollByString("deathknight_armor", 25, 1, 1);
+        table.AddWeightedRollByString("deathknight_greatsword", 22, 1, 1);
+        table.AddWeightedRollByString("dragon_armor", 18, 1, 1);
+        table.AddWeightedRollByString("ancient_amulet", 20, 1, 1);
+        table.AddWeightedRollByString("frost_claymore", 22, 1, 1);
+        table.AddWeightedRollByString("iron_armor", 25, 1, 1);
+        return table;
+    }
+
+    // Tirada garantizada en ruleta ponderada según tier 1 (Cofres de ruinas menores)
     table.AddGuaranteedByString("potion_health", 2, 3);
     table.AddGuaranteedByString("potion_mana", 1, 2);
 

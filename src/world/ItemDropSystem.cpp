@@ -6,6 +6,7 @@
 #include "WorldGenerator.h"
 #include "ModelLoader.h"
 #include "inventory/ItemModelRegistry.h"
+#include "world/StructureSystem.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <algorithm>
@@ -13,6 +14,8 @@
 
 ItemDropSystem::ItemDropSystem() {
     initMesh();
+    // Inicializar el registro de modelos 3D de objetos inmediatamente al iniciar el juego
+    ItemModelRegistry::Get().Init();
 }
 
 ItemDropSystem::~ItemDropSystem() {
@@ -73,9 +76,9 @@ void ItemDropSystem::SpawnDrop(const ItemInstance& item, glm::vec3 pos, glm::vec
     if (glm::length(initialVelocity) > 0.01f) {
         drop.velocity = initialVelocity;
     } else {
-        float vx = (rand() % 100 / 50.0f - 1.0f) * 1.8f;
-        float vz = (rand() % 100 / 50.0f - 1.0f) * 1.8f;
-        float vy = 3.2f + (rand() % 50 / 50.0f) * 1.5f;
+        float vx = (rand() % 100 / 50.0f - 1.0f) * 1.2f;
+        float vz = (rand() % 100 / 50.0f - 1.0f) * 1.2f;
+        float vy = 2.6f + (rand() % 50 / 50.0f) * 1.0f;
         drop.velocity = glm::vec3(vx, vy, vz);
     }
     
@@ -105,16 +108,28 @@ void ItemDropSystem::Update(float deltaTime, glm::vec3 playerPos, InventorySyste
             it->pickupDelay -= deltaTime;
         }
 
+        float terrainY = WorldGenerator::GetHeight(it->position.x, it->position.z);
+        float groundFloorY = StructureSystem::GetWalkableHeight(it->position.x, it->position.z, it->position.y, terrainY);
+        float minItemY = groundFloorY + 0.22f;
+
         // Físicas de caída parabólica
         if (glm::length(it->velocity) > 0.05f) {
             it->position += it->velocity * deltaTime;
             it->velocity.y -= 12.0f * deltaTime; // Gravedad
-            it->velocity.x *= (1.0f - 2.0f * deltaTime);
-            it->velocity.z *= (1.0f - 2.0f * deltaTime);
+            it->velocity.x *= (1.0f - 2.5f * deltaTime);
+            it->velocity.z *= (1.0f - 2.5f * deltaTime);
 
-            float groundY = WorldGenerator::GetHeight(it->position.x, it->position.z) + 0.15f;
-            if (it->position.y <= groundY) {
-                it->position.y = groundY;
+            // Rebotar / colisionar con almenas y muros de la estructura
+            StructureSystem::CheckCollision(it->position, 0.25f, 0.3f, it->velocity);
+
+            if (it->position.y <= minItemY) {
+                it->position.y = minItemY;
+                it->velocity = glm::vec3(0.0f);
+            }
+        } else {
+            // Asegurar que nunca quede enterrado o por debajo del piso de la estructura
+            if (it->position.y < minItemY) {
+                it->position.y = minItemY;
                 it->velocity = glm::vec3(0.0f);
             }
         }
@@ -212,6 +227,8 @@ bool ItemDropSystem::TryCollectNearby(glm::vec3 playerPos, InventorySystem& inve
 
 void ItemDropSystem::Render(GLuint shaderProgram, glm::vec3 cameraPos) {
     if (m_drops.empty()) return;
+
+    ItemModelRegistry::Get().Init();
 
     GLint modelLoc = glGetUniformLocation(shaderProgram, "u_Model");
     glUniform1i(glGetUniformLocation(shaderProgram, "u_IsInstanced"), 0);

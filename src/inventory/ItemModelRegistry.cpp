@@ -132,23 +132,38 @@ void ItemModelRegistry::buildAllItemModels() {
     }
 
     // 2. ARMORS & HELMETS
-    registerBoxes("leather_armor", ModelLoader::Load("assets/models/equipment/armor_leather.txt"));
+    auto leatherArmor = ModelLoader::Load("assets/models/equipment/armor_leather.txt");
+    registerBoxes("leather_armor", leatherArmor);
+    registerBoxes("armor_leather", leatherArmor);
+
     registerBoxes("iron_armor", ModelLoader::Load("assets/models/equipment/armor_iron_plate.txt"));
     registerBoxes("deathknight_armor", ModelLoader::Load("assets/models/equipment/armor_death_knight.txt"));
 
-    registerBoxes("leather_cap", ModelLoader::Load("assets/models/equipment/helm_leather.txt"));
+    auto leatherCap = ModelLoader::Load("assets/models/equipment/helm_leather.txt");
+    registerBoxes("leather_cap", leatherCap);
+    registerBoxes("helm_leather", leatherCap);
+
     registerBoxes("iron_helm", ModelLoader::Load("assets/models/equipment/helm_iron.txt"));
     registerBoxes("deathknight_helm", ModelLoader::Load("assets/models/equipment/helm_death_knight.txt"));
 
-    registerBoxes("leather_gloves", ModelLoader::Load("assets/models/equipment/armor_leather_gloves.txt"));
+    auto leatherGloves = ModelLoader::Load("assets/models/equipment/armor_leather_gloves.txt");
+    registerBoxes("leather_gloves", leatherGloves);
+    registerBoxes("armor_leather_gloves", leatherGloves);
+
     registerBoxes("iron_gauntlets", ModelLoader::Load("assets/models/equipment/armor_iron_gauntlets.txt"));
     registerBoxes("deathknight_gauntlets", ModelLoader::Load("assets/models/equipment/armor_death_knight_gauntlets.txt"));
 
-    registerBoxes("leather_pants", ModelLoader::Load("assets/models/equipment/armor_leather_pants.txt"));
+    auto leatherPants = ModelLoader::Load("assets/models/equipment/armor_leather_pants.txt");
+    registerBoxes("leather_pants", leatherPants);
+    registerBoxes("armor_leather_pants", leatherPants);
+
     registerBoxes("iron_greaves", ModelLoader::Load("assets/models/equipment/armor_iron_greaves.txt"));
     registerBoxes("deathknight_greaves", ModelLoader::Load("assets/models/equipment/armor_death_knight_greaves.txt"));
 
-    registerBoxes("leather_boots", ModelLoader::Load("assets/models/equipment/armor_leather_boots.txt"));
+    auto leatherBoots = ModelLoader::Load("assets/models/equipment/armor_leather_boots.txt");
+    registerBoxes("leather_boots", leatherBoots);
+    registerBoxes("armor_leather_boots", leatherBoots);
+
     registerBoxes("iron_boots", ModelLoader::Load("assets/models/equipment/armor_iron_boots.txt"));
     registerBoxes("deathknight_boots", ModelLoader::Load("assets/models/equipment/armor_death_knight_boots.txt"));
 
@@ -340,6 +355,21 @@ void ItemModelRegistry::buildAllItemModels() {
         amulet.push_back({glm::vec3(0, -0.15f, 0.06f), glm::vec3(0.22f, 0.22f, 0.04f), glm::vec3(0), glm::vec3(0.25f, 0.85f, 0.95f), "RUNE_EYE"});
         amulet.push_back({glm::vec3(0, 0.25f, 0), glm::vec3(0.45f, 0.45f, 0.04f), glm::vec3(0), glm::vec3(0.85f, 0.70f, 0.20f), "CHAIN"});
         registerBoxes("ancient_amulet", amulet);
+    }
+
+    // Dragon Scale
+    {
+        std::vector<BoxDef> scale;
+        scale.push_back({glm::vec3(0, 0, 0), glm::vec3(0.50f, 0.65f, 0.12f), glm::vec3(0), glm::vec3(0.85f, 0.12f, 0.12f), "SCALE_MAIN"});
+        scale.push_back({glm::vec3(0, 0, 0.04f), glm::vec3(0.32f, 0.45f, 0.10f), glm::vec3(0), glm::vec3(1.00f, 0.40f, 0.15f), "SCALE_CORE"});
+        registerBoxes("dragon_scale", scale);
+    }
+    // Dragon Scale Ring
+    {
+        std::vector<BoxDef> ring;
+        ring.push_back({glm::vec3(0, 0, 0), glm::vec3(0.55f, 0.22f, 0.55f), glm::vec3(0), glm::vec3(0.95f, 0.80f, 0.20f), "BAND"});
+        ring.push_back({glm::vec3(0, 0.18f, 0), glm::vec3(0.28f, 0.22f, 0.28f), glm::vec3(0), glm::vec3(0.95f, 0.15f, 0.10f), "DRAGON_GEM"});
+        registerBoxes("dragon_scale_ring", ring);
     }
 
     // Default Fallback: Adventurer Sack

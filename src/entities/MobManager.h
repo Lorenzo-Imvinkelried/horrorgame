@@ -42,6 +42,7 @@ public:
     void SpawnNightMonsters(glm::vec3 playerPos, int count);
     void DespawnNightMonsters();
     void MaintainWorldPopulation(glm::vec3 playerPos, int nightCount, bool isBloodMoon, bool isNight);
+    void SpawnTowerGuards(const std::vector<struct TowerGuardSpawn>& spawns);
 
     std::vector<std::unique_ptr<Monster>>& GetMonsters() { return m_monsters; }
     std::vector<std::unique_ptr<EnemyMob>>& GetEnemyMobs() { return m_enemyMobs; }

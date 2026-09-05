@@ -406,8 +406,15 @@ void RenderPipeline::RenderUI2D(Player& player, InventorySystem& inventory,
 
     glUseProgram(m_uiProgram);
 
-    // 1. Crosshair in 1st Person
-    if (!player.IsThirdPerson) {
+    bool isUiModalActive = inputMgr.IsCharacterPanelOpen() || 
+                           inputMgr.GetLoreModal().active || 
+                           inputMgr.GetFatalError().active || 
+                           inventory.IsOpen() || 
+                           inputMgr.IsGamePaused() || 
+                           player.IsDead();
+
+    // 1. Crosshair in 1st Person (solo en juego activo, sin modales/paneles)
+    if (!player.IsThirdPerson && !isUiModalActive) {
         UIRenderer::DrawCrosshair(m_uiProgram, m_uiVAO, m_uiVBO, 0.012f, 0.003f, glm::vec3(0.9f, 0.9f, 0.9f));
     }
 
@@ -478,8 +485,11 @@ void RenderPipeline::RenderUI2D(Player& player, InventorySystem& inventory,
         m_uiRenderer.RenderGameOverScreen(m_uiProgram, m_uiVAO, m_uiVBO, player.DeathTimer);
     }
 
-    // 14. Retro Cursor
-    UIRenderer::RenderCursor(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
+    // 14. Retro Cursor (visible en 3ª persona o cuando algún panel/modal/menú está abierto)
+    bool showCursor = player.IsThirdPerson || isUiModalActive;
+    if (showCursor) {
+        UIRenderer::RenderCursor(m_uiProgram, m_uiVAO, m_uiVBO, inputMgr.GetMouseNdcX(), inputMgr.GetMouseNdcY());
+    }
 
     glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);

@@ -7,6 +7,7 @@
 #include "entities/Dragon.h"
 #include "WorldGenerator.h"
 #include "ModelLoader.h"
+#include "world/StructureSystem.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <cmath>
@@ -133,6 +134,7 @@ void ProjectileSystem::Update(float deltaTime, Player* player, ParticleSystem& p
         }
 
         // Advance position
+        glm::vec3 prevPos = it->pos;
         it->pos += it->vel * deltaTime;
 
         // Spawn trail particles
@@ -144,6 +146,17 @@ void ProjectileSystem::Update(float deltaTime, Player* player, ParticleSystem& p
             glm::vec3 pVel((rand()%100/50.0f - 1.0f)*0.6f, (rand()%100/50.0f - 1.0f)*0.6f, (rand()%100/50.0f - 1.0f)*0.6f);
             particles.SpawnParticle(it->pos, pVel - it->vel * 0.15f, it->color, 0.16f, 0.45f, 0.0f);
             particles.SpawnParticle(it->pos, pVel * 0.4f, glm::vec4(1.0f, 0.8f, 1.0f, 0.8f), 0.10f, 0.35f, 0.0f);
+        }
+
+        // Check collision with structure stone walls and floors
+        if (StructureSystem::Raycast(prevPos, it->pos)) {
+            for (int i = 0; i < 16; ++i) {
+                glm::vec3 explodeVel((rand()%100/50.0f - 1.0f)*2.8f, (rand()%100/50.0f + 0.3f)*3.0f, (rand()%100/50.0f - 1.0f)*2.8f);
+                particles.SpawnParticle(it->pos, explodeVel, glm::vec4(0.82f, 0.80f, 0.76f, 1.0f), 0.14f, 0.5f, -9.8f);
+            }
+            it->active = false;
+            it = m_projectiles.erase(it);
+            continue;
         }
 
         // Check collision with ground/terrain

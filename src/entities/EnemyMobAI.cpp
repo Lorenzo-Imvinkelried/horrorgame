@@ -1,6 +1,7 @@
 #include "EnemyMob.h"
 #include "WorldGenerator.h"
 #include "Player.h"
+#include "world/StructureSystem.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -11,7 +12,8 @@ void EnemyMob::pickWanderTarget() {
     float dist = 4.0f + (float)(rand() % (int)wanderRadius);
     m_targetPos.x = m_spawnOrigin.x + cos(angle) * dist;
     m_targetPos.z = m_spawnOrigin.z + sin(angle) * dist;
-    m_targetPos.y = WorldGenerator::GetHeight(m_targetPos.x, m_targetPos.z);
+    float terrainY = WorldGenerator::GetHeight(m_targetPos.x, m_targetPos.z);
+    m_targetPos.y = StructureSystem::GetWalkableHeight(m_targetPos.x, m_targetPos.z, m_pos.y, terrainY);
 }
 
 void EnemyMob::updateAI(float deltaTime, glm::vec3 playerPos, Player* player, ParticleSystem& particles, DamageNumberSystem& damageNumbers, ProjectileSystem& projectiles) {
@@ -45,14 +47,44 @@ void EnemyMob::updateAI(float deltaTime, glm::vec3 playerPos, Player* player, Pa
 void EnemyMob::updateMeleeAI(float deltaTime, glm::vec3 playerPos, Player* player, ParticleSystem& particles, DamageNumberSystem& damageNumbers) {
     float distToPlayer = glm::distance(glm::vec2(m_pos.x, m_pos.z), glm::vec2(playerPos.x, playerPos.z));
 
-    if (distToPlayer < 28.0f && m_state != EnemyState::CHASE) {
-        m_state = EnemyState::CHASE;
+    // Rango de detección cuerpo a cuerpo reducido (antes 28.0m / 38.0m) para evitar que vengan desde muy lejos
+    float aggroDist = 14.0f;
+    float loseDist = 22.0f;
+    if (m_type == EnemyType::SHADOW_ASSASSIN || m_type == EnemyType::VAMPIRE) {
+        aggroDist = 15.0f;
+        loseDist = 23.5f;
+    } else if (m_type == EnemyType::DEATH_KNIGHT) {
+        aggroDist = 13.0f;
+        loseDist = 21.0f;
     }
 
-    if (m_state == EnemyState::CHASE && distToPlayer > 38.0f) {
-        m_state = EnemyState::IDLE;
-        m_stateTimer = 3.0f;
-        m_speed = 0.0f;
+    if (distToPlayer < aggroDist && m_state != EnemyState::CHASE) {
+        glm::vec3 mobEyes = m_pos + glm::vec3(0.0f, 1.4f * m_scale, 0.0f);
+        glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.4f, 0.0f);
+        if (StructureSystem::HasLineOfSight(mobEyes, playerChest)) {
+            m_state = EnemyState::CHASE;
+            m_stateTimer = 4.0f;
+        }
+    }
+
+    if (m_state == EnemyState::CHASE) {
+        glm::vec3 mobEyes = m_pos + glm::vec3(0.0f, 1.4f * m_scale, 0.0f);
+        glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.4f, 0.0f);
+        if (!StructureSystem::HasLineOfSight(mobEyes, playerChest)) {
+            m_stateTimer -= deltaTime;
+            if (m_stateTimer <= 0.0f || distToPlayer > loseDist) {
+                m_state = EnemyState::IDLE;
+                m_stateTimer = 3.0f;
+                m_speed = 0.0f;
+            }
+        } else {
+            m_stateTimer = 4.0f;
+            if (distToPlayer > loseDist) {
+                m_state = EnemyState::IDLE;
+                m_stateTimer = 3.0f;
+                m_speed = 0.0f;
+            }
+        }
     }
 
     if (m_state == EnemyState::CHASE) {
@@ -157,7 +189,11 @@ void EnemyMob::updateMeleeAI(float deltaTime, glm::vec3 playerPos, Player* playe
 void EnemyMob::updateArcherAI(float deltaTime, glm::vec3 playerPos, ParticleSystem& particles, ProjectileSystem& projectiles) {
     float distToPlayer = glm::distance(glm::vec2(m_pos.x, m_pos.z), glm::vec2(playerPos.x, playerPos.z));
 
-    if (distToPlayer < 30.0f) {
+    glm::vec3 bowPos = m_pos + glm::vec3(0.24f, 1.2f, 0.2f);
+    glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.4f, 0.0f);
+    bool hasLOS = StructureSystem::HasLineOfSight(bowPos, playerChest);
+
+    if (distToPlayer < 30.0f && hasLOS) {
         glm::vec2 toP = glm::vec2(playerPos.x - m_pos.x, playerPos.z - m_pos.z);
         float d2D = glm::length(toP);
         if (d2D > 0.001f) toP /= d2D;
@@ -179,9 +215,6 @@ void EnemyMob::updateArcherAI(float deltaTime, glm::vec3 playerPos, ParticleSyst
         }
 
         if (m_attackCooldown <= 0.0f && distToPlayer <= 26.0f) {
-            glm::vec3 bowPos = m_pos + glm::vec3(0.24f, 1.2f, 0.2f);
-            glm::vec3 playerChest = playerPos + glm::vec3(0.0f, 1.0f, 0.0f);
-
             int archerDmg = (int)((28 + (rand() % 8)) * (1.0f + (m_nightLevel - 1) * 0.28f));
             projectiles.Spawn(bowPos, playerChest, 28.0f, archerDmg, glm::vec4(0.9f, 0.85f, 0.2f, 1.0f), false, ProjectileType::ARROW);
 
@@ -200,7 +233,11 @@ void EnemyMob::updateArcherAI(float deltaTime, glm::vec3 playerPos, ParticleSyst
 void EnemyMob::updateMageAI(float deltaTime, glm::vec3 playerPos, ParticleSystem& particles, ProjectileSystem& projectiles) {
     float distToPlayer = glm::distance(glm::vec2(m_pos.x, m_pos.z), glm::vec2(playerPos.x, playerPos.z));
 
-    if (distToPlayer < 32.0f) {
+    glm::vec3 staffOrbPos = m_pos + glm::vec3(0.32f, 2.08f, 0.15f);
+    glm::vec3 playerChest = playerPos - glm::vec3(0.0f, 0.4f, 0.0f);
+    bool hasLOS = StructureSystem::HasLineOfSight(staffOrbPos, playerChest);
+
+    if (distToPlayer < 32.0f && hasLOS) {
         glm::vec2 toP = glm::vec2(playerPos.x - m_pos.x, playerPos.z - m_pos.z);
         float d2D = glm::length(toP);
         if (d2D > 0.001f) toP /= d2D;
@@ -221,9 +258,6 @@ void EnemyMob::updateMageAI(float deltaTime, glm::vec3 playerPos, ParticleSystem
         }
 
         if (m_attackCooldown <= 0.0f && distToPlayer <= 25.0f) {
-            glm::vec3 staffOrbPos = m_pos + glm::vec3(0.32f, 2.08f, 0.15f);
-            glm::vec3 playerChest = playerPos + glm::vec3(0.0f, 1.1f, 0.0f);
-
             int mageDmg = (int)((34 + (rand() % 10)) * (1.0f + (m_nightLevel - 1) * 0.28f));
             projectiles.Spawn(staffOrbPos, playerChest, 13.5f, mageDmg, glm::vec4(0.95f, 0.15f, 0.90f, 1.0f));
 

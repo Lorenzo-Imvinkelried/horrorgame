@@ -8,6 +8,7 @@
 #include "Monster.h"
 #include "PassiveMob.h"
 #include "ParticleSystem.h"
+#include "world/StructureSystem.h"
 
 Player::Player(glm::vec3 startPos) 
     : Position(startPos), Front(glm::vec3(0.0f, 0.0f, -1.0f)), WorldUp(glm::vec3(0.0f, 1.0f, 0.0f)),
@@ -1046,7 +1047,7 @@ glm::vec3 Player::GetTorchPosition() const {
 }
 
 void Player::ProcessMouseMovement(float xoffset, float yoffset) {
-    float sensitivity = 0.12f;
+    float sensitivity = IsThirdPerson ? 0.12f : 0.19f;
     xoffset *= sensitivity;
     yoffset *= sensitivity;
 
@@ -1303,6 +1304,9 @@ void Player::ProcessKeyboard(int key, float deltaTime, ChunkManager& chunkManage
             Position.x = nextPos.x;
             Position.z = nextPos.z;
 
+            // Structure Wall & Parapet Collision
+            StructureSystem::CheckCollision(Position, PlayerRadius, PlayerHeight, Velocity);
+
             Velocity.x = moveDir.x * currentSpeed;
             Velocity.z = moveDir.z * currentSpeed;
 
@@ -1325,8 +1329,9 @@ void Player::Update(float deltaTime) {
         Velocity.y -= Gravity * deltaTime;
         Position.y += Velocity.y * deltaTime;
         float terrainHeight = WorldGenerator::GetHeight(Position.x, Position.z);
-        if (Position.y < terrainHeight + 0.35f) {
-            Position.y = terrainHeight + 0.35f;
+        float groundHeight = StructureSystem::GetWalkableHeight(Position.x, Position.z, Position.y - PlayerHeight, terrainHeight);
+        if (Position.y < groundHeight + 0.35f) {
+            Position.y = groundHeight + 0.35f;
             Velocity.y = 0.0f;
             IsGrounded = true;
         }
@@ -1354,24 +1359,26 @@ void Player::Update(float deltaTime) {
     }
 
     float terrainHeight = WorldGenerator::GetHeight(Position.x, Position.z);
+    float groundHeight = StructureSystem::GetWalkableHeight(Position.x, Position.z, Position.y - PlayerHeight, terrainHeight);
     
-    if (Position.y < terrainHeight + PlayerHeight) {
-        float targetY = terrainHeight + PlayerHeight;
-        Position.y = glm::mix(Position.y, targetY, glm::clamp(deltaTime * 15.0f, 0.0f, 1.0f));
+    if (Position.y < groundHeight + PlayerHeight) {
+        Position.y = groundHeight + PlayerHeight;
         Velocity.y = 0.0f;
         IsGrounded = true;
     } else {
-        // Sticky feet on slope down
-        float distToGround = Position.y - (terrainHeight + PlayerHeight);
-        if (IsGrounded && distToGround < 0.5f && Velocity.y <= 0.0f) {
-             float targetY = terrainHeight + PlayerHeight;
-             Position.y = glm::mix(Position.y, targetY, glm::clamp(deltaTime * 20.0f, 0.0f, 1.0f));
+        // Sticky feet on slope down / stairs
+        float distToGround = Position.y - (groundHeight + PlayerHeight);
+        if (IsGrounded && distToGround < 0.65f && Velocity.y <= 0.0f) {
+             Position.y = groundHeight + PlayerHeight;
              Velocity.y = 0.0f;
              IsGrounded = true;
         } else {
              IsGrounded = false;
         }
     }
+
+    // Colisión sólida continua contra estructuras y almenas
+    StructureSystem::CheckCollision(Position, PlayerRadius, PlayerHeight, Velocity);
 
     WeaponSwayPos = glm::mix(WeaponSwayPos, glm::vec3(0.0f), glm::clamp(deltaTime * SwaySmoothing, 0.0f, 1.0f));
 }
@@ -1382,10 +1389,11 @@ glm::vec3 Player::GetCameraPosition() {
         glm::vec3 focus = Position - glm::vec3(0.0f, 0.4f, 0.0f);
         glm::vec3 camPos = focus - Front * CameraDistance;
 
-        // Anti-clipping terrain check
+        // Anti-clipping terrain & structure check
         float groundY = WorldGenerator::GetHeight(camPos.x, camPos.z) + 0.45f;
-        if (camPos.y < groundY) {
-            camPos.y = groundY;
+        float structY = StructureSystem::GetWalkableHeight(camPos.x, camPos.z, camPos.y, groundY) + 0.45f;
+        if (camPos.y < structY) {
+            camPos.y = structY;
         }
         return camPos;
     } else {

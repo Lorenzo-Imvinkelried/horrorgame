@@ -31,6 +31,7 @@ InventorySystem::InventorySystem()
     : m_inventory(30, 160.0f)
 {
     // El jugador empieza con el inventario completamente vacío
+    ItemModelRegistry::Get().Init();
 }
 
 bool InventorySystem::AddItem(ItemType type, int count) {

@@ -12,12 +12,20 @@
 #include "ui/UIRenderer.h"
 #include "combat/TargetingSystem.h"
 #include "mobs/dummy/DummyMob.h"
+#include "world/StructureSystem.h"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
 
 MobManager::MobManager() {}
 MobManager::~MobManager() {}
+
+void MobManager::SpawnTowerGuards(const std::vector<TowerGuardSpawn>& spawns) {
+    if (!Config::Gameplay::SpawnMobs) return;
+    for (const auto& sp : spawns) {
+        m_enemyMobs.push_back(std::make_unique<EnemyMob>(sp.pos, static_cast<EnemyType>(sp.type), sp.nightLevel));
+    }
+}
 
 void MobManager::Init(glm::vec3 playerPos, int monsterCount) {
     m_passiveMobs.clear();

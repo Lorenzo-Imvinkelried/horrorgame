@@ -336,6 +336,8 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
     m_lastMouseX = curMouseX;
     m_lastMouseY = curMouseY;
 
+    bool isUiModalActive = m_isCharacterPanelOpen || m_loreModal.active || m_fatalError.active || inventory.IsOpen();
+
 #ifdef __EMSCRIPTEN__
     static float virtualMouseX = 0.0f;
     static float virtualMouseY = 0.0f;
@@ -348,7 +350,10 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
 
     EmscriptenPointerlockChangeEvent plStatus;
     bool hasPL = (emscripten_get_pointerlock_status(&plStatus) == EMSCRIPTEN_RESULT_SUCCESS && plStatus.isActive);
-    if (hasPL) {
+    if (!player.IsThirdPerson && !isUiModalActive) {
+        virtualMouseX = (float)screenW * 0.5f;
+        virtualMouseY = (float)screenH * 0.5f;
+    } else if (hasPL) {
         virtualMouseX += xoff;
         virtualMouseY -= yoff;
     } else {
@@ -361,8 +366,13 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
     m_mouseNdcX = (virtualMouseX / (float)screenW) * 2.0f - 1.0f;
     m_mouseNdcY = 1.0f - (virtualMouseY / (float)screenH) * 2.0f;
 #else
-    m_mouseNdcX = (curMouseX / (float)screenW) * 2.0f - 1.0f;
-    m_mouseNdcY = 1.0f - (curMouseY / (float)screenH) * 2.0f;
+    if (!player.IsThirdPerson && !isUiModalActive) {
+        m_mouseNdcX = 0.0f;
+        m_mouseNdcY = 0.0f;
+    } else {
+        m_mouseNdcX = (curMouseX / (float)screenW) * 2.0f - 1.0f;
+        m_mouseNdcY = 1.0f - (curMouseY / (float)screenH) * 2.0f;
+    }
 #endif
 
     if (player.IsDead()) {
@@ -374,7 +384,6 @@ void InputManager::UpdateMouseAndLook(float deltaTime, float curMouseX, float cu
         inventory.UpdateDrag(m_mouseNdcX, m_mouseNdcY, leftIsPressed);
     }
 
-    bool isUiModalActive = m_isCharacterPanelOpen || m_loreModal.active || m_fatalError.active || inventory.IsOpen();
     player.IsFreeOrbiting = rightIsPressed;
 
     bool shouldRotateCam = (!isUiModalActive && !player.IsThirdPerson) || rightIsPressed;

@@ -1,6 +1,7 @@
 #include "EnemyMob.h"
 #include "WorldGenerator.h"
 #include "Player.h"
+#include "world/StructureSystem.h"
 #include <algorithm>
 #include <cstdlib>
 
@@ -131,7 +132,13 @@ void EnemyMob::Update(float deltaTime, glm::vec3 playerPos, Player* player, Part
     }
 
     updateAI(deltaTime, playerPos, player, particles, damageNumbers, projectiles);
-    m_pos.y = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
+
+    // Colisión sólida de la estructura: los mobs respetan muros, pilares y almenas
+    glm::vec3 dummyVel(0.0f);
+    StructureSystem::CheckCollision(m_pos, 0.5f * m_scale, 1.8f * m_scale, dummyVel);
+
+    float terrainY = WorldGenerator::GetHeight(m_pos.x, m_pos.z);
+    m_pos.y = StructureSystem::GetWalkableHeight(m_pos.x, m_pos.z, m_pos.y, terrainY);
     updateModelMesh();
 }
 

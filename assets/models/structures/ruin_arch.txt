@@ -1,0 +1,15 @@
+# Ancient Ruin Arch & Pillars
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+
+# 4 Corner Pillars
+BOX -2.0  2.0 -2.0   0.7 4.0 0.7   0 0 0   0.48 0.48 0.50  Pillar1
+BOX  2.0  2.0 -2.0   0.7 4.0 0.7   0 0 0   0.48 0.48 0.50  Pillar2
+BOX -2.0  2.0  2.0   0.7 4.0 0.7   0 0 0   0.48 0.48 0.50  Pillar3
+BOX  2.0  2.0  2.0   0.7 4.0 0.7   0 0 0   0.48 0.48 0.50  Pillar4
+
+# Cross Arches / Lintel
+BOX  0.0  4.2 -2.0   4.8 0.6 0.8   0 0 0   0.42 0.42 0.45  Arch1
+BOX  0.0  4.2  2.0   4.8 0.6 0.8   0 0 0   0.42 0.42 0.45  Arch2
+
+# Stone Platform Base
+BOX  0.0  0.1  0.0   5.5 0.2 5.5   0 0 0   0.35 0.35 0.38  Base

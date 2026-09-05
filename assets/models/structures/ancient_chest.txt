@@ -1,0 +1,11 @@
+# Ancient Ruins Chest
+# Format: BOX PosX PosY PosZ ScaleX ScaleY ScaleZ RotX RotY RotZ R G B Name
+
+# Wooden Chest Body
+BOX  0.0  0.35  0.00   1.10 0.70 0.75   0 0 0   0.38 0.22 0.12  ChestBody
+
+# Lid / Top Cover
+BOX  0.0  0.75  0.00   1.15 0.20 0.80   0 0 0   0.28 0.16 0.08  ChestLid
+
+# Golden Lock / Latch
+BOX  0.0  0.40  0.40   0.18 0.22 0.08   0 0 0   0.85 0.75 0.20  ChestLock

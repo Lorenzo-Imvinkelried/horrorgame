@@ -5,6 +5,7 @@
 #include "Config.h"
 #include <iostream> 
 #include "ModelLoader.h"
+#include "world/StructureSystem.h"
 #include <map>
 
 unsigned int WorldGenerator::GlobalSeed = 0;
@@ -143,8 +144,8 @@ std::vector<glm::vec2> WorldGenerator::GetChunkTreeLocations(int chunkX, int chu
             glm::vec3 normal = glm::normalize(glm::vec3(hL - hR, 2.0f, hD - hU));
             float slope = 1.0f - normal.y;
 
-            // Don't spawn trees in water or on sheer rock walls (slope > 0.38) or barren rocky tops (> 55m)
-            if (IsLagoon(tx, tz, h) || h > 55.0f || slope > 0.38f) {
+            // Don't spawn trees in water, sheer rock walls, high rocky tops or inside/near structures
+            if (IsLagoon(tx, tz, h) || h > 55.0f || slope > 0.38f || StructureSystem::IsNearStructure(tx, tz)) {
                 valid = false;
             } else {
                 // If on high mountain grassy area (mFactor > 0.45), spawn with balanced alpine distribution

@@ -438,11 +438,18 @@ void GameApp::initWorld() {
     m_player = std::make_unique<Player>(glm::vec3(px, py, pz));
     m_player->Stats.AvailableStatPoints = Config::Gameplay::StartingStatPoints;
 
+    if (m_structureSystem) {
+        m_structureSystem->GenerateStructures(m_player->Position);
+    }
+
     m_chunkManager->SetBirdSystem(&m_mobManager->GetBirds());
     m_chunkManager->Init();
     m_chunkManager->Update(m_player->Position);
 
     m_mobManager->Init(m_player->Position);
+    if (m_structureSystem) {
+        m_mobManager->SpawnTowerGuards(m_structureSystem->GetTowerGuardSpawns());
+    }
 }
 
 void GameApp::updateGameLogic(float deltaTime) {
@@ -466,10 +473,13 @@ void GameApp::updateGameLogic(float deltaTime) {
         m_dayCycleTime = fmod(m_dayCycleTime, 240.0f);
     }
 
-    // 5. Buildings
+    // 5. Buildings & Structures
     m_buildingSystem->Update(deltaTime, m_player->Position, *m_particles);
     glm::vec3 bPush(0.0f);
     m_buildingSystem->CheckCollision(m_player->Position, m_player->PlayerRadius, m_player->PlayerHeight, bPush);
+    if (m_structureSystem) {
+        m_structureSystem->CheckCollision(m_player->Position, m_player->PlayerRadius, m_player->PlayerHeight, m_player->Velocity);
+    }
 
     // 6. Ground Loot System
     m_itemDropSystem->Update(deltaTime, m_player->Position, *m_inventory, *m_damageNumbers, *m_particles);
@@ -573,6 +583,15 @@ void GameApp::UpdateFrame() {
     bool leftIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Left);
     bool rightIsPressed = sf::Mouse::isButtonPressed(sf::Mouse::Right);
     bool hasFocus = m_window.hasFocus();
+
+    bool showSysCursor = m_player->IsThirdPerson || 
+                         m_inputManager->IsCharacterPanelOpen() || 
+                         m_inputManager->GetLoreModal().active || 
+                         m_inputManager->GetFatalError().active || 
+                         m_inventory->IsOpen() || 
+                         m_inputManager->IsGamePaused() || 
+                         m_player->IsDead();
+    m_window.setMouseCursorVisible(showSysCursor);
 #else
     static double lastFrameTime = emscripten_get_now() / 1000.0;
     static double lastFpsTime = lastFrameTime;
